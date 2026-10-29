@@ -1,0 +1,83 @@
+name: minsu-doctrack
+
+services:
+  # -------------------------------------------------------------------
+  # PostgreSQL Database Service
+  # -------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: minsu_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 5mdb02f6
+      POSTGRES_DB: db_TDP
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d db_TDP" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - minsu_network
+
+  # -------------------------------------------------------------------
+  # Database Migration & Seeding Init Service (Runs once on startup)
+  # -------------------------------------------------------------------
+  db-init:
+    container_name: minsu_db_init
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrator
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://postgres:5mdb02f6@db:5432/db_TDP?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - minsu_network
+
+  # -------------------------------------------------------------------
+  # Next.js Application Production Runner
+  # -------------------------------------------------------------------
+  app:
+    container_name: minsu_app
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:5mdb02f6@db:5432/db_TDP?schema=public
+      SESSION_SECRET: minsu_doctrack_secure_session_secret_2026
+      NEXT_PUBLIC_APP_NAME: MinSU DocTrack
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    volumes:
+      - uploads_data:/app/public/uploads
+    networks:
+      - minsu_network
+
+volumes:
+  db_data:
+    name: minsu_db_data
+  uploads_data:
+    name: minsu_uploads_data
+
+networks:
+  minsu_network:
+    name: minsu_network
+    driver: bridge

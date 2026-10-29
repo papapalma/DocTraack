@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STAFF
+  STUDENT
+  DIRECTOR
+  ACCOUNTING
+  SYSTEM_ADMIN
+}
+
+enum DocumentStatus {
+  DRAFT
+  SUBMITTED
+  RETURNED
+  RESUBMITTED
+  APPROVED
+  UPLOADED
+  TRANSMITTED
+  ARCHIVED
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  role          Role           @default(STAFF)
+  active        Boolean        @default(true)
+  departmentId  String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  sessions      Session[]
+  documents     Document[]
+  comments      Comment[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  applications  Application[]
+  applicantCalls ApplicantCall[]
+  transmittals  Transmittal[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@map("sessions")
+}
+
+model AnnexType {
+  id           String      @id @default(cuid())
+  number       Int         @unique
+  name         String
+  creatorRoles Role[]
+  formSchema   Json
+  pdfTemplate  String?
+  documents    Document[]
+
+  @@map("annex_types")
+}
+
+model Document {
+  id            String          @id @default(cuid())
+  annexTypeId   String
+  annexType     AnnexType       @relation(fields: [annexTypeId], references: [id])
+  title         String
+  status        DocumentStatus  @default(DRAFT)
+  formData      Json            @default("{}")
+  fileUrl       String?
+  createdById   String
+  createdBy     User            @relation(fields: [createdById], references: [id])
+  departmentId  String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  comments      Comment[]
+  statusHistory StatusHistory[]
+  transmittal   Transmittal?
+
+  @@index([status])
+  @@index([createdById])
+  @@index([annexTypeId])
+  @@map("documents")
+}
+
+model StatusHistory {
+  id         String         @id @default(cuid())
+  documentId String
+  document   Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  fromStatus DocumentStatus
+  toStatus   DocumentStatus
+  actorId    String
+  comment    String?
+  createdAt  DateTime       @default(now())
+
+  @@index([documentId])
+  @@map("status_history")
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([documentId])
+  @@map("comments")
+}
+
+model Transmittal {
+  id         String   @id @default(cuid())
+  documentId String   @unique
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  sentById   String
+  sentBy     User     @relation(fields: [sentById], references: [id])
+  method     String   // "email", "drive_link", "manual"
+  recipient  String
+  driveLink  String?
+  notes      String?
+  sentAt     DateTime @default(now())
+
+  @@map("transmittals")
+}
+
+model ApplicantCall {
+  id           String        @id @default(cuid())
+  title        String
+  description  String?
+  deadline     DateTime
+  formSchema   Json
+  isActive     Boolean       @default(true)
+  createdById  String
+  createdBy    User          @relation(fields: [createdById], references: [id])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  applications Application[]
+
+  @@index([isActive])
+  @@map("applicant_calls")
+}
+
+model Application {
+  id               String            @id @default(cuid())
+  callId           String?
+  call             ApplicantCall?    @relation(fields: [callId], references: [id], onDelete: Cascade)
+  studentId        String
+  student          User              @relation(fields: [studentId], references: [id])
+  formData         Json
+  trackingCode     String            @unique
+  status           ApplicationStatus @default(SUBMITTED)
+  reviewComment    String?
+  reviewedById     String?
+  reviewedAt       DateTime?
+  annex1DocumentId String?
+  submittedAt      DateTime          @default(now())
+
+  @@index([studentId])
+  @@index([callId])
+  @@index([status])
+  @@map("applications")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id])
+  action    String
+  entity    String
+  entityId  String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([actorId])
+  @@map("audit_log")
+}
+
+model LandingPageConfig {
+  id                    String    @id @default("default")
+  publishedSections     Json
+  draftSections         Json
+  hasUnpublishedChanges Boolean   @default(false)
+  publishedAt           DateTime?
+  updatedAt             DateTime  @updatedAt
+  updatedById           String?
+
+  @@map("landing_page_config")
+}
+

@@ -1,0 +1,25 @@
+# =====================================================================
+# Docker Compose Development Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# =====================================================================
+
+services:
+  app:
+    container_name: minsu_app_dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: deps
+    command: sh -c "npx prisma generate && npm run dev"
+    environment:
+      DATABASE_URL: postgresql://postgres:5mdb02f6@db:5432/db_TDP?schema=public
+      SESSION_SECRET: minsu_doctrack_secure_session_secret_2026
+      NEXT_PUBLIC_APP_NAME: MinSU DocTrack
+      NODE_ENV: development
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+      - uploads_data:/app/public/uploads
