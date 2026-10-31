@@ -107,7 +107,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .apple-scrollbar::-webkit-scrollbar {
-  width: 5px;
+  width: 6px;
+  height: 6px;
 }
 
 .apple-scrollbar::-webkit-scrollbar-track {
@@ -139,37 +140,62 @@ h1, h2, h3, h4, h5, h6 {
     print-color-adjust: exact !important;
   }
 
-  /* Hide interactive web navigation, controls, sidebars, and toasts */
+  /* Hide interactive web navigation, controls, sidebars, modals, and toasts */
   header,
   nav,
   aside,
   footer,
   .no-print,
-  .print\\:hidden,
+  .print\:hidden,
   button:not(.allow-print),
   [role="dialog"],
-  [aria-modal="true"] {
+  [aria-modal="true"],
+  .topbar-container,
+  .sidebar-container,
+  .document-header-banner,
+  .workflow-sidebar-panel,
+  .print-preview-modal-overlay,
+  .new-document-wizard-chrome,
+  .page-creation-header {
     display: none !important;
+  }
+
+  /* Format editable inputs and textareas to render as clean official printed text */
+  input,
+  textarea,
+  select {
+    border: none !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    outline: none !important;
+    font-weight: inherit !important;
+    text-align: inherit !important;
   }
 
   /* Reset container constraints */
   main,
-  .print-container {
+  .print-container,
+  .annex-printable-document {
     padding: 0 !important;
     margin: 0 !important;
     max-width: 100% !important;
     width: 100% !important;
     box-shadow: none !important;
     border: none !important;
+    overflow: visible !important;
   }
 
-  /* Force page breaks cleanly */
+  /* Force clean page breaks */
   .page-break-before {
     page-break-before: always !important;
     break-before: page !important;
   }
 
-  .page-break-after {
+  .page-break-after,
+  .print-page-break {
     page-break-after: always !important;
     break-after: page !important;
   }
@@ -185,8 +211,17 @@ h1, h2, h3, h4, h5, h6 {
     width: 100% !important;
   }
 
+  thead {
+    display: table-header-group !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
   th, td {
-    border-color: #999999 !important;
+    border-color: #333333 !important;
   }
 }
 

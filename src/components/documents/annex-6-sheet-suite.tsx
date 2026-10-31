@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChedLogo, UniFastLogo } from "./ched-unifast-logos";
-import { Annex6FormData, Annex6ManagementFeeExpenses } from "@/types";
+import { AnnexLogo } from "./annex-logo";
+import { PrintPreviewModal } from "./print-preview-modal";
+import { Annex6FormData, Annex6ManagementFeeExpenses, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
   FileSpreadsheet,
@@ -47,12 +49,22 @@ export function Annex6SheetSuite({
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
+  // Print & PDF modal state
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printOrientation, setPrintOrientation] = useState<"portrait" | "landscape">("portrait");
+
+  useEffect(() => {
+    const handleOpenPrint = () => setIsPrintModalOpen(true);
+    window.addEventListener("minsu:open-print-modal", handleOpenPrint);
+    return () => window.removeEventListener("minsu:open-print-modal", handleOpenPrint);
+  }, []);
+
   // Default initial values
   const defaultData: Annex6FormData = useMemo(() => {
     return (
       initialData || {
-        heiName: "MINDORO STATE UNIVERSITY",
-        heiAddress: "Alcate, Victoria, Oriental Mindoro",
+        heiName: "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS",
+        heiAddress: "Labasan, Bongabong, Oriental Mindoro",
         coveredPeriod: "January 1, 2024 to June 30, 2024",
 
         checkNumber: "LBP-2024-009841",
@@ -104,6 +116,26 @@ export function Annex6SheetSuite({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleLeftLogoChange = (newConfig: LogoConfig) => {
+    setFormData((prev) => ({
+      ...prev,
+      headerLogos: {
+        ...prev.headerLogos,
+        leftLogo: newConfig,
+      },
+    }));
+  };
+
+  const handleRightLogoChange = (newConfig: LogoConfig) => {
+    setFormData((prev) => ({
+      ...prev,
+      headerLogos: {
+        ...prev.headerLogos,
+        rightLogo: newConfig,
+      },
+    }));
+  };
 
   // Live recalculate all financial ledger totals
   const recalculateLedger = (
@@ -283,9 +315,9 @@ export function Annex6SheetSuite({
   return (
     <div className="space-y-6 w-full mx-auto pb-20">
       {/* ========================================================================= */}
-      {/* 1. TOP DUAL-MODE FROSTED GLASS STICKY TOOLBAR                           */}
+      {/* 1. TOP DUAL-MODE ACTION & NAVIGATION TOOLBAR                             */}
       {/* ========================================================================= */}
-      <div className="sticky top-4 z-40 backdrop-blur-xl bg-white/95 p-2 rounded-2xl border border-line shadow-md flex flex-col md:flex-row items-center justify-between gap-3 print:hidden transition-all duration-200">
+      <div className="relative z-10 bg-white/95 backdrop-blur-sm p-2 rounded-2xl border border-line shadow-xs flex flex-col md:flex-row items-center justify-between gap-3 print:hidden transition-all duration-200">
         {/* Left: View Mode Switcher */}
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <div className="inline-flex p-1 rounded-xl bg-minsu-green-50 border border-minsu-green-100">
@@ -331,10 +363,7 @@ export function Annex6SheetSuite({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              setViewMode("sheet");
-              setTimeout(() => window.print(), 150);
-            }}
+            onClick={() => setIsPrintModalOpen(true)}
             className="text-xs h-8 border-line hover:bg-minsu-green-50 text-ink gap-1.5 apple-press shadow-xs font-semibold"
             title="Export official document to PDF or physical printer"
           >
@@ -380,7 +409,7 @@ export function Annex6SheetSuite({
       {/* 2. MODE A: INTERACTIVE DATA WORKSPACE                                    */}
       {/* ========================================================================= */}
       {viewMode === "workspace" && (
-        <div className="space-y-6">
+        <div className="space-y-6 print:hidden">
           {/* Sub-tabs */}
           <div className="flex border-b border-line gap-4">
             <button
@@ -834,12 +863,20 @@ export function Annex6SheetSuite({
       {/* ========================================================================= */}
       {/* 3. MODE B: REFINED OFFICIAL DOCUMENT CANVAS (FUR_tab_preview.png)         */}
       {/* ========================================================================= */}
-      {viewMode === "sheet" && (
-        <div className="bg-white text-ink font-sans p-6 sm:p-12 border border-neutral-800 shadow-xl rounded-sm max-w-4xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none print-container text-[11px] leading-tight space-y-6">
+      <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
+        <div className="annex-printable-document bg-white text-ink font-sans p-6 sm:p-12 border border-neutral-800 shadow-xl rounded-sm max-w-4xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none print-container text-[11px] leading-tight space-y-6">
           {/* Top Header Logos */}
           <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
             <div className="w-20 flex justify-center">
-              <ChedLogo className="w-16 h-16" />
+              <AnnexLogo
+                position="left"
+                config={formData.headerLogos?.leftLogo}
+                defaultPreset="ched"
+                editable={true}
+                documentId={documentId}
+                className="w-16 h-16"
+                onLogoChange={handleLeftLogoChange}
+              />
             </div>
 
             <div className="text-center flex-1 px-4 space-y-1">
@@ -857,7 +894,15 @@ export function Annex6SheetSuite({
             </div>
 
             <div className="w-20 flex justify-center">
-              <UniFastLogo className="w-16 h-16" />
+              <AnnexLogo
+                position="right"
+                config={formData.headerLogos?.rightLogo}
+                defaultPreset="unifast"
+                editable={true}
+                documentId={documentId}
+                className="w-16 h-16"
+                onLogoChange={handleRightLogoChange}
+              />
             </div>
           </div>
 
@@ -1054,7 +1099,32 @@ export function Annex6SheetSuite({
             </div>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Apple-styled Fluid Print / PDF Preview Modal */}
+      <PrintPreviewModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        documentTitle={documentTitle || "Annex 6 - Fund Utilization Report (FUR)"}
+        annexNumber={6}
+        orientation={printOrientation}
+        onOrientationChange={setPrintOrientation}
+        previewContent={
+          <div className="text-black text-xs space-y-3">
+            <div className="p-4 border border-dashed border-neutral-300 rounded bg-[#F1F8F1]">
+              <div className="font-bold text-sm text-[#123F17]">
+                TDP Annex 6 - Fund Utilization Report (FUR)
+              </div>
+              <div className="text-xs text-neutral-600 mt-1">
+                HEI: {formData.heiName} • Period: {formData.coveredPeriod} • Total Received: ₱{formData.totalFundsReceived.toLocaleString()}
+              </div>
+              <div className="text-[11px] text-neutral-500 mt-2 italic">
+                Official single-sheet portrait financial statement with Accountant, President, and COA Auditor endorsements.
+              </div>
+            </div>
+          </div>
+        }
+      />
     </div>
   );
 }

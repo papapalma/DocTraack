@@ -71,9 +71,9 @@ function StudentPortalContent({
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-[#F6F8F6] flex flex-col">
+    <div className="h-screen overflow-hidden bg-[#F6F8F6] flex flex-col print:h-auto print:overflow-visible">
       {/* Student Portal Header */}
-      <header className="sticky top-0 z-40 h-16 bg-[#1B5E20] border-b-2 border-[#F2B705] text-white flex items-center justify-between px-3 sm:px-8 shadow-md">
+      <header className="shrink-0 z-40 h-16 bg-[#1B5E20] border-b-2 border-[#F2B705] text-white flex items-center justify-between px-3 sm:px-8 shadow-md print:hidden">
         <div className="flex items-center gap-2 sm:gap-3">
           <Link href="/portal" className="flex items-center gap-2 sm:gap-2.5">
             <Logo size="sm" />
@@ -121,19 +121,23 @@ function StudentPortalContent({
       />
 
       {/* Student Nav Bar with Suspense */}
-      <Suspense fallback={<div className="h-11 bg-white border-b border-[#D6DDD8]" />}>
-        <StudentNav />
-      </Suspense>
+      <div className="shrink-0 z-30 print:hidden">
+        <Suspense fallback={<div className="h-11 bg-white border-b border-[#D6DDD8]" />}>
+          <StudentNav />
+        </Suspense>
+      </div>
 
-      {/* Main Content */}
-      <main className="flex-1 max-w-5xl mx-auto w-full p-3 sm:p-6 md:p-8 min-w-0">
-        {children}
+      {/* Main Scrollable Content */}
+      <main className="flex-1 h-full min-h-0 overflow-y-auto w-full apple-scrollbar print:h-auto print:overflow-visible flex flex-col justify-between">
+        <div className="max-w-5xl mx-auto w-full p-3 sm:p-6 md:p-8 min-w-0 flex-1">
+          {children}
+        </div>
+
+        {/* Footer */}
+        <footer className="py-4 border-t border-[#D6DDD8] bg-white text-center text-xs text-[#55645B] shrink-0 print:hidden">
+          <p>© 2026 Mindoro State University • Student Financial Assistance & Grants Office</p>
+        </footer>
       </main>
-
-      {/* Footer */}
-      <footer className="py-4 border-t border-[#D6DDD8] bg-white text-center text-xs text-[#55645B]">
-        <p>© 2026 Mindoro State University • Student Financial Assistance & Grants Office</p>
-      </footer>
     </div>
   );
 }

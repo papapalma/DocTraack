@@ -3,11 +3,14 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ChedLogo, UniFastLogo } from "./ched-unifast-logos";
+import { AnnexLogo } from "./annex-logo";
+import { PrintPreviewModal } from "./print-preview-modal";
 import {
   Annex3FormData,
   Annex3Grantee,
   Annex3OtherGrantee,
   OtherGranteeStatus,
+  LogoConfig,
 } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +61,25 @@ export function Annex3SheetSuite({
   // Mode: "workspace" (Interactive Data Suite) or "sheet" (Refined Official Document Canvas)
   const [viewMode, setViewMode] = useState<"workspace" | "sheet">("workspace");
   const [activeTab, setActiveTab] = useState<"tab1" | "tab2" | "tab3" | "tab4">("tab1");
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printOrientation, setPrintOrientation] = useState<"portrait" | "landscape">("portrait");
+  const [printScope, setPrintScope] = useState<"active" | "all">("active");
+
+  // Sync orientation with active tab
+  useEffect(() => {
+    if (activeTab === "tab2" || activeTab === "tab3") {
+      setPrintOrientation("landscape");
+    } else {
+      setPrintOrientation("portrait");
+    }
+  }, [activeTab]);
+
+  // Global print shortcut listener
+  useEffect(() => {
+    const handleOpenPrint = () => setIsPrintModalOpen(true);
+    window.addEventListener("minsu:open-print-modal", handleOpenPrint);
+    return () => window.removeEventListener("minsu:open-print-modal", handleOpenPrint);
+  }, []);
   const [workspaceTab, setWorkspaceTab] = useState<"billed" | "other" | "signatories">("billed");
   const [selectedCampus, setSelectedCampus] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -68,8 +90,8 @@ export function Annex3SheetSuite({
       initialData || {
         regionCode: "MIMAROPA",
         heiCode: "MINSU",
-        heiName: "Mindoro State University",
-        heiAddress: "Alcate, Victoria, Oriental Mindoro",
+        heiName: "Mindoro State University - Bongabong Campus",
+        heiAddress: "Labasan, Bongabong, Oriental Mindoro",
         academicYear: "2024-2025",
         termCode: "1",
         trancheNumber: "1",
@@ -100,7 +122,7 @@ export function Annex3SheetSuite({
             tdpBatch: "3",
             semesterAmount: 7500,
             totalAmount: 7500,
-            campus: "Main Campus (Victoria / Alcate)",
+            campus: "Bongabong Campus",
           },
           {
             controlNumber: "00002",
@@ -118,7 +140,7 @@ export function Annex3SheetSuite({
             tdpBatch: "3",
             semesterAmount: 7500,
             totalAmount: 7500,
-            campus: "Main Campus (Victoria / Alcate)",
+            campus: "Bongabong Campus",
           },
           {
             controlNumber: "00003",
@@ -136,7 +158,7 @@ export function Annex3SheetSuite({
             tdpBatch: "3",
             semesterAmount: 7500,
             totalAmount: 7500,
-            campus: "Calapan Campus",
+            campus: "Bongabong Campus",
           },
           {
             controlNumber: "00004",
@@ -154,7 +176,7 @@ export function Annex3SheetSuite({
             tdpBatch: "3",
             semesterAmount: 7500,
             totalAmount: 7500,
-            campus: "Calapan Campus",
+            campus: "Bongabong Campus",
           },
           {
             controlNumber: "00005",
@@ -187,7 +209,7 @@ export function Annex3SheetSuite({
           pageNo: "84",
           bookNo: "XII",
           series: "2025",
-          issuedAt: "Victoria, Oriental Mindoro",
+          issuedAt: "Bongabong, Oriental Mindoro",
           issuedOn: "March 4, 2025",
         },
       }
@@ -198,6 +220,26 @@ export function Annex3SheetSuite({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleLeftLogoChange = (newConfig: LogoConfig) => {
+    setFormData((prev) => ({
+      ...prev,
+      headerLogos: {
+        ...prev.headerLogos,
+        leftLogo: newConfig,
+      },
+    }));
+  };
+
+  const handleRightLogoChange = (newConfig: LogoConfig) => {
+    setFormData((prev) => ({
+      ...prev,
+      headerLogos: {
+        ...prev.headerLogos,
+        rightLogo: newConfig,
+      },
+    }));
+  };
 
   // Synchronize financial calculations when billed grantees change
   useEffect(() => {
@@ -318,7 +360,7 @@ export function Annex3SheetSuite({
       tdpBatch: formData.batchNumber,
       semesterAmount: 7500,
       totalAmount: 7500,
-      campus: selectedCampus === "ALL" ? "Main Campus (Victoria / Alcate)" : selectedCampus,
+      campus: selectedCampus === "ALL" ? "Bongabong Campus" : selectedCampus,
     };
     setFormData((prev) => ({
       ...prev,
@@ -342,7 +384,7 @@ export function Annex3SheetSuite({
       yearLevel: "2",
       status: "dropped",
       remarks: "Non-enrolled this term",
-      campus: selectedCampus === "ALL" ? "Main Campus (Victoria / Alcate)" : selectedCampus,
+      campus: selectedCampus === "ALL" ? "Bongabong Campus" : selectedCampus,
     };
     setFormData((prev) => ({
       ...prev,
@@ -391,7 +433,7 @@ export function Annex3SheetSuite({
             tdpBatch: formData.batchNumber,
             semesterAmount: 7500,
             totalAmount: 7500,
-            campus: c.campus || "Main Campus (Victoria / Alcate)",
+            campus: c.campus || "Bongabong Campus",
           }));
           setFormData((prev) => ({
             ...prev,
@@ -511,12 +553,20 @@ export function Annex3SheetSuite({
 
   const termLabel = formData.termCode === "1" ? "1st Semester" : "2nd Semester";
 
+  const availableForms = [
+    { id: "tab1", label: "Form 1: Statement", defaultOrientation: "portrait" as const },
+    { id: "tab2", label: `Form 2: Billed (${formData.billedGrantees.length})`, defaultOrientation: "landscape" as const },
+    { id: "tab3", label: `Form 3: Other (${formData.otherGrantees.length})`, defaultOrientation: "landscape" as const },
+    { id: "tab4", label: "Form 4: Certificate", defaultOrientation: "portrait" as const },
+  ];
+  const activeFormLabel = availableForms.find((f) => f.id === activeTab)?.label || "Form";
+
   return (
     <div className="space-y-6 w-full mx-auto pb-20">
       {/* ========================================================================= */}
-      {/* 1. APPLE DUAL-MODE FROSTED GLASS STICKY TOOLBAR                           */}
+      {/* 1. APPLE DUAL-MODE ACTION & NAVIGATION TOOLBAR                             */}
       {/* ========================================================================= */}
-      <div className="sticky top-4 z-40 backdrop-blur-xl bg-white/90 p-2 rounded-2xl border border-line shadow-md flex flex-col md:flex-row items-center justify-between gap-3 print:hidden transition-all duration-200">
+      <div className="relative z-10 bg-white/95 backdrop-blur-sm p-2 rounded-2xl border border-line shadow-xs flex flex-col md:flex-row items-center justify-between gap-3 print:hidden transition-all duration-200">
         {/* Left Side: View Mode Toggle & Form Navigation */}
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           {/* Dual-Mode Switcher */}
@@ -597,10 +647,7 @@ export function Annex3SheetSuite({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              setViewMode("sheet");
-              setTimeout(() => window.print(), 150);
-            }}
+            onClick={() => setIsPrintModalOpen(true)}
             className="text-xs h-8 border-line hover:bg-minsu-green-50 text-ink gap-1.5 apple-press shadow-xs font-semibold"
             title="Export official document to PDF or physical printer"
           >
@@ -639,7 +686,7 @@ export function Annex3SheetSuite({
       {/* 2. MODE A: INTERACTIVE WORKSPACE (Modern Apple Data Suite)                */}
       {/* ========================================================================= */}
       {viewMode === "workspace" && (
-        <div className="space-y-6 animate-in fade-in duration-200">
+        <div className="space-y-6 animate-in fade-in duration-200 print:hidden">
           {/* Top Live KPI Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Card 1: Total Enrolled Scholars */}
@@ -1357,12 +1404,12 @@ export function Annex3SheetSuite({
       {/* ========================================================================= */}
       {/* 3. MODE B: REFINED OFFICIAL DOCUMENT CANVAS (Print-Ready Government Suite) */}
       {/* ========================================================================= */}
-      {viewMode === "sheet" && (
-        <div className="bg-white text-ink font-sans p-6 sm:p-10 border border-neutral-800 shadow-xl rounded-sm max-w-5xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none">
+      <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
+        <div className="annex-printable-document bg-white text-ink font-sans p-6 sm:p-10 border border-neutral-800 shadow-xl rounded-sm max-w-5xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none">
           {/* ======================================================================= */}
           {/* TAB 1: FORM 1 – CONSOLIDATED TDP BILLING STATEMENT                      */}
           {/* ======================================================================= */}
-          {activeTab === "tab1" && (
+          {(activeTab === "tab1" || printScope === "all") && (
             <div className="space-y-4 text-[12px] leading-tight print:block">
               {/* Top Right Form Tag */}
               <div className="text-right font-bold text-[13px] text-neutral-800">
@@ -1372,7 +1419,15 @@ export function Annex3SheetSuite({
               {/* Header: CHED Logo | HEI Info | UniFAST Logo */}
               <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
                 <div className="w-20 flex justify-center">
-                  <ChedLogo className="w-16 h-16" />
+                  <AnnexLogo
+                    position="left"
+                    config={formData.headerLogos?.leftLogo}
+                    defaultPreset="ched"
+                    editable={true}
+                    documentId={documentId}
+                    className="w-16 h-16"
+                    onLogoChange={handleLeftLogoChange}
+                  />
                 </div>
 
                 <div className="text-center flex-1 px-4 space-y-1">
@@ -1396,7 +1451,15 @@ export function Annex3SheetSuite({
                 </div>
 
                 <div className="w-20 flex justify-center">
-                  <UniFastLogo className="w-16 h-16" />
+                  <AnnexLogo
+                    position="right"
+                    config={formData.headerLogos?.rightLogo}
+                    defaultPreset="unifast"
+                    editable={true}
+                    documentId={documentId}
+                    className="w-16 h-16"
+                    onLogoChange={handleRightLogoChange}
+                  />
                 </div>
               </div>
 
@@ -1693,10 +1756,16 @@ export function Annex3SheetSuite({
             </div>
           )}
 
+          {printScope === "all" && (
+            <div className="print-page-break my-8 border-b-2 border-dashed border-[#1B5E20]/40 print:border-none py-2 text-center text-xs font-bold text-[#1B5E20] print:hidden">
+              --- Official Page Break: End of Form 1 ---
+            </div>
+          )}
+
           {/* ======================================================================= */}
           {/* TAB 2: FORM 2 – CONSOLIDATED CONTINUING TDP GRANTEES DETAILS            */}
           {/* ======================================================================= */}
-          {activeTab === "tab2" && (
+          {(activeTab === "tab2" || printScope === "all") && (
             <div className="space-y-4 text-[11px] leading-tight print:block">
               {/* Top Tag */}
               <div className="text-right font-bold text-[13px] text-neutral-800">
@@ -1706,7 +1775,15 @@ export function Annex3SheetSuite({
               {/* Header: Logos and Title */}
               <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
                 <div className="w-16 flex justify-center">
-                  <ChedLogo className="w-14 h-14" />
+                  <AnnexLogo
+                    position="left"
+                    config={formData.headerLogos?.leftLogo}
+                    defaultPreset="ched"
+                    editable={true}
+                    documentId={documentId}
+                    className="w-14 h-14"
+                    onLogoChange={handleLeftLogoChange}
+                  />
                 </div>
 
                 <div className="text-center flex-1 px-4 space-y-0.5">
@@ -1728,7 +1805,15 @@ export function Annex3SheetSuite({
                 </div>
 
                 <div className="w-16 flex justify-center">
-                  <UniFastLogo className="w-14 h-14" />
+                  <AnnexLogo
+                    position="right"
+                    config={formData.headerLogos?.rightLogo}
+                    defaultPreset="unifast"
+                    editable={true}
+                    documentId={documentId}
+                    className="w-14 h-14"
+                    onLogoChange={handleRightLogoChange}
+                  />
                 </div>
               </div>
 
@@ -1919,10 +2004,16 @@ export function Annex3SheetSuite({
             </div>
           )}
 
+          {printScope === "all" && (
+            <div className="print-page-break my-8 border-b-2 border-dashed border-[#1B5E20]/40 print:border-none py-2 text-center text-xs font-bold text-[#1B5E20] print:hidden">
+              --- Official Page Break: End of Form 2 ---
+            </div>
+          )}
+
           {/* ======================================================================= */}
           {/* TAB 3: FORM 3 – OTHER CONTINUING GRANTEES (NOT BILLED THIS TERM)        */}
           {/* ======================================================================= */}
-          {activeTab === "tab3" && (
+          {(activeTab === "tab3" || printScope === "all") && (
             <div className="space-y-4 text-[11px] leading-tight print:block">
               {/* Top Tag */}
               <div className="text-right font-bold text-[13px] text-neutral-800">
@@ -1932,7 +2023,15 @@ export function Annex3SheetSuite({
               {/* Header: Logos and Title */}
               <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
                 <div className="w-16 flex justify-center">
-                  <ChedLogo className="w-14 h-14" />
+                  <AnnexLogo
+                    position="left"
+                    config={formData.headerLogos?.leftLogo}
+                    defaultPreset="ched"
+                    editable={true}
+                    documentId={documentId}
+                    className="w-14 h-14"
+                    onLogoChange={handleLeftLogoChange}
+                  />
                 </div>
 
                 <div className="text-center flex-1 px-4 space-y-0.5">
@@ -1954,7 +2053,15 @@ export function Annex3SheetSuite({
                 </div>
 
                 <div className="w-16 flex justify-center">
-                  <UniFastLogo className="w-14 h-14" />
+                  <AnnexLogo
+                    position="right"
+                    config={formData.headerLogos?.rightLogo}
+                    defaultPreset="unifast"
+                    editable={true}
+                    documentId={documentId}
+                    className="w-14 h-14"
+                    onLogoChange={handleRightLogoChange}
+                  />
                 </div>
               </div>
 
@@ -2067,10 +2174,16 @@ export function Annex3SheetSuite({
             </div>
           )}
 
+          {printScope === "all" && (
+            <div className="print-page-break my-8 border-b-2 border-dashed border-[#1B5E20]/40 print:border-none py-2 text-center text-xs font-bold text-[#1B5E20] print:hidden">
+              --- Official Page Break: End of Form 3 ---
+            </div>
+          )}
+
           {/* ======================================================================= */}
           {/* TAB 4: FORM 4 – CERTIFICATION (NOTARIZED)                               */}
           {/* ======================================================================= */}
-          {activeTab === "tab4" && (
+          {(activeTab === "tab4" || printScope === "all") && (
             <div className="space-y-6 text-[12px] leading-relaxed p-4 sm:p-8 max-w-3xl mx-auto print:block">
               {/* Top Tag */}
               <div className="text-right font-bold text-[13px] text-neutral-800">
@@ -2208,7 +2321,51 @@ export function Annex3SheetSuite({
             </div>
           )}
         </div>
-      )}
+      </div>
+
+      {/* Apple-styled Fluid Print / PDF Preview Modal */}
+      <PrintPreviewModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        documentTitle={documentTitle || "Annex 3 - TDP Continuing Billing Statement"}
+        annexNumber={3}
+        orientation={printOrientation}
+        onOrientationChange={setPrintOrientation}
+        availableForms={availableForms}
+        activeFormId={activeTab}
+        activeFormLabel={activeFormLabel}
+        scope={printScope}
+        onScopeChange={setPrintScope}
+        previewContent={
+          <div className="text-ink">
+            {(activeTab === "tab1" || printScope === "all") && (
+              <div className="p-4 border border-dashed border-neutral-300 rounded mb-4">
+                <div className="font-bold text-sm text-minsu-green-900 mb-1">Form 1: Consolidated TDP Billing Statement</div>
+                <div className="text-xs text-ink-muted">TDP Batch {formData.batchNumber} • AY {formData.academicYear} • Total Scholars: {formData.totalGrantees}</div>
+                <div className="text-xs font-mono font-bold text-ink mt-1">Total Subsidy: ₱{formData.totalSubsidy.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
+              </div>
+            )}
+            {(activeTab === "tab2" || printScope === "all") && (
+              <div className="p-4 border border-dashed border-neutral-300 rounded mb-4">
+                <div className="font-bold text-sm text-minsu-green-900 mb-1">Form 2: Billed Grantees Details ({formData.billedGrantees.length} Scholars)</div>
+                <div className="text-xs text-ink-muted">Official multi-tier ledger with student numbers, programs, year levels, and subsidy amounts.</div>
+              </div>
+            )}
+            {(activeTab === "tab3" || printScope === "all") && (
+              <div className="p-4 border border-dashed border-neutral-300 rounded mb-4">
+                <div className="font-bold text-sm text-minsu-green-900 mb-1">Form 3: Other Grantees ({formData.otherGrantees.length} Scholars)</div>
+                <div className="text-xs text-ink-muted">Non-billed scholar listing (LOA, Transferred, Graduated).</div>
+              </div>
+            )}
+            {(activeTab === "tab4" || printScope === "all") && (
+              <div className="p-4 border border-dashed border-neutral-300 rounded">
+                <div className="font-bold text-sm text-minsu-green-900 mb-1">Form 4: Certification & Notarization</div>
+                <div className="text-xs text-ink-muted">Official MinSU Registrar Certification and Notary Public block.</div>
+              </div>
+            )}
+          </div>
+        }
+      />
     </div>
   );
 }

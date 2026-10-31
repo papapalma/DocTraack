@@ -26,13 +26,17 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
   return (
     <NavProvider>
-      <div className="min-h-screen bg-[#F6F8F6] flex flex-col">
-        <Topbar />
-        <div className="flex flex-1 min-w-0">
-          <Suspense fallback={<div className="hidden md:block sticky top-16 w-64 shrink-0 bg-white/90 backdrop-blur-xl border-r border-[#D6DDD8] h-[calc(100vh-4rem)]" />}>
-            <Sidebar />
-          </Suspense>
-          <main className="flex-1 p-3 sm:p-6 md:p-8 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden">
+      <div className="h-screen overflow-hidden bg-[#F6F8F6] flex flex-col print:h-auto print:overflow-visible print:bg-white">
+        <div className="topbar-container shrink-0 z-40 print:hidden">
+          <Topbar />
+        </div>
+        <div className="flex flex-1 min-h-0 overflow-hidden print:block print:min-h-0 print:overflow-visible">
+          <div className="sidebar-container shrink-0 h-full print:hidden">
+            <Suspense fallback={<div className="hidden md:block w-64 shrink-0 bg-white/90 backdrop-blur-xl border-r border-[#D6DDD8] h-full" />}>
+              <Sidebar />
+            </Suspense>
+          </div>
+          <main className="flex-1 h-full min-h-0 overflow-y-auto p-3 sm:p-6 md:p-8 max-w-7xl mx-auto w-full min-w-0 apple-scrollbar print:h-auto print:overflow-visible print:p-0 print:m-0 print:max-w-none">
             {children}
           </main>
         </div>

@@ -49,6 +49,20 @@ export interface AnnexTypeInfo {
   pdfTemplate?: string | null;
 }
 
+export type LogoPresetId = "ched" | "unifast" | "minsu" | "none";
+
+export interface LogoConfig {
+  type: "preset" | "custom";
+  presetId?: LogoPresetId;
+  url?: string;
+  alt?: string;
+}
+
+export interface HeaderLogosConfig {
+  leftLogo?: LogoConfig;
+  rightLogo?: LogoConfig;
+}
+
 export interface Annex1StudentData {
   seq?: number;
   student_id: string;
@@ -161,8 +175,8 @@ export interface Annex3OtherGrantee {
 export interface Annex3FormData {
   regionCode: string; // "MIMAROPA"
   heiCode: string; // "MINSU"
-  heiName: string; // "Mindoro State University"
-  heiAddress: string; // "Alcate, Victoria, Oriental Mindoro"
+  heiName: string; // "Mindoro State University - Bongabong Campus"
+  heiAddress: string; // "Labasan, Bongabong, Oriental Mindoro"
   academicYear: string; // "2024-2025"
   termCode: "1" | "2"; // 1 = 1st sem, 2 = 2nd sem
   trancheNumber: "1" | "2";
@@ -180,6 +194,7 @@ export interface Annex3FormData {
 
   billedGrantees: Annex3Grantee[];
   otherGrantees: Annex3OtherGrantee[];
+  headerLogos?: HeaderLogosConfig;
 
   signatories?: {
     accountingHead?: { name: string; position: string };
@@ -219,8 +234,8 @@ export interface Annex4Grantee {
 export interface Annex4FormData {
   regionCode: string; // "MIMAROPA"
   heiCode: string; // "MINSU"
-  heiName: string; // "Mindoro State University"
-  heiAddress: string; // "Alcate, Victoria, Oriental Mindoro"
+  heiName: string; // "Mindoro State University - Bongabong Campus"
+  heiAddress: string; // "Labasan, Bongabong, Oriental Mindoro"
   academicYear: string; // e.g. "2023-2024"
   termCode: "1" | "2"; // 1 = 1st sem, 2 = 2nd sem
   trancheNumber: "1" | "2";
@@ -228,7 +243,7 @@ export interface Annex4FormData {
   referenceNumber: string; // "MIMAROPA-MINSU-2023-2-1:20.1"
   billingDate: string;
   isLastBatch: boolean;
-  campus: string; // e.g. "Main Campus - Victoria"
+  campus: string; // e.g. "Bongabong Campus"
 
   totalGrantees: number;
   stipendPerGrantee: number; // 7500.00
@@ -238,6 +253,7 @@ export interface Annex4FormData {
   grandTotalBilling: number; // totalSubsidy + managementFeeAmount
 
   grantees: Annex4Grantee[];
+  headerLogos?: HeaderLogosConfig;
 
   jmcNumber?: string; // e.g. "04"
   jmcSeries?: string; // e.g. "2022"
@@ -274,6 +290,7 @@ export interface Annex5FormData {
   region: string; // "MIMAROPA" or "IV-B"
   heis: Annex5HeiEntry[];
   totalGrantees: number;
+  headerLogos?: HeaderLogosConfig;
 
   addressee?: {
     name: string;
@@ -319,6 +336,7 @@ export interface Annex6FormData {
   // Balance
   balance: number;
   utilizationRate: number; // percentage, e.g. 98.5
+  headerLogos?: HeaderLogosConfig;
 
   signatories?: {
     chiefAccountant?: { name: string; position: string };
@@ -354,6 +372,7 @@ export interface Annex7FormData {
   disbursingOfficerName: string;
   disbursingOfficerDesignation: string;
   certificationDate: string;
+  headerLogos?: HeaderLogosConfig;
 }
 
 export interface Annex8CheckEntry {
@@ -383,6 +402,7 @@ export interface Annex8FormData {
   presidentName: string;
   auditorName: string;
   auditorTitle: string;
+  headerLogos?: HeaderLogosConfig;
 }
 
 export interface Annex9GranteePayroll {
@@ -420,6 +440,7 @@ export interface Annex9FormData {
   firstSemTotalAmount: number;
   secondSemTotalAmount: number;
   grandTotalAmount: number;
+  headerLogos?: HeaderLogosConfig;
 
   signatories?: {
     tesFocalPerson?: { name: string; position: string };
@@ -460,4 +481,5 @@ export interface Annex10FormData {
     office: string;
   };
   conditions: string[];
+  headerLogos?: HeaderLogosConfig;
 }

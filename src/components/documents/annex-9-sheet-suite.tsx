@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChedLogo, UniFastLogo } from "./ched-unifast-logos";
-import { Annex9FormData, Annex9GranteePayroll } from "@/types";
+import { AnnexLogo } from "./annex-logo";
+import { PrintPreviewModal } from "./print-preview-modal";
+import { Annex9FormData, Annex9GranteePayroll, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
   FileSpreadsheet,
@@ -50,6 +51,16 @@ export function Annex9SheetSuite({
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
+
+  // Print & PDF modal state
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printOrientation, setPrintOrientation] = useState<"portrait" | "landscape">("landscape");
+
+  useEffect(() => {
+    const handleOpenPrint = () => setIsPrintModalOpen(true);
+    window.addEventListener("minsu:open-print-modal", handleOpenPrint);
+    return () => window.removeEventListener("minsu:open-print-modal", handleOpenPrint);
+  }, []);
 
   // Default initial values
   const defaultData: Annex9FormData = useMemo(() => {
@@ -149,10 +160,10 @@ export function Annex9SheetSuite({
     return {
       academicYear: "2023-2024",
       activeSemester: "1",
-      campus: "Main Campus - Victoria",
+      campus: "Bongabong Campus",
       payrollDate: "March 28, 2024",
-      heiName: "MINDORO STATE UNIVERSITY",
-      heiAddress: "Alcate, Victoria, Oriental Mindoro",
+      heiName: "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS",
+      heiAddress: "Labasan, Bongabong, Oriental Mindoro",
       grantees: initialGrantees,
       firstSemTotalAmount: firstSemTotal,
       secondSemTotalAmount: secondSemTotal,
@@ -186,6 +197,26 @@ export function Annex9SheetSuite({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleLeftLogoChange = (newConfig: LogoConfig) => {
+    setFormData((prev) => ({
+      ...prev,
+      headerLogos: {
+        ...prev.headerLogos,
+        leftLogo: newConfig,
+      },
+    }));
+  };
+
+  const handleRightLogoChange = (newConfig: LogoConfig) => {
+    setFormData((prev) => ({
+      ...prev,
+      headerLogos: {
+        ...prev.headerLogos,
+        rightLogo: newConfig,
+      },
+    }));
+  };
 
   // Recalculate totals
   const updateGranteesAndTotals = (newGrantees: Annex9GranteePayroll[]) => {
@@ -292,15 +323,15 @@ export function Annex9SheetSuite({
       for (const doc of docs) {
         if (doc.annexType?.number === 3 && doc.formData?.billedGrantees?.length > 0) {
           sourceTitle = doc.title || "Annex 3 Continuing Billing";
-          imported = doc.formData.billedGrantees.map((bg: any, index: number) => ({
+          imported = doc.formData.billedGrantees.map((bg: Record<string, string | number>, index: number) => ({
             id: `imported-${index + 1}`,
             seqNo: index + 1,
-            tdpAwardNo: bg.awardNo || `TDP-2023-IVB-${String(index + 1).padStart(5, "0")}`,
-            studentIdNo: bg.studentId || bg.studentNo || "",
-            lastName: bg.lastName || (bg.studentName ? bg.studentName.split(",")[0]?.trim() : ""),
-            givenName: bg.givenName || (bg.studentName ? bg.studentName.split(",")[1]?.trim() : ""),
-            middleInitial: bg.middleInitial || bg.middleName || "",
-            degreeProgram: bg.degreeProgram || bg.course || "BS Information Technology",
+            tdpAwardNo: String(bg.awardNo || `TDP-2023-IVB-${String(index + 1).padStart(5, "0")}`),
+            studentIdNo: String(bg.studentId || bg.studentNo || ""),
+            lastName: String(bg.lastName || (typeof bg.studentName === "string" ? bg.studentName.split(",")[0]?.trim() : "")),
+            givenName: String(bg.givenName || (typeof bg.studentName === "string" ? bg.studentName.split(",")[1]?.trim() : "")),
+            middleInitial: String(bg.middleInitial || bg.middleName || ""),
+            degreeProgram: String(bg.degreeProgram || bg.course || "BS Information Technology"),
             yearLevel: String(bg.yearLevel || "3"),
             firstSemAmount: formData.activeSemester === "1" ? 7500 : 0,
             firstSemDateReceived: formData.activeSemester === "1" ? formData.payrollDate : "",
@@ -312,15 +343,15 @@ export function Annex9SheetSuite({
           break;
         } else if (doc.annexType?.number === 4 && doc.formData?.grantees?.length > 0) {
           sourceTitle = doc.title || "Annex 4 New Billing";
-          imported = doc.formData.grantees.map((g: any, index: number) => ({
+          imported = doc.formData.grantees.map((g: Record<string, string | number>, index: number) => ({
             id: `imported-${index + 1}`,
             seqNo: index + 1,
-            tdpAwardNo: g.awardNo || `TDP-2023-IVB-${String(index + 1).padStart(5, "0")}`,
-            studentIdNo: g.studentNo || "",
-            lastName: g.lastName || "",
-            givenName: g.givenName || "",
-            middleInitial: g.middleInitial || "",
-            degreeProgram: g.degreeProgram || "BS Agriculture",
+            tdpAwardNo: String(g.awardNo || `TDP-2023-IVB-${String(index + 1).padStart(5, "0")}`),
+            studentIdNo: String(g.studentNo || ""),
+            lastName: String(g.lastName || ""),
+            givenName: String(g.givenName || ""),
+            middleInitial: String(g.middleInitial || ""),
+            degreeProgram: String(g.degreeProgram || "BS Agriculture"),
             yearLevel: String(g.yearLevel || "1"),
             firstSemAmount: formData.activeSemester === "1" ? 7500 : 0,
             firstSemDateReceived: formData.activeSemester === "1" ? formData.payrollDate : "",
@@ -398,9 +429,9 @@ export function Annex9SheetSuite({
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 3000);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "An unexpected error occurred while saving.");
+      setError(err instanceof Error ? err.message : "An unexpected error occurred while saving.");
     } finally {
       setIsSaving(false);
     }
@@ -434,10 +465,7 @@ export function Annex9SheetSuite({
 
   // Native Print / PDF
   const handlePrint = () => {
-    setViewMode("sheet");
-    setTimeout(() => {
-      window.print();
-    }, 200);
+    setIsPrintModalOpen(true);
   };
 
   // Search filtered scholars
@@ -674,7 +702,7 @@ export function Annex9SheetSuite({
                     size="sm"
                     onClick={handleImportFromBillings}
                     disabled={isImporting}
-                    className="text-xs border-minsu-gold-600 text-minsu-gold-700 hover:bg-minsu-gold-50"
+                    className="apple-press text-xs border-minsu-gold-600/80 text-minsu-gold-700 hover:bg-minsu-gold-50 shadow-xs"
                   >
                     <DownloadCloud className={`w-3.5 h-3.5 mr-1.5 ${isImporting ? "animate-spin" : ""}`} />
                     Import from Billings (Annex 3 / 4)
@@ -684,7 +712,7 @@ export function Annex9SheetSuite({
                     variant="outline"
                     size="sm"
                     onClick={handleBulkSetStipend}
-                    className="text-xs border-minsu-green-700 text-minsu-green-700 hover:bg-minsu-green-50"
+                    className="apple-press text-xs border-minsu-green-700/80 text-minsu-green-700 hover:bg-minsu-green-50 shadow-xs"
                   >
                     <DollarSign className="w-3.5 h-3.5 mr-1" />
                     Set All ₱7,500 ({formData.activeSemester === "1" ? "1st Sem" : "2nd Sem"})
@@ -693,7 +721,7 @@ export function Annex9SheetSuite({
                     type="button"
                     size="sm"
                     onClick={handleAddRow}
-                    className="bg-minsu-green-700 hover:bg-minsu-green-800 text-white text-xs"
+                    className="apple-press bg-minsu-green-700 hover:bg-minsu-green-800 text-white text-xs shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5 mr-1" />
                     Add Scholar Row
@@ -702,182 +730,207 @@ export function Annex9SheetSuite({
               </div>
 
               {/* Editable Master Table */}
-              <div className="bg-white rounded-xl border border-line shadow-sm overflow-x-auto">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-neutral-50 border-b border-line text-ink-muted font-medium">
-                    <tr>
-                      <th className="p-2.5 w-10 text-center">#</th>
-                      <th className="p-2.5 w-36">TDP Award No.</th>
-                      <th className="p-2.5 w-28">Student ID</th>
-                      <th className="p-2.5 w-32">Last Name</th>
-                      <th className="p-2.5 w-32">Given Name</th>
-                      <th className="p-2.5 w-12 text-center">M.I.</th>
-                      <th className="p-2.5 min-w-[150px]">Degree Program</th>
-                      <th className="p-2.5 w-14 text-center">Yr</th>
-                      {/* Semester 1 */}
-                      <th className="p-2.5 w-28 text-right bg-emerald-50/40">1st Sem (₱)</th>
-                      <th className="p-2.5 w-28 bg-emerald-50/40">1st Sem Date</th>
-                      <th className="p-2.5 w-28 bg-emerald-50/40">1st Sem Sign</th>
-                      {/* Semester 2 */}
-                      <th className="p-2.5 w-28 text-right bg-blue-50/40">2nd Sem (₱)</th>
-                      <th className="p-2.5 w-28 bg-blue-50/40">2nd Sem Date</th>
-                      <th className="p-2.5 w-28 bg-blue-50/40">2nd Sem Sign</th>
-                      <th className="p-2.5 w-12 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {filteredGrantees.map((g, idx) => (
-                      <tr key={g.id} className="hover:bg-neutral-50/50 transition">
-                        <td className="p-1.5 text-center text-ink-muted font-mono">{idx + 1}</td>
-                        <td className="p-1.5">
-                          <input
-                            type="text"
-                            value={g.tdpAwardNo}
-                            onChange={(e) => handleGranteeChange(g.id, "tdpAwardNo", e.target.value)}
-                            className="w-full p-1 text-xs font-mono rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="TDP-2023-..."
-                          />
-                        </td>
-                        <td className="p-1.5">
-                          <input
-                            type="text"
-                            value={g.studentIdNo}
-                            onChange={(e) => handleGranteeChange(g.id, "studentIdNo", e.target.value)}
-                            className="w-full p-1 text-xs font-mono rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="21-0000"
-                          />
-                        </td>
-                        <td className="p-1.5">
-                          <input
-                            type="text"
-                            value={g.lastName}
-                            onChange={(e) => handleGranteeChange(g.id, "lastName", e.target.value)}
-                            className="w-full p-1 text-xs font-semibold uppercase rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="Last Name"
-                          />
-                        </td>
-                        <td className="p-1.5">
-                          <input
-                            type="text"
-                            value={g.givenName}
-                            onChange={(e) => handleGranteeChange(g.id, "givenName", e.target.value)}
-                            className="w-full p-1 text-xs uppercase rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="Given Name"
-                          />
-                        </td>
-                        <td className="p-1.5 text-center">
-                          <input
-                            type="text"
-                            value={g.middleInitial}
-                            onChange={(e) => handleGranteeChange(g.id, "middleInitial", e.target.value)}
-                            className="w-full p-1 text-xs uppercase text-center rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            maxLength={3}
-                            placeholder="M."
-                          />
-                        </td>
-                        <td className="p-1.5">
-                          <input
-                            type="text"
-                            value={g.degreeProgram}
-                            onChange={(e) => handleGranteeChange(g.id, "degreeProgram", e.target.value)}
-                            className="w-full p-1 text-xs rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="Program"
-                          />
-                        </td>
-                        <td className="p-1.5 text-center">
-                          <input
-                            type="text"
-                            value={g.yearLevel}
-                            onChange={(e) => handleGranteeChange(g.id, "yearLevel", e.target.value)}
-                            className="w-full p-1 text-xs text-center rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            maxLength={2}
-                          />
-                        </td>
-                        {/* 1st Sem */}
-                        <td className="p-1.5 text-right bg-emerald-50/20">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={g.firstSemAmount || ""}
-                            onChange={(e) => handleGranteeChange(g.id, "firstSemAmount", e.target.value)}
-                            className="w-full p-1 text-xs font-mono text-right font-semibold rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                          />
-                        </td>
-                        <td className="p-1.5 bg-emerald-50/20">
-                          <input
-                            type="text"
-                            value={g.firstSemDateReceived}
-                            onChange={(e) => handleGranteeChange(g.id, "firstSemDateReceived", e.target.value)}
-                            className="w-full p-1 text-xs rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="YYYY-MM-DD"
-                          />
-                        </td>
-                        <td className="p-1.5 bg-emerald-50/20">
-                          <input
-                            type="text"
-                            value={g.firstSemSignature}
-                            onChange={(e) => handleGranteeChange(g.id, "firstSemSignature", e.target.value)}
-                            className="w-full p-1 text-xs italic rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="Ack / Sign"
-                          />
-                        </td>
-                        {/* 2nd Sem */}
-                        <td className="p-1.5 text-right bg-blue-50/20">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={g.secondSemAmount || ""}
-                            onChange={(e) => handleGranteeChange(g.id, "secondSemAmount", e.target.value)}
-                            className="w-full p-1 text-xs font-mono text-right font-semibold rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                          />
-                        </td>
-                        <td className="p-1.5 bg-blue-50/20">
-                          <input
-                            type="text"
-                            value={g.secondSemDateReceived}
-                            onChange={(e) => handleGranteeChange(g.id, "secondSemDateReceived", e.target.value)}
-                            className="w-full p-1 text-xs rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="YYYY-MM-DD"
-                          />
-                        </td>
-                        <td className="p-1.5 bg-blue-50/20">
-                          <input
-                            type="text"
-                            value={g.secondSemSignature}
-                            onChange={(e) => handleGranteeChange(g.id, "secondSemSignature", e.target.value)}
-                            className="w-full p-1 text-xs italic rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="Ack / Sign"
-                          />
-                        </td>
-                        <td className="p-1.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteRow(g.id)}
-                            className="text-neutral-400 hover:text-red-600 transition p-1"
-                            title="Delete scholar"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
+              <div className="bg-white rounded-2xl border border-line/80 shadow-xs overflow-hidden">
+                <div className="overflow-x-auto apple-scrollbar">
+                  <table className="w-full min-w-[1650px] text-xs text-left border-collapse">
+                    <thead className="bg-neutral-50/80 backdrop-blur-xs border-b border-line text-ink-muted text-[11px] font-semibold uppercase tracking-wider select-none">
+                      <tr>
+                        <th className="py-3 px-2 w-12 text-center">#</th>
+                        <th className="py-3 px-2.5 w-40 min-w-[155px]">TDP Award No.</th>
+                        <th className="py-3 px-2.5 w-32 min-w-[125px]">Student ID</th>
+                        <th className="py-3 px-2.5 w-36 min-w-[140px]">Last Name</th>
+                        <th className="py-3 px-2.5 w-36 min-w-[140px]">Given Name</th>
+                        <th className="py-3 px-1 w-14 text-center">M.I.</th>
+                        <th className="py-3 px-2.5 min-w-[180px]">Degree Program</th>
+                        <th className="py-3 px-1 w-14 text-center">Yr</th>
+                        {/* Semester 1 */}
+                        <th className="py-3 px-2.5 w-36 min-w-[140px] text-right bg-emerald-50/50 text-emerald-800 border-l border-emerald-100">1st Sem (₱)</th>
+                        <th className="py-3 px-2.5 w-36 min-w-[140px] bg-emerald-50/50 text-emerald-800">1st Sem Date</th>
+                        <th className="py-3 px-2.5 w-32 min-w-[125px] bg-emerald-50/50 text-emerald-800 border-r border-emerald-100">1st Sem Sign</th>
+                        {/* Semester 2 */}
+                        <th className="py-3 px-2.5 w-36 min-w-[140px] text-right bg-blue-50/50 text-blue-800 border-l border-blue-100">2nd Sem (₱)</th>
+                        <th className="py-3 px-2.5 w-36 min-w-[140px] bg-blue-50/50 text-blue-800">2nd Sem Date</th>
+                        <th className="py-3 px-2.5 w-32 min-w-[125px] bg-blue-50/50 text-blue-800 border-r border-blue-100">2nd Sem Sign</th>
+                        <th className="py-3 px-2 w-14 text-center">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-neutral-50 font-bold border-t border-line text-ink">
-                    <tr>
-                      <td colSpan={8} className="p-2.5 text-right uppercase tracking-wider text-xs">
-                        TOTAL AMOUNT RELEASED:
-                      </td>
-                      <td className="p-2.5 text-right font-mono text-minsu-green-800 text-xs bg-emerald-50/40">
-                        ₱{formData.firstSemTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </td>
-                      <td colSpan={2} className="bg-emerald-50/40"></td>
-                      <td className="p-2.5 text-right font-mono text-blue-800 text-xs bg-blue-50/40">
-                        ₱{formData.secondSemTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </td>
-                      <td colSpan={3} className="bg-blue-50/40"></td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-line/60">
+                      {filteredGrantees.map((g, idx) => (
+                        <tr key={g.id} className="group hover:bg-neutral-50/60 transition-colors duration-150">
+                          <td className="py-2 px-2 text-center text-ink-muted/80 font-mono text-[11px]">{idx + 1}</td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={g.tdpAwardNo}
+                              onChange={(e) => handleGranteeChange(g.id, "tdpAwardNo", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs font-mono rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="TDP-2023-..."
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={g.studentIdNo}
+                              onChange={(e) => handleGranteeChange(g.id, "studentIdNo", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs font-mono rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="21-0000"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={g.lastName}
+                              onChange={(e) => handleGranteeChange(g.id, "lastName", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs font-semibold uppercase rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="Last Name"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={g.givenName}
+                              onChange={(e) => handleGranteeChange(g.id, "givenName", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs uppercase rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="Given Name"
+                            />
+                          </td>
+                          <td className="py-1.5 px-1 text-center">
+                            <input
+                              type="text"
+                              value={g.middleInitial}
+                              onChange={(e) => handleGranteeChange(g.id, "middleInitial", e.target.value)}
+                              className="w-full py-1.5 px-1 text-xs uppercase text-center rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              maxLength={3}
+                              placeholder="M."
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={g.degreeProgram}
+                              onChange={(e) => handleGranteeChange(g.id, "degreeProgram", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="Degree Program"
+                            />
+                          </td>
+                          <td className="py-1.5 px-1 text-center">
+                            <input
+                              type="text"
+                              value={g.yearLevel}
+                              onChange={(e) => handleGranteeChange(g.id, "yearLevel", e.target.value)}
+                              className="w-full py-1.5 px-1 text-xs font-mono text-center rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              maxLength={2}
+                              placeholder="1"
+                            />
+                          </td>
+                          {/* 1st Sem */}
+                          <td className="py-1.5 px-2 bg-emerald-50/20 border-l border-emerald-100/70">
+                            <div className="relative flex items-center">
+                              <span className="absolute left-2 text-xs font-mono text-emerald-700 select-none pointer-events-none">₱</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={g.firstSemAmount || ""}
+                                onChange={(e) => handleGranteeChange(g.id, "firstSemAmount", e.target.value)}
+                                placeholder="0.00"
+                                className="w-full py-1.5 pl-5 pr-2 text-xs font-mono text-right font-semibold rounded-lg border border-transparent hover:border-emerald-300 focus:border-minsu-green-700 bg-emerald-50/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-emerald-900 transition-all duration-150 outline-none"
+                              />
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-2 bg-emerald-50/20">
+                            <input
+                              type="date"
+                              value={g.firstSemDateReceived}
+                              onChange={(e) => handleGranteeChange(g.id, "firstSemDateReceived", e.target.value)}
+                              className="w-full py-1.5 px-2 text-xs font-mono rounded-lg border border-transparent hover:border-emerald-300 focus:border-minsu-green-700 bg-emerald-50/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink transition-all duration-150 outline-none cursor-pointer"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2 bg-emerald-50/20 border-r border-emerald-100/70">
+                            <input
+                              type="text"
+                              value={g.firstSemSignature}
+                              onChange={(e) => handleGranteeChange(g.id, "firstSemSignature", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs italic rounded-lg border border-transparent hover:border-emerald-300 focus:border-minsu-green-700 bg-emerald-50/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="Signature / Ack"
+                            />
+                          </td>
+                          {/* 2nd Sem */}
+                          <td className="py-1.5 px-2 bg-blue-50/20 border-l border-blue-100/70">
+                            <div className="relative flex items-center">
+                              <span className="absolute left-2 text-xs font-mono text-blue-700 select-none pointer-events-none">₱</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={g.secondSemAmount || ""}
+                                onChange={(e) => handleGranteeChange(g.id, "secondSemAmount", e.target.value)}
+                                placeholder="0.00"
+                                className="w-full py-1.5 pl-5 pr-2 text-xs font-mono text-right font-semibold rounded-lg border border-transparent hover:border-blue-300 focus:border-blue-600 bg-blue-50/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-blue-500/20 text-blue-900 transition-all duration-150 outline-none"
+                              />
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-2 bg-blue-50/20">
+                            <input
+                              type="date"
+                              value={g.secondSemDateReceived}
+                              onChange={(e) => handleGranteeChange(g.id, "secondSemDateReceived", e.target.value)}
+                              className="w-full py-1.5 px-2 text-xs font-mono rounded-lg border border-transparent hover:border-blue-300 focus:border-blue-600 bg-blue-50/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-blue-500/20 text-ink transition-all duration-150 outline-none cursor-pointer"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2 bg-blue-50/20 border-r border-blue-100/70">
+                            <input
+                              type="text"
+                              value={g.secondSemSignature}
+                              onChange={(e) => handleGranteeChange(g.id, "secondSemSignature", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs italic rounded-lg border border-transparent hover:border-blue-300 focus:border-blue-600 bg-blue-50/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-blue-500/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="Signature / Ack"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRow(g.id)}
+                              className="apple-press inline-flex items-center justify-center w-7 h-7 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50/80 active:bg-red-100 transition-all duration-150"
+                              title="Delete scholar"
+                              aria-label="Delete scholar"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredGrantees.length === 0 && (
+                        <tr>
+                          <td colSpan={15} className="py-12 text-center text-ink-muted">
+                            <FileSpreadsheet className="w-8 h-8 mx-auto mb-2 text-neutral-300" />
+                            <p className="font-medium text-sm">No grantee payroll records found</p>
+                            <p className="text-xs text-ink-muted/80 mt-0.5">
+                              {searchTerm ? "Try adjusting your search criteria." : "Click 'Add Scholar Row' or 'Import from Billings' to populate."}
+                            </p>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot className="bg-neutral-50/90 border-t border-line text-ink">
+                      <tr>
+                        <td colSpan={8} className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                          <span className="inline-flex items-center gap-1.5 font-medium normal-case">
+                            <span className="w-2 h-2 rounded-full bg-minsu-green-600"></span>
+                            Showing <span className="font-semibold text-ink">{filteredGrantees.length}</span> {filteredGrantees.length === 1 ? "scholar" : "scholars"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-minsu-green-800 text-xs font-bold bg-emerald-50/60 border-l border-emerald-100">
+                          ₱{formData.firstSemTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td colSpan={2} className="bg-emerald-50/60 border-r border-emerald-100"></td>
+                        <td className="py-3 px-3 text-right font-mono text-blue-800 text-xs font-bold bg-blue-50/60 border-l border-blue-100">
+                          ₱{formData.secondSemTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td colSpan={2} className="bg-blue-50/60 border-r border-blue-100"></td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -1061,7 +1114,7 @@ export function Annex9SheetSuite({
       {/* OFFICIAL SHEET CANVAS MODE (Pixel-perfect reproduction of page-1.png & Annex9.xlsx) */}
       {(viewMode === "sheet" || typeof window !== "undefined") && (
         <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
-          <div className="bg-neutral-100 p-4 md:p-8 rounded-2xl flex justify-center overflow-x-auto print:bg-white print:p-0">
+          <div className="annex-printable-document bg-neutral-100 p-4 md:p-8 rounded-2xl flex justify-center overflow-x-auto print:bg-white print:p-0">
             {/* Standard Government Ledger Canvas (Landscape) */}
             <div className="w-[1150px] bg-white text-black p-8 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight">
               
@@ -1075,7 +1128,15 @@ export function Annex9SheetSuite({
               {/* Dual Logo & Country Header */}
               <div className="flex items-center justify-between mb-4">
                 <div className="w-16 h-16 flex items-center justify-center">
-                  <ChedLogo className="w-16 h-16" />
+                  <AnnexLogo
+                    position="left"
+                    config={formData.headerLogos?.leftLogo}
+                    defaultPreset="ched"
+                    editable={true}
+                    documentId={documentId}
+                    className="w-16 h-16"
+                    onLogoChange={handleLeftLogoChange}
+                  />
                 </div>
                 <div className="text-center flex-1 px-4">
                   <p className="text-[10px] font-sans text-neutral-600 mb-0.5">Republic of the Philippines</p>
@@ -1093,7 +1154,15 @@ export function Annex9SheetSuite({
                   </p>
                 </div>
                 <div className="w-16 h-16 flex items-center justify-center">
-                  <UniFastLogo className="w-16 h-16" />
+                  <AnnexLogo
+                    position="right"
+                    config={formData.headerLogos?.rightLogo}
+                    defaultPreset="unifast"
+                    editable={true}
+                    documentId={documentId}
+                    className="w-16 h-16"
+                    onLogoChange={handleRightLogoChange}
+                  />
                 </div>
               </div>
 
@@ -1258,6 +1327,31 @@ export function Annex9SheetSuite({
           </div>
         </div>
       )}
+
+      {/* Apple-styled Fluid Print / PDF Preview Modal */}
+      <PrintPreviewModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        documentTitle={documentTitle || "Annex 9 - Masterlist of Beneficiaries (Payroll)"}
+        annexNumber={9}
+        orientation={printOrientation}
+        onOrientationChange={setPrintOrientation}
+        previewContent={
+          <div className="text-black text-xs space-y-3">
+            <div className="p-4 border border-dashed border-neutral-300 rounded bg-[#F1F8F1]">
+              <div className="font-bold text-sm text-[#123F17]">
+                TDP Annex 9 - Masterlist of Beneficiaries (Payroll)
+              </div>
+              <div className="text-xs text-neutral-600 mt-1">
+                HEI: {formData.heiName} • Total Beneficiaries: {formData.grantees.length} • Total Amount: ₱{formData.grandTotalAmount.toLocaleString()}
+              </div>
+              <div className="text-[11px] text-neutral-500 mt-2 italic">
+                Official student stipend payroll ledger formatted in Landscape orientation.
+              </div>
+            </div>
+          </div>
+        }
+      />
     </div>
   );
 }

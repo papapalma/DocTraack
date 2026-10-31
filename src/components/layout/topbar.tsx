@@ -3,17 +3,19 @@
 import React, { useState } from "react";
 import { useSession } from "@/hooks/use-session";
 import { useNav } from "@/components/layout/nav-context";
-import { Bell, LogOut, User as UserIcon, Shield, Menu, ChevronDown } from "lucide-react";
+import { Bell, LogOut, User as UserIcon, Shield, Menu, ChevronDown, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/auth/logout-modal";
 import { Logo } from "@/components/ui/logo";
+import { GlobalBrandingModal } from "@/components/dashboard/global-branding-modal";
 
 export const Topbar: React.FC = () => {
   const { user, logout } = useSession();
   const { toggleSidebar } = useNav();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showBrandingModal, setShowBrandingModal] = useState(false);
 
   const getRoleDisplayName = (role?: string) => {
     switch (role) {
@@ -33,7 +35,7 @@ export const Topbar: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 h-16 w-full bg-[#1B5E20]/95 backdrop-blur-xl text-white shadow-[0_4px_20px_rgba(0,0,0,0.06)] border-b border-[#F2B705]/30 flex items-center justify-between px-3 sm:px-6 transition-colors">
+    <header className="shrink-0 z-40 h-16 w-full bg-[#1B5E20]/95 backdrop-blur-xl text-white shadow-[0_4px_20px_rgba(0,0,0,0.06)] border-b border-[#F2B705]/30 flex items-center justify-between px-3 sm:px-6 transition-colors">
       {/* Brand & Sidebar Toggle Button */}
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Universal Sidebar Toggle Button */}
@@ -128,6 +130,19 @@ export const Topbar: React.FC = () => {
                       <UserIcon className="w-4 h-4 text-[#1B5E20]" />
                       Dashboard
                     </Link>
+
+                    {(user.role === "SYSTEM_ADMIN" || user.role === "DIRECTOR") && (
+                      <button
+                        onClick={() => {
+                          setMenuOpen(false);
+                          setShowBrandingModal(true);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-xl text-[#1F2A24] hover:bg-[#F1F8F1] active:bg-[#DCEFDD] transition-colors text-left"
+                      >
+                        <Sparkles className="w-4 h-4 text-[#B88A00]" />
+                        Annex Logos & Branding
+                      </button>
+                    )}
                   </div>
 
                   <div className="border-t border-[#D6DDD8]/60 mt-1 pt-1">
@@ -155,6 +170,12 @@ export const Topbar: React.FC = () => {
         onClose={() => setShowLogoutModal(false)}
         onConfirm={logout}
         userName={user?.name}
+      />
+
+      {/* Global Branding & Logos Modal */}
+      <GlobalBrandingModal
+        isOpen={showBrandingModal}
+        onClose={() => setShowBrandingModal(false)}
       />
     </header>
   );

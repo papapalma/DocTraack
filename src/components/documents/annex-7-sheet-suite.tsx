@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChedLogo, UniFastLogo } from "./ched-unifast-logos";
-import { Annex7FormData, Annex7Entry } from "@/types";
+import { AnnexLogo } from "./annex-logo";
+import { PrintPreviewModal } from "./print-preview-modal";
+import { Annex7FormData, Annex7Entry, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
   FileSpreadsheet,
@@ -19,7 +20,6 @@ import {
   Building,
   Plus,
   Trash2,
-  Calendar,
   Sparkles,
   Search,
 } from "lucide-react";
@@ -50,6 +50,16 @@ export function Annex7SheetSuite({
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
 
+  // Print & PDF modal state
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printOrientation, setPrintOrientation] = useState<"portrait" | "landscape">("landscape");
+
+  useEffect(() => {
+    const handleOpenPrint = () => setIsPrintModalOpen(true);
+    window.addEventListener("minsu:open-print-modal", handleOpenPrint);
+    return () => window.removeEventListener("minsu:open-print-modal", handleOpenPrint);
+  }, []);
+
   // Default initial values
   const defaultData: Annex7FormData = useMemo(() => {
     if (initialData) return initialData;
@@ -74,7 +84,7 @@ export function Annex7SheetSuite({
         dvPayrollNo: "DV-2024-03-0146",
         orsBursNo: "ORS-2024-03-0211",
         responsibilityCenterCode: "10-001-03-00001",
-        payee: "Mindoro State University (TES/TDP Office)",
+        payee: "Mindoro State University - Bongabong Campus (TES/TDP Office)",
         uacsObjectCode: "5-02-03-010",
         natureOfPayment: "0.5% Administrative Support Cost / Management Fee for Batch 20.1",
         amount: 375,
@@ -98,7 +108,7 @@ export function Annex7SheetSuite({
         dvPayrollNo: "DV-2024-04-0203",
         orsBursNo: "ORS-2024-04-0316",
         responsibilityCenterCode: "10-001-03-00001",
-        payee: "Mindoro State University (TES/TDP Office)",
+        payee: "Mindoro State University - Bongabong Campus (TES/TDP Office)",
         uacsObjectCode: "5-02-03-010",
         natureOfPayment: "0.5% Administrative Support Cost / Management Fee for Batch 20.2",
         amount: 3375,
@@ -109,7 +119,7 @@ export function Annex7SheetSuite({
 
     return {
       periodCovered: "January 1, 2024 to June 30, 2024",
-      entityName: "MINDORO STATE UNIVERSITY",
+      entityName: "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS",
       fundCluster: "01 - Regular Agency Fund",
       bankNameAccountNo: "Land Bank of the Philippines - Calapan Branch / CA # 0122-1088-24",
       reportNo: "2024-06-001",
@@ -131,6 +141,26 @@ export function Annex7SheetSuite({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleLeftLogoChange = (newConfig: LogoConfig) => {
+    setFormData((prev) => ({
+      ...prev,
+      headerLogos: {
+        ...prev.headerLogos,
+        leftLogo: newConfig,
+      },
+    }));
+  };
+
+  const handleRightLogoChange = (newConfig: LogoConfig) => {
+    setFormData((prev) => ({
+      ...prev,
+      headerLogos: {
+        ...prev.headerLogos,
+        rightLogo: newConfig,
+      },
+    }));
+  };
 
   // Auto-compute total and ADA serial bounds
   const updateEntriesAndTotals = (newEntries: Annex7Entry[]) => {
@@ -209,7 +239,20 @@ export function Annex7SheetSuite({
       const pulledEntries: Annex7Entry[] = [];
       let counter = 1;
 
-      docs.forEach((doc: any) => {
+      interface SyncedBillingDoc {
+        annexType?: { number?: number };
+        formData?: {
+          batchNumber?: string;
+          termCode?: string;
+          academicYear?: string;
+          totalGrantees?: number;
+          totalSubsidy?: number | string;
+          managementFeeAmount?: number | string;
+          billingDate?: string;
+        };
+      }
+
+      docs.forEach((doc: SyncedBillingDoc) => {
         if (
           (doc.annexType?.number === 3 || doc.annexType?.number === 4) &&
           doc.formData?.totalSubsidy
@@ -318,9 +361,9 @@ export function Annex7SheetSuite({
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 3000);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "An unexpected error occurred while saving.");
+      setError(err instanceof Error ? err.message : "An unexpected error occurred while saving.");
     } finally {
       setIsSaving(false);
     }
@@ -354,10 +397,7 @@ export function Annex7SheetSuite({
 
   // Native Print / PDF
   const handlePrint = () => {
-    setViewMode("sheet");
-    setTimeout(() => {
-      window.print();
-    }, 200);
+    setIsPrintModalOpen(true);
   };
 
   // Filtered entries for search
@@ -594,7 +634,7 @@ export function Annex7SheetSuite({
                     size="sm"
                     onClick={syncFromBillings}
                     disabled={isSyncing}
-                    className="text-xs border-minsu-gold-600 text-minsu-gold-700 hover:bg-minsu-gold-50"
+                    className="apple-press text-xs border-minsu-gold-600/80 text-minsu-gold-700 hover:bg-minsu-gold-50 shadow-xs"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isSyncing ? "animate-spin" : ""}`} />
                     Auto-Populate from TDP Billings
@@ -603,7 +643,7 @@ export function Annex7SheetSuite({
                     type="button"
                     size="sm"
                     onClick={handleAddRow}
-                    className="bg-minsu-green-700 hover:bg-minsu-green-800 text-white text-xs"
+                    className="apple-press bg-minsu-green-700 hover:bg-minsu-green-800 text-white text-xs shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5 mr-1" />
                     Add ADA Row
@@ -612,122 +652,146 @@ export function Annex7SheetSuite({
               </div>
 
               {/* Editable Table */}
-              <div className="bg-white rounded-xl border border-line shadow-sm overflow-x-auto">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-neutral-50 border-b border-line text-ink-muted font-medium">
-                    <tr>
-                      <th className="p-3 w-10 text-center">#</th>
-                      <th className="p-3 w-32">ADA Date</th>
-                      <th className="p-3 w-36">ADA Serial No.</th>
-                      <th className="p-3 w-36">DV / Payroll No.</th>
-                      <th className="p-3 w-36">ORS / BURS No.</th>
-                      <th className="p-3 w-48">Payee</th>
-                      <th className="p-3 w-32">UACS Code</th>
-                      <th className="p-3 min-w-[200px]">Nature of Payment</th>
-                      <th className="p-3 w-36 text-right">Amount (₱)</th>
-                      <th className="p-3 w-12 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {filteredEntries.map((entry, index) => (
-                      <tr key={entry.id} className="hover:bg-neutral-50/50 transition">
-                        <td className="p-2 text-center text-ink-muted font-mono">{index + 1}</td>
-                        <td className="p-2">
-                          <input
-                            type="date"
-                            value={entry.adaDate}
-                            onChange={(e) => handleEntryChange(entry.id, "adaDate", e.target.value)}
-                            className="w-full p-1.5 text-xs rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={entry.adaSerialNo}
-                            onChange={(e) => handleEntryChange(entry.id, "adaSerialNo", e.target.value)}
-                            className="w-full p-1.5 text-xs font-mono font-medium rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="ADA-2024-xxx"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={entry.dvPayrollNo}
-                            onChange={(e) => handleEntryChange(entry.id, "dvPayrollNo", e.target.value)}
-                            className="w-full p-1.5 text-xs font-mono rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="DV-2024-xxxx"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={entry.orsBursNo}
-                            onChange={(e) => handleEntryChange(entry.id, "orsBursNo", e.target.value)}
-                            className="w-full p-1.5 text-xs font-mono rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="ORS-2024-xxxx"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={entry.payee}
-                            onChange={(e) => handleEntryChange(entry.id, "payee", e.target.value)}
-                            className="w-full p-1.5 text-xs rounded border border-line focus:ring-1 focus:ring-minsu-green-700 font-medium"
-                            placeholder="Payee name / Grantees"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={entry.uacsObjectCode}
-                            onChange={(e) => handleEntryChange(entry.id, "uacsObjectCode", e.target.value)}
-                            className="w-full p-1.5 text-xs font-mono rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="5-02-99-990"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={entry.natureOfPayment}
-                            onChange={(e) => handleEntryChange(entry.id, "natureOfPayment", e.target.value)}
-                            className="w-full p-1.5 text-xs rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                            placeholder="Purpose / Stipend details"
-                          />
-                        </td>
-                        <td className="p-2 text-right">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={entry.amount || ""}
-                            onChange={(e) => handleEntryChange(entry.id, "amount", e.target.value)}
-                            className="w-full p-1.5 text-xs font-mono text-right font-semibold rounded border border-line focus:ring-1 focus:ring-minsu-green-700"
-                          />
-                        </td>
-                        <td className="p-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteRow(entry.id)}
-                            className="text-neutral-400 hover:text-red-600 transition p-1"
-                            title="Delete entry"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
+              <div className="bg-white rounded-2xl border border-line/80 shadow-xs overflow-hidden">
+                <div className="overflow-x-auto apple-scrollbar">
+                  <table className="w-full min-w-[1340px] text-xs text-left border-collapse">
+                    <thead className="bg-neutral-50/80 backdrop-blur-xs border-b border-line text-ink-muted text-[11px] font-semibold uppercase tracking-wider select-none">
+                      <tr>
+                        <th className="py-3 px-2 w-12 text-center">#</th>
+                        <th className="py-3 px-2.5 w-40 min-w-[155px]">ADA Date</th>
+                        <th className="py-3 px-2.5 w-44 min-w-[160px]">ADA Serial No.</th>
+                        <th className="py-3 px-2.5 w-44 min-w-[160px]">DV / Payroll No.</th>
+                        <th className="py-3 px-2.5 w-44 min-w-[160px]">ORS / BURS No.</th>
+                        <th className="py-3 px-2.5 w-60 min-w-[220px]">Payee</th>
+                        <th className="py-3 px-2.5 w-36 min-w-[130px]">UACS Code</th>
+                        <th className="py-3 px-2.5 min-w-[240px]">Nature of Payment</th>
+                        <th className="py-3 px-2.5 w-44 min-w-[165px] text-right">Amount (₱)</th>
+                        <th className="py-3 px-2 w-14 text-center">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-neutral-50 font-bold border-t border-line text-ink">
-                    <tr>
-                      <td colSpan={8} className="p-3 text-right uppercase tracking-wider text-xs">
-                        Total Amount of ADAs Issued:
-                      </td>
-                      <td className="p-3 text-right font-mono text-minsu-green-800 text-sm">
-                        ₱{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-line/60">
+                      {filteredEntries.map((entry, index) => (
+                        <tr key={entry.id} className="group hover:bg-minsu-green-50/40 transition-colors duration-150">
+                          <td className="py-2 px-2 text-center text-ink-muted/80 font-mono text-[11px]">{index + 1}</td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="date"
+                              value={entry.adaDate}
+                              onChange={(e) => handleEntryChange(entry.id, "adaDate", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs font-mono rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink transition-all duration-150 outline-none cursor-pointer"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={entry.adaSerialNo}
+                              onChange={(e) => handleEntryChange(entry.id, "adaSerialNo", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs font-mono font-medium rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="ADA-2024-xxx"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={entry.dvPayrollNo}
+                              onChange={(e) => handleEntryChange(entry.id, "dvPayrollNo", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs font-mono rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="DV-2024-xxxx"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={entry.orsBursNo}
+                              onChange={(e) => handleEntryChange(entry.id, "orsBursNo", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs font-mono rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="ORS-2024-xxxx"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={entry.payee}
+                              onChange={(e) => handleEntryChange(entry.id, "payee", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink font-medium placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="Payee name / Grantees"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={entry.uacsObjectCode}
+                              onChange={(e) => handleEntryChange(entry.id, "uacsObjectCode", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs font-mono rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="5-02-99-990"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <input
+                              type="text"
+                              value={entry.natureOfPayment}
+                              onChange={(e) => handleEntryChange(entry.id, "natureOfPayment", e.target.value)}
+                              className="w-full py-1.5 px-2.5 text-xs rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink placeholder:text-neutral-400 transition-all duration-150 outline-none"
+                              placeholder="Purpose / Stipend details"
+                            />
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <div className="relative flex items-center">
+                              <span className="absolute left-2.5 text-xs font-mono text-ink-muted select-none pointer-events-none">₱</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={entry.amount || ""}
+                                onChange={(e) => handleEntryChange(entry.id, "amount", e.target.value)}
+                                placeholder="0.00"
+                                className="w-full py-1.5 pl-6 pr-2.5 text-xs font-mono text-right font-semibold rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-neutral-100/40 hover:bg-white focus:bg-white focus:ring-2 focus:ring-minsu-green-700/20 text-ink transition-all duration-150 outline-none"
+                              />
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRow(entry.id)}
+                              className="apple-press inline-flex items-center justify-center w-7 h-7 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50/80 active:bg-red-100 transition-all duration-150"
+                              title="Delete entry"
+                              aria-label="Delete entry"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredEntries.length === 0 && (
+                        <tr>
+                          <td colSpan={10} className="py-12 text-center text-ink-muted">
+                            <FileSpreadsheet className="w-8 h-8 mx-auto mb-2 text-neutral-300" />
+                            <p className="font-medium text-sm">No ADA entries found</p>
+                            <p className="text-xs text-ink-muted/80 mt-0.5">
+                              {searchTerm ? "Try searching for a different keyword or serial number." : "Click 'Add ADA Row' or 'Auto-Populate' to add records."}
+                            </p>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot className="bg-neutral-50/90 border-t border-line text-ink">
+                      <tr>
+                        <td colSpan={6} className="py-3 px-4 text-xs font-medium text-ink-muted">
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-minsu-green-600"></span>
+                            Showing <span className="font-semibold text-ink">{filteredEntries.length}</span> {filteredEntries.length === 1 ? "entry" : "entries"}
+                          </span>
+                        </td>
+                        <td colSpan={2} className="py-3 px-3 text-right text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                          Total Amount of ADAs Issued:
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-minsu-green-800 text-sm font-bold">
+                          ₱{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -875,7 +939,7 @@ export function Annex7SheetSuite({
       {/* OFFICIAL CANVAS MODE (Pixel-perfect reproduction of RADAI_tab_preview.png) */}
       {(viewMode === "sheet" || typeof window !== "undefined") && (
         <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
-          <div className="bg-neutral-100 p-4 md:p-8 rounded-2xl flex justify-center overflow-x-auto print:bg-white print:p-0">
+          <div className="annex-printable-document bg-neutral-100 p-4 md:p-8 rounded-2xl flex justify-center overflow-x-auto print:bg-white print:p-0">
             {/* Standard Letter Paper Canvas */}
             <div className="w-[1020px] bg-white text-black p-10 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight">
               
@@ -889,7 +953,15 @@ export function Annex7SheetSuite({
               {/* Dual Logo Header */}
               <div className="flex items-center justify-between mb-4">
                 <div className="w-20 h-20 flex items-center justify-center">
-                  <ChedLogo className="w-20 h-20" />
+                  <AnnexLogo
+                    position="left"
+                    config={formData.headerLogos?.leftLogo}
+                    defaultPreset="ched"
+                    editable={true}
+                    documentId={documentId}
+                    className="w-20 h-20"
+                    onLogoChange={handleLeftLogoChange}
+                  />
                 </div>
                 <div className="text-center flex-1 px-4">
                   <h1 className="text-base font-bold tracking-tight uppercase font-sans mb-1">
@@ -900,7 +972,15 @@ export function Annex7SheetSuite({
                   </p>
                 </div>
                 <div className="w-20 h-20 flex items-center justify-center">
-                  <UniFastLogo className="w-20 h-20" />
+                  <AnnexLogo
+                    position="right"
+                    config={formData.headerLogos?.rightLogo}
+                    defaultPreset="unifast"
+                    editable={true}
+                    documentId={documentId}
+                    className="w-20 h-20"
+                    onLogoChange={handleRightLogoChange}
+                  />
                 </div>
               </div>
 
@@ -1058,6 +1138,31 @@ export function Annex7SheetSuite({
           </div>
         </div>
       )}
+
+      {/* Apple-styled Fluid Print / PDF Preview Modal */}
+      <PrintPreviewModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        documentTitle={documentTitle || "Annex 7 - Report of Advice to Debit Account Issued (RADAI)"}
+        annexNumber={7}
+        orientation={printOrientation}
+        onOrientationChange={setPrintOrientation}
+        previewContent={
+          <div className="text-black text-xs space-y-3">
+            <div className="p-4 border border-dashed border-neutral-300 rounded bg-[#F1F8F1]">
+              <div className="font-bold text-sm text-[#123F17]">
+                TDP Annex 7 - Report of Advice to Debit Account Issued (RADAI)
+              </div>
+              <div className="text-xs text-neutral-600 mt-1">
+                Bank / Account: {formData.bankNameAccountNo} • Total Entries: {formData.entries.length} • Total Amount: ₱{formData.totalAmount.toLocaleString()}
+              </div>
+              <div className="text-[11px] text-neutral-500 mt-2 italic">
+                Official accounting disbursement ledger formatted in Landscape orientation.
+              </div>
+            </div>
+          </div>
+        }
+      />
     </div>
   );
 }

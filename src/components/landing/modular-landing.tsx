@@ -27,10 +27,10 @@ export function ModularLanding({
   const activeSections = sections.filter((s) => s.enabled);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#F6F8F6] via-[#EFF5F0] to-[#F6F8F6] flex flex-col selection:bg-[#F2B705]/30">
+    <div className="h-screen overflow-hidden bg-gradient-to-b from-[#F6F8F6] via-[#EFF5F0] to-[#F6F8F6] flex flex-col selection:bg-[#F2B705]/30">
       {/* Top Header */}
       {showHeader && (
-        <header className="sticky top-0 z-40 h-16 sm:h-20 bg-[#1B5E20]/95 backdrop-blur-xl border-b border-[#F2B705]/40 text-white flex items-center justify-between px-3 sm:px-8 md:px-12 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
+        <header className="shrink-0 z-40 h-16 sm:h-20 bg-[#1B5E20]/95 backdrop-blur-xl border-b border-[#F2B705]/40 text-white flex items-center justify-between px-3 sm:px-8 md:px-12 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
           <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
             <Logo size="md" className="sm:hidden" />
             <Logo size="lg" className="hidden sm:flex" />
@@ -58,7 +58,7 @@ export function ModularLanding({
       )}
 
       {/* Main Sections */}
-      <main className="flex-1 w-full flex flex-col items-center">
+      <main className="flex-1 h-full min-h-0 overflow-y-auto w-full flex flex-col items-center apple-scrollbar">
         {activeSections.map((section) => {
           switch (section.type) {
             case "HERO":
@@ -109,17 +109,17 @@ export function ModularLanding({
               return null;
           }
         })}
-      </main>
 
-      {/* Footer */}
-      {showFooter && (
-        <footer className="py-6 border-t border-[#D6DDD8]/70 bg-white/60 backdrop-blur-md text-center text-xs text-[#55645B]">
-          <p>© 2026 Mindoro State University (MinSU) • All Rights Reserved</p>
-          <p className="mt-1 text-[11px] text-[#55645B]/80">
-            Tulong Dunong Program - Unified Student Financial Assistance System
-          </p>
-        </footer>
-      )}
+        {/* Footer */}
+        {showFooter && (
+          <footer className="w-full py-6 border-t border-[#D6DDD8]/70 bg-white/60 backdrop-blur-md text-center text-xs text-[#55645B] shrink-0">
+            <p>© 2026 Mindoro State University (MinSU) • All Rights Reserved</p>
+            <p className="mt-1 text-[11px] text-[#55645B]/80">
+              Tulong Dunong Program - Unified Student Financial Assistance System
+            </p>
+          </footer>
+        )}
+      </main>
     </div>
   );
 }

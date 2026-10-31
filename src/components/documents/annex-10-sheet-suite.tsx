@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChedLogo, UniFastLogo } from "./ched-unifast-logos";
-import { Annex10FormData, Annex10Grantee } from "@/types";
+import { AnnexLogo } from "./annex-logo";
+import { PrintPreviewModal } from "./print-preview-modal";
+import { Annex10FormData, Annex10Grantee, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
   FileText,
@@ -53,6 +55,21 @@ export function Annex10SheetSuite({
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
 
+  // Print & PDF modal state
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
+  const [printOrientation, setPrintOrientation] = useState<"portrait" | "landscape">("portrait");
+  const [printScope, setPrintScope] = useState<"active" | "all">("active");
+
+  useEffect(() => {
+    setIsBatchPrint(printScope === "all");
+  }, [printScope]);
+
+  useEffect(() => {
+    const handleOpenPrint = () => setIsPrintModalOpen(true);
+    window.addEventListener("minsu:open-print-modal", handleOpenPrint);
+    return () => window.removeEventListener("minsu:open-print-modal", handleOpenPrint);
+  }, []);
+
   // Default initial values matching a-10-1.png & official UniFast guidelines
   const defaultData: Annex10FormData = useMemo(() => {
     if (initialData) return initialData;
@@ -65,12 +82,12 @@ export function Annex10SheetSuite({
         studentIdNo: "21-0492",
         granteeName: "JUAN P. DELA CRUZ",
         salutation: "Dear Mr. Dela Cruz:",
-        address: "Poblacion I, Victoria",
-        cityMunicipality: "Oriental Mindoro, 5205",
+        address: "Labasan, Bongabong",
+        cityMunicipality: "Oriental Mindoro, 5211",
         startingSemester: "1st",
         academicYear: "2024-2025",
         stipendAmount: 7500,
-        heiName: "Mindoro State University",
+        heiName: "Mindoro State University - Bongabong Campus",
         program: "BS Information Technology",
       },
       {
@@ -80,13 +97,13 @@ export function Annex10SheetSuite({
         studentIdNo: "21-0493",
         granteeName: "MARIA C. SANTOS",
         salutation: "Dear Ms. Santos:",
-        address: "Brgy. Masipit, Calapan City",
-        cityMunicipality: "Oriental Mindoro, 5200",
+        address: "Poblacion, Bongabong",
+        cityMunicipality: "Oriental Mindoro, 5211",
         startingSemester: "1st",
         academicYear: "2024-2025",
         stipendAmount: 7500,
-        heiName: "Mindoro State University",
-        program: "BS Agriculture",
+        heiName: "Mindoro State University - Bongabong Campus",
+        program: "BS Fisheries",
       },
       {
         id: "g-3",
@@ -95,12 +112,12 @@ export function Annex10SheetSuite({
         studentIdNo: "22-1084",
         granteeName: "CARLO M. REYES",
         salutation: "Dear Mr. Reyes:",
-        address: "Brgy. Bagumbayan, Roxas",
-        cityMunicipality: "Oriental Mindoro, 5212",
+        address: "Aplaya, Bongabong",
+        cityMunicipality: "Oriental Mindoro, 5211",
         startingSemester: "1st",
         academicYear: "2024-2025",
         stipendAmount: 7500,
-        heiName: "Mindoro State University",
+        heiName: "Mindoro State University - Bongabong Campus",
         program: "BS Criminology",
       },
     ];
@@ -137,6 +154,26 @@ export function Annex10SheetSuite({
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   const [saveMessage, setSaveMessage] = useState<string>("");
+
+  const handleLeftLogoChange = (newConfig: LogoConfig) => {
+    setFormData((prev) => ({
+      ...prev,
+      headerLogos: {
+        ...prev.headerLogos,
+        leftLogo: newConfig,
+      },
+    }));
+  };
+
+  const handleRightLogoChange = (newConfig: LogoConfig) => {
+    setFormData((prev) => ({
+      ...prev,
+      headerLogos: {
+        ...prev.headerLogos,
+        rightLogo: newConfig,
+      },
+    }));
+  };
 
   // Currently selected grantee for single letter preview
   const activeGranteeIndex = useMemo(() => {
@@ -184,7 +221,7 @@ export function Annex10SheetSuite({
       startingSemester: formData.defaultStartingSemester,
       academicYear: formData.defaultAcademicYear,
       stipendAmount: formData.stipendAmountPerSem,
-      heiName: "Mindoro State University",
+      heiName: "Mindoro State University - Bongabong Campus",
       program: "BS Information Technology",
     };
 
@@ -274,7 +311,7 @@ export function Annex10SheetSuite({
                 startingSemester: formData.defaultStartingSemester,
                 academicYear: formData.defaultAcademicYear,
                 stipendAmount: 7500,
-                heiName: "Mindoro State University",
+                heiName: "Mindoro State University - Bongabong Campus",
                 program: s.degreeProgram || s.degree_program || "BS Information Technology",
               });
             });
@@ -300,12 +337,12 @@ export function Annex10SheetSuite({
           studentIdNo: "21-0492",
           granteeName: "JUAN P. DELA CRUZ",
           salutation: "Dear Mr. Dela Cruz:",
-          address: "Poblacion I, Victoria",
-          cityMunicipality: "Oriental Mindoro, 5205",
+          address: "Labasan, Bongabong",
+          cityMunicipality: "Oriental Mindoro, 5211",
           startingSemester: "1st",
           academicYear: "2024-2025",
           stipendAmount: 7500,
-          heiName: "Mindoro State University",
+          heiName: "Mindoro State University - Bongabong Campus",
           program: "BS Information Technology",
         },
         {
@@ -315,13 +352,13 @@ export function Annex10SheetSuite({
           studentIdNo: "21-0493",
           granteeName: "MARIA C. SANTOS",
           salutation: "Dear Ms. Santos:",
-          address: "Brgy. Masipit, Calapan City",
-          cityMunicipality: "Oriental Mindoro, 5200",
+          address: "Poblacion, Bongabong",
+          cityMunicipality: "Oriental Mindoro, 5211",
           startingSemester: "1st",
           academicYear: "2024-2025",
           stipendAmount: 7500,
-          heiName: "Mindoro State University",
-          program: "BS Agriculture",
+          heiName: "Mindoro State University - Bongabong Campus",
+          program: "BS Fisheries",
         },
         {
           id: "c-3",
@@ -330,12 +367,12 @@ export function Annex10SheetSuite({
           studentIdNo: "22-1084",
           granteeName: "CARLO M. REYES",
           salutation: "Dear Mr. Reyes:",
-          address: "Brgy. Bagumbayan, Roxas",
-          cityMunicipality: "Oriental Mindoro, 5212",
+          address: "Aplaya, Bongabong",
+          cityMunicipality: "Oriental Mindoro, 5211",
           startingSemester: "1st",
           academicYear: "2024-2025",
           stipendAmount: 7500,
-          heiName: "Mindoro State University",
+          heiName: "Mindoro State University - Bongabong Campus",
           program: "BS Criminology",
         },
         {
@@ -345,12 +382,12 @@ export function Annex10SheetSuite({
           studentIdNo: "22-1090",
           granteeName: "ANGELA D. GARCIA",
           salutation: "Dear Ms. Garcia:",
-          address: "Brgy. San Vicente, Calapan City",
-          cityMunicipality: "Oriental Mindoro, 5200",
+          address: "Lisap, Bongabong",
+          cityMunicipality: "Oriental Mindoro, 5211",
           startingSemester: "1st",
           academicYear: "2024-2025",
           stipendAmount: 7500,
-          heiName: "Mindoro State University",
+          heiName: "Mindoro State University - Bongabong Campus",
           program: "BS Computer Science",
         },
         {
@@ -360,12 +397,12 @@ export function Annex10SheetSuite({
           studentIdNo: "23-0144",
           granteeName: "MARK ANTHONY L. BAUTISTA",
           salutation: "Dear Mr. Bautista:",
-          address: "Brgy. Malugay, Socorro",
-          cityMunicipality: "Oriental Mindoro, 5207",
+          address: "Hagan, Bongabong",
+          cityMunicipality: "Oriental Mindoro, 5211",
           startingSemester: "1st",
           academicYear: "2024-2025",
           stipendAmount: 7500,
-          heiName: "Mindoro State University",
+          heiName: "Mindoro State University - Bongabong Campus",
           program: "BS Hospitality Management",
         },
       ];
@@ -651,7 +688,7 @@ export function Annex10SheetSuite({
 
   // 1-Click Print / PDF
   const handlePrint = () => {
-    window.print();
+    setIsPrintModalOpen(true);
   };
 
   return (
@@ -1329,7 +1366,7 @@ export function Annex10SheetSuite({
         </div>
 
         {/* LETTER CANVAS CONTAINER */}
-        <div className="flex justify-center bg-neutral-100 p-2 sm:p-6 rounded-2xl print:bg-white print:p-0">
+        <div className="annex-printable-document flex justify-center bg-neutral-100 p-2 sm:p-6 rounded-2xl print:bg-white print:p-0">
           <div className="w-full max-w-[850px] space-y-8 print:space-y-0">
             {(isBatchPrint ? formData.grantees : [currentGrantee]).map((grantee, gIndex) => {
               const labelRight =
@@ -1342,7 +1379,7 @@ export function Annex10SheetSuite({
               return (
                 <div
                   key={grantee.id}
-                  className="bg-white rounded-xl shadow-md border border-neutral-300 print:border-none print:shadow-none p-8 sm:p-14 text-black text-[13.5px] leading-relaxed relative print:p-0 print:m-0 print:page-break"
+                  className="bg-white rounded-xl shadow-md border border-neutral-300 print:border-none print:shadow-none p-8 sm:p-14 text-black text-[13.5px] leading-relaxed relative print:p-0 print:m-0 print-page-break"
                   style={{
                     fontFamily: "'Times New Roman', Times, serif, 'Arial'",
                     minHeight: "11in",
@@ -1357,7 +1394,15 @@ export function Annex10SheetSuite({
                   {/* OFFICIAL LETTERHEAD */}
                   <div className="flex items-center justify-between gap-4 mb-4">
                     <div className="w-20 h-20 shrink-0 flex items-center justify-center">
-                      <ChedLogo className="w-20 h-20 object-contain drop-shadow-sm" />
+                      <AnnexLogo
+                        position="left"
+                        config={formData.headerLogos?.leftLogo}
+                        defaultPreset="ched"
+                        editable={true}
+                        documentId={documentId}
+                        className="w-20 h-20 object-contain drop-shadow-sm"
+                        onLogoChange={handleLeftLogoChange}
+                      />
                     </div>
 
                     <div className="text-center flex-1">
@@ -1376,7 +1421,15 @@ export function Annex10SheetSuite({
                     </div>
 
                     <div className="w-20 h-20 shrink-0 flex items-center justify-center">
-                      <UniFastLogo className="w-20 h-20 object-contain drop-shadow-sm" />
+                      <AnnexLogo
+                        position="right"
+                        config={formData.headerLogos?.rightLogo}
+                        defaultPreset="unifast"
+                        editable={true}
+                        documentId={documentId}
+                        className="w-20 h-20 object-contain drop-shadow-sm"
+                        onLogoChange={handleRightLogoChange}
+                      />
                     </div>
                   </div>
 
@@ -1461,6 +1514,39 @@ export function Annex10SheetSuite({
           </div>
         </div>
       </div>
+
+      {/* Apple-styled Fluid Print / PDF Preview Modal */}
+      <PrintPreviewModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        documentTitle={documentTitle || "Annex 10 - Notice of Award (NOA)"}
+        annexNumber={10}
+        orientation={printOrientation}
+        onOrientationChange={setPrintOrientation}
+        availableForms={[
+          { id: "single", label: currentGrantee ? currentGrantee.granteeName : "Current NOA", defaultOrientation: "portrait" },
+          { id: "batch", label: `Batch All (${formData.grantees.length} Scholars)`, defaultOrientation: "portrait" },
+        ]}
+        activeFormId={isBatchPrint ? "batch" : "single"}
+        activeFormLabel={isBatchPrint ? `Batch All (${formData.grantees.length})` : (currentGrantee?.granteeName || "Single NOA")}
+        scope={printScope}
+        onScopeChange={setPrintScope}
+        previewContent={
+          <div className="text-black text-xs space-y-4">
+            <div className="p-4 border border-dashed border-neutral-300 rounded bg-[#F1F8F1]">
+              <div className="font-bold text-sm text-[#123F17]">
+                {printScope === "all" ? `Batch Notice of Awards (${formData.grantees.length} Scholars)` : `Notice of Award: ${currentGrantee?.granteeName}`}
+              </div>
+              <div className="text-xs text-neutral-600 mt-1">
+                MinSU Campus: {currentGrantee?.heiName || "Mindoro State University"} • Award: ₱{(currentGrantee?.stipendAmount || formData.stipendAmountPerSem).toLocaleString()} • AY {currentGrantee?.academicYear || formData.defaultAcademicYear}
+              </div>
+              <div className="text-[11px] text-neutral-500 mt-2 italic">
+                Official single-sheet portrait letter format with CHED/UniFAST letterhead and UniFAST Memorandum conditions.
+              </div>
+            </div>
+          </div>
+        }
+      />
     </div>
   );
 }

@@ -97,6 +97,17 @@ export default function DocumentDetailPage({
 
   useEffect(() => {
     loadDoc();
+
+    // Global shortcut listener for Ctrl+P / Cmd+P on document pages
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("minsu:open-print-modal"));
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [id]);
 
   if (!user || isLoading) {
@@ -331,7 +342,7 @@ export default function DocumentDetailPage({
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-xl border border-[#D6DDD8] shadow-sm">
+      <div className="document-header-banner flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-xl border border-[#D6DDD8] shadow-sm print:hidden">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Link href="/documents">
@@ -589,9 +600,9 @@ export default function DocumentDetailPage({
       </div>
 
       {/* Main Grid: Left = Form Fields / Full Canvas, Right = Workflow & Timeline */}
-      <div className={isSpecialSuite && !showWorkflowPanel ? "space-y-6" : "grid grid-cols-1 lg:grid-cols-3 gap-6"}>
+      <div className={isSpecialSuite && !showWorkflowPanel ? "space-y-6 print:block" : "grid grid-cols-1 lg:grid-cols-3 gap-6 print:block"}>
         {/* Left Column: Document Data */}
-        <div className={isSpecialSuite && !showWorkflowPanel ? "w-full" : "lg:col-span-2 space-y-6"}>
+        <div className={isSpecialSuite && !showWorkflowPanel ? "w-full print:w-full print:max-w-none" : "lg:col-span-2 space-y-6 print:w-full print:max-w-none"}>
           {isAnnex3 ? (
             <Annex3Viewer
               documentId={document.id}
@@ -814,7 +825,7 @@ export default function DocumentDetailPage({
 
           {/* Transmittal Summary (if transmitted) */}
           {document.transmittal && (
-            <Card className="border-l-4 border-l-[#123F17] bg-[#F1F8F1]/40">
+            <Card className="border-l-4 border-l-[#123F17] bg-[#F1F8F1]/40 print:hidden">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base text-[#123F17] flex items-center gap-2">
                   <Send className="w-4 h-4" />
@@ -870,7 +881,7 @@ export default function DocumentDetailPage({
           )}
 
           {/* Discussion & Comments Feed */}
-          <Card>
+          <Card className="print:hidden">
             <CardHeader className="pb-3 border-b border-[#D6DDD8]">
               <CardTitle className="text-base flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-[#1B5E20]" />
@@ -933,7 +944,7 @@ export default function DocumentDetailPage({
 
         {/* Right Column: Workflow Actions & Status Timeline */}
         {(!isAnnex3 || showWorkflowPanel) && (
-          <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="workflow-sidebar-panel space-y-6 animate-in fade-in duration-200 print:hidden">
             {/* Action Decision Card */}
           <Card className="border-t-4 border-t-[#1B5E20]">
             <CardHeader className="pb-3">

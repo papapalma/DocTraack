@@ -449,7 +449,7 @@ async function main() {
         sectionSubtitle:
           "Have inquiries regarding your application or institutional requirements? Reach our coordinators.",
         officeLocation:
-          "Mindoro State University Main Campus, Alcate, Victoria, Oriental Mindoro",
+          "Mindoro State University - Bongabong Campus, Labasan, Bongabong, Oriental Mindoro",
         officeHours: "Monday – Friday: 8:00 AM – 5:00 PM PHT",
         email: "tdp.office@minsu.edu.ph",
         hotline: "(043) 288-2026 / Local 104",

@@ -131,10 +131,24 @@ export default function NewDocumentPage() {
     }
   };
 
+  // Intercept Ctrl+P / Cmd+P to open the Apple Print Preview Modal if an Annex is selected
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        if (selectedAnnexId) {
+          window.dispatchEvent(new CustomEvent("minsu:open-print-modal"));
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedAnnexId]);
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 print:max-w-none print:m-0 print:p-0 print:w-full print:space-y-0">
       {/* Top Bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between new-document-wizard-chrome print:hidden">
         <Link href="/documents">
           <Button variant="ghost" size="sm" className="text-xs text-[#55645B]">
             <ArrowLeft className="w-4 h-4 mr-1.5" />
@@ -146,7 +160,7 @@ export default function NewDocumentPage() {
         </span>
       </div>
 
-      <div>
+      <div className="new-document-wizard-chrome page-creation-header print:hidden">
         <h1 className="text-2xl font-heading font-bold text-[#1B5E20]">
           Prepare TDP Annex Document
         </h1>
@@ -156,13 +170,13 @@ export default function NewDocumentPage() {
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-[#FDE8E7] border border-[#B3261E]/40 text-sm text-[#B3261E] font-medium">
+        <div className="p-4 rounded-xl bg-[#FDE8E7] border border-[#B3261E]/40 text-sm text-[#B3261E] font-medium new-document-wizard-chrome print:hidden">
           {error}
         </div>
       )}
 
       {/* Step 1: Select Annex Type */}
-      <Card>
+      <Card className="new-document-wizard-chrome print:hidden">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-[#1B5E20] text-white text-xs flex items-center justify-center font-bold">
@@ -342,7 +356,7 @@ export default function NewDocumentPage() {
             </div>
 
             {/* Submission Actions */}
-            <div className="pt-6 border-t border-[#D6DDD8] flex flex-col sm:flex-row items-center justify-end gap-3">
+            <div className="pt-6 border-t border-[#D6DDD8] flex flex-col sm:flex-row items-center justify-end gap-3 print:hidden">
               <Button
                 type="button"
                 variant="secondary"

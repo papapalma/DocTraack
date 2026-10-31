@@ -114,6 +114,18 @@ export const Sidebar: React.FC = () => {
 
   const navItems = getNavItems();
 
+  // Determine active item: exact match takes precedence, followed by longest prefix match
+  const activeHref = (() => {
+    const exact = navItems.find((item) => item.href === pathname);
+    if (exact) return exact.href;
+
+    const matching = navItems
+      .filter((item) => item.href !== "/dashboard" && pathname.startsWith(item.href))
+      .sort((a, b) => b.href.length - a.href.length);
+
+    return matching[0]?.href;
+  })();
+
   const renderNavContent = (isCollapsed = false) => (
     <div className="flex flex-col justify-between h-full overflow-hidden">
       {/* Scrollable Navigation Area with Apple Sleek Scrollbar */}
@@ -127,10 +139,7 @@ export const Sidebar: React.FC = () => {
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive =
-                item.href === "/dashboard"
-                  ? pathname === "/dashboard"
-                  : pathname.startsWith(item.href);
+              const isActive = item.href === activeHref;
 
               return (
                 <Link
@@ -199,10 +208,10 @@ export const Sidebar: React.FC = () => {
 
   return (
     <>
-      {/* Desktop Sticky Collapsible Sidebar with Apple Glassmorphic Styling */}
+      {/* Desktop Fixed Collapsible Sidebar with Apple Glassmorphic Styling */}
       <aside
         className={cn(
-          "hidden md:flex sticky top-16 z-30 shrink-0 bg-white/90 backdrop-blur-xl border-r border-[#D6DDD8]/80 h-[calc(100vh-4rem)] flex-col justify-between p-4 select-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          "hidden md:flex shrink-0 bg-white/90 backdrop-blur-xl border-r border-[#D6DDD8]/80 h-full flex-col justify-between p-4 select-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
           desktopCollapsed ? "w-20" : "w-64"
         )}
       >
