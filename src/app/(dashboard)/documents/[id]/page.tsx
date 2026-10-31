@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { StatusBadge } from "@/components/documents/status-badge";
 import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StateContainer } from "@/components/ui/state-container";
 import { canEditDocument, canReviewDocument, canUploadScan, canTransmit, canArchive } from "@/lib/rbac";
 import { AnnexFormField, DocumentStatus } from "@/types";
 import {
@@ -170,16 +171,18 @@ export default function DocumentDetailPage({
 
   if (error || !document) {
     return (
-      <div className="py-16 text-center max-w-md mx-auto">
-        <h2 className="text-lg font-bold text-[#B3261E] mb-2">Error</h2>
-        <p className="text-sm text-[#55645B] mb-4">{error || "Document not found."}</p>
-        <Link href="/documents">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Documents
-          </Button>
-        </Link>
-      </div>
+      <StateContainer
+        error={{
+          whatWentWrong: error || "Document could not be located",
+          context: typeof navigator !== "undefined" && !navigator.onLine
+            ? "Your device is currently offline. Please reconnect to load the document from the server."
+            : "The requested annex may have been removed or you may have insufficient viewing permissions.",
+          onRetry: () => loadDoc(),
+          onGoBack: () => router.push("/documents"),
+        }}
+      >
+        <div />
+      </StateContainer>
     );
   }
 
@@ -333,8 +336,8 @@ export default function DocumentDetailPage({
   const isAnnex4 = document?.annexType?.number === 4 && (formData as any)?.grantees;
   const isAnnex5 = document?.annexType?.number === 5 && (formData as any)?.heis;
   const isAnnex6 = document?.annexType?.number === 6 && (formData as any)?.totalFundsReceived !== undefined;
-  const isAnnex7 = document?.annexType?.number === 7 && (formData as any)?.entries;
-  const isAnnex8 = document?.annexType?.number === 8 && (formData as any)?.entries;
+  const isAnnex7 = document?.annexType?.number === 7;
+  const isAnnex8 = document?.annexType?.number === 8;
   const isAnnex9 = document?.annexType?.number === 9 && (formData as any)?.grantees;
   const isAnnex10 = document?.annexType?.number === 10 && (formData as any)?.grantees;
   const isSpecialSuite = isAnnex3 || isAnnex4 || isAnnex5 || isAnnex6 || isAnnex7 || isAnnex8 || isAnnex9 || isAnnex10;

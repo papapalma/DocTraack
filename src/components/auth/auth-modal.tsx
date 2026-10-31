@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { LogIn, UserPlus, Sparkles, GraduationCap, Shield } from "lucide-react";
+import { FormField } from "@/components/ui/form-field";
+import { LogIn, Sparkles } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { ContinuousRegistrationModal } from "@/components/auth/continuous-registration-modal";
 
@@ -26,11 +25,13 @@ export function AuthModal({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<"login" | "register">(initialMode);
+  const [prevInitialMode, setPrevInitialMode] = useState(initialMode);
 
-  // Sync mode when initialMode prop changes
-  useEffect(() => {
+  // Sync mode when initialMode prop changes (without cascading effect)
+  if (prevInitialMode !== initialMode) {
+    setPrevInitialMode(initialMode);
     setMode(initialMode);
-  }, [initialMode]);
+  }
 
   // Form states
   const [email, setEmail] = useState("");
@@ -143,46 +144,56 @@ export function AuthModal({
         </div>
       </div>
 
-      {/* Error Alert */}
-      {error && (
-        <div className="p-3 mb-3.5 rounded-xl bg-[#FDE8E7] border border-[#B3261E]/30 text-xs text-[#B3261E] font-medium leading-relaxed animate-in fade-in">
-          {error}
-        </div>
-      )}
-
       {/* LOGIN FORM */}
-      <form onSubmit={handleLogin} className="space-y-3">
-        <div className="space-y-1">
-          <Label htmlFor="m-email" required className="text-xs font-semibold text-[#1F2A24]">
-            Email Address
-          </Label>
-          <Input
-            id="m-email"
-            type="email"
-            placeholder="name@minsu.edu.ph"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-            className="h-10 text-base sm:text-xs rounded-xl"
-          />
-        </div>
+      <form onSubmit={handleLogin} className="space-y-1">
+        <FormField
+          id="m-email"
+          label="Email Address"
+          required
+          error={error && error.toLowerCase().includes("email") ? error : undefined}
+          helperText="Use your registered MinSU email account"
+        >
+          {({ id, className, ...fieldProps }) => (
+            <input
+              id={id}
+              type="email"
+              placeholder="name@minsu.edu.ph"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error) setError(null);
+              }}
+              required
+              autoComplete="email"
+              className={className}
+              {...fieldProps}
+            />
+          )}
+        </FormField>
 
-        <div className="space-y-1">
-          <Label htmlFor="m-password" required className="text-xs font-semibold text-[#1F2A24]">
-            Password
-          </Label>
-          <Input
-            id="m-password"
-            type="password"
-            placeholder="••••••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            className="h-10 text-base sm:text-xs rounded-xl"
-          />
-        </div>
+        <FormField
+          id="m-password"
+          label="Password"
+          required
+          error={error && !error.toLowerCase().includes("email") ? error : undefined}
+        >
+          {({ id, className, ...fieldProps }) => (
+            <input
+              id={id}
+              type="password"
+              placeholder="••••••••••••"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError(null);
+              }}
+              required
+              autoComplete="current-password"
+              className={className}
+              {...fieldProps}
+            />
+          )}
+        </FormField>
 
         <Button
           type="submit"

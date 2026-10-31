@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { canCreateAnnex } from "@/lib/rbac";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
-import { DocumentStatus } from "@prisma/client";
+import { DocumentStatus, Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const statusFilter = searchParams.get("status") as DocumentStatus | null;
     const annexFilter = searchParams.get("annex");
 
-    const whereClause: any = {};
+    const whereClause: Prisma.DocumentWhereInput = {};
 
     // Filter by status if requested
     if (statusFilter) {
@@ -34,10 +34,14 @@ export async function GET(req: NextRequest) {
         whereClause.status = { not: DocumentStatus.DRAFT };
       }
     } else if (user.role === "ACCOUNTING") {
-      // Accounting sees their own documents + financial annexes (6-9)
+      // Accounting sees their own documents + financial annexes (6-9) + submitted/approved billing packages (3, 4)
       whereClause.OR = [
         { createdById: user.id },
         { annexType: { number: { in: [6, 7, 8, 9] } } },
+        {
+          annexType: { number: { in: [3, 4] } },
+          status: { in: [DocumentStatus.SUBMITTED, DocumentStatus.APPROVED, DocumentStatus.TRANSMITTED] },
+        },
       ];
     } else if (user.role === "STAFF") {
       // Staff sees all active documents across the TDP office
@@ -116,7 +120,13 @@ export async function POST(req: NextRequest) {
       title ||
       `Annex ${annexType.number} - ${annexType.name} (${new Date().toLocaleDateString()})`;
 
-    const initialStatus = submitDirectly
+    const isDirectSubmit = Boolean(
+      submitDirectly ||
+      body.status === "SUBMITTED" ||
+      body.status === DocumentStatus.SUBMITTED
+    );
+
+    const initialStatus = isDirectSubmit
       ? DocumentStatus.SUBMITTED
       : DocumentStatus.DRAFT;
 

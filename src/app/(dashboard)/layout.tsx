@@ -7,6 +7,7 @@ import { SessionProvider, useSession } from "@/components/providers/session-prov
 import { useRouter } from "next/navigation";
 import { NavProvider } from "@/components/layout/nav-context";
 import { DashboardSkeleton } from "@/components/ui/skeleton";
+import { OfflineBanner } from "@/components/ui/offline-banner";
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useSession();
@@ -26,6 +27,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
   return (
     <NavProvider>
+      <OfflineBanner />
       <div className="h-screen overflow-hidden bg-[#F6F8F6] flex flex-col print:h-auto print:overflow-visible print:bg-white">
         <div className="topbar-container shrink-0 z-40 print:hidden">
           <Topbar />

@@ -122,6 +122,9 @@ export async function PUT(
   }
 }
 
+// Export PATCH as alias to PUT for REST compatibility across all sheet suites
+export const PATCH = PUT;
+
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

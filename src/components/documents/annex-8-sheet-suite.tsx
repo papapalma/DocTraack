@@ -62,8 +62,6 @@ export function Annex8SheetSuite({
 
   // Default initial values
   const defaultData: Annex8FormData = useMemo(() => {
-    if (initialData) return initialData;
-
     const initialEntries: Annex8CheckEntry[] = [
       {
         id: "chk-1",
@@ -109,7 +107,7 @@ export function Annex8SheetSuite({
 
     const totalAmt = initialEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-    return {
+    const baseDefaults: Annex8FormData = {
       reportDate: "June 30, 2024",
       heiName: "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS",
       heiAddress: "Labasan, Bongabong, Oriental Mindoro",
@@ -126,9 +124,27 @@ export function Annex8SheetSuite({
       auditorName: "ATTY. CRISTINA M. MERCADO",
       auditorTitle: "COA/State Auditor",
     };
+
+    if (!initialData) return baseDefaults;
+
+    const resolvedEntries = Array.isArray(initialData.entries) && initialData.entries.length > 0
+      ? initialData.entries
+      : (Array.isArray(initialData.entries) ? initialData.entries : initialEntries);
+
+    const resolvedTotal = initialData.totalAmount !== undefined && initialData.totalAmount !== null
+      ? Number(initialData.totalAmount)
+      : resolvedEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    return {
+      ...baseDefaults,
+      ...initialData,
+      entries: resolvedEntries,
+      totalAmount: resolvedTotal,
+    };
   }, [initialData]);
 
   const [formData, setFormData] = useState<Annex8FormData>(defaultData);
+
   const [docTitle] = useState(
     documentTitle || `Annex 8: Report of Checks Issued (RCI) - ${defaultData.reportDate}`
   );
@@ -158,18 +174,19 @@ export function Annex8SheetSuite({
 
   // Auto-compute total and check serial bounds
   const updateEntriesAndTotals = (newEntries: Annex8CheckEntry[]) => {
-    const totalAmount = newEntries.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
-    
-    const serials = newEntries
-      .map((e) => e.checkNo.trim())
+    const safeEntries = Array.isArray(newEntries) ? newEntries : [];
+    const totalAmount = safeEntries.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
+
+    const serials = safeEntries
+      .map((e) => String(e.checkNo || "").trim())
       .filter((s) => s.length > 0);
-    
+
     const checkNoFrom = serials.length > 0 ? serials[0] : "";
     const checkNoTo = serials.length > 0 ? serials[serials.length - 1] : "";
 
     setFormData((prev) => ({
       ...prev,
-      entries: newEntries,
+      entries: safeEntries,
       totalAmount,
       checkNoFrom: prev.checkNoFrom || checkNoFrom,
       checkNoTo: prev.checkNoTo || checkNoTo,
@@ -178,9 +195,10 @@ export function Annex8SheetSuite({
 
   // Add new check row
   const handleAddRow = () => {
-    const nextSeq = formData.entries.length + 1;
+    const currentList = Array.isArray(formData.entries) ? formData.entries : [];
+    const nextSeq = currentList.length + 1;
     const padded = String(nextSeq).padStart(3, "0");
-    const lastCheckNo = formData.entries.length > 0 ? Number(formData.entries[formData.entries.length - 1].checkNo) : 1029380;
+    const lastCheckNo = currentList.length > 0 ? Number(currentList[currentList.length - 1].checkNo) : 1029380;
     const nextCheckNo = isNaN(lastCheckNo) ? `1029${padded}` : String(lastCheckNo + 1);
 
     const newEntry: Annex8CheckEntry = {
@@ -193,12 +211,13 @@ export function Annex8SheetSuite({
       purposeOfPayment: "TES",
       amount: 0,
     };
-    updateEntriesAndTotals([...formData.entries, newEntry]);
+    updateEntriesAndTotals([...currentList, newEntry]);
   };
 
   // Update field in row
   const handleEntryChange = (id: string, field: keyof Annex8CheckEntry, value: string | number) => {
-    const updated = formData.entries.map((item) => {
+    const currentList = Array.isArray(formData.entries) ? formData.entries : [];
+    const updated = currentList.map((item) => {
       if (item.id === id) {
         return {
           ...item,
@@ -212,11 +231,12 @@ export function Annex8SheetSuite({
 
   // Delete row
   const handleDeleteRow = (id: string) => {
-    if (formData.entries.length <= 1) {
+    const currentList = Array.isArray(formData.entries) ? formData.entries : [];
+    if (currentList.length <= 1) {
       alert("At least one check entry is required.");
       return;
     }
-    const updated = formData.entries.filter((item) => item.id !== id);
+    const updated = currentList.filter((item) => item.id !== id);
     updateEntriesAndTotals(updated);
   };
 
@@ -310,7 +330,7 @@ export function Annex8SheetSuite({
           title: docTitle,
           annexTypeId: annexTypeId,
           formData: formData,
-          status: submitDirectly ? "SUBMITTED" : "DRAFT",
+          submitDirectly,
         };
 
         const res = await fetch("/api/documents", {
@@ -325,17 +345,18 @@ export function Annex8SheetSuite({
         }
 
         const createdDoc = await res.json();
+        const docId = createdDoc.document?.id || createdDoc.id;
         setSaveSuccess(true);
-        if (onSaved) onSaved(createdDoc.id);
-        else router.push(`/documents/${createdDoc.id}`);
+        if (onSaved) onSaved(docId);
+        else router.push(`/documents/${docId}`);
       } else {
         const payload = {
+          title: docTitle,
           formData: formData,
-          status: submitDirectly ? "SUBMITTED" : undefined,
         };
 
         const res = await fetch(`/api/documents/${documentId}`, {
-          method: "PATCH",
+          method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
@@ -345,7 +366,16 @@ export function Annex8SheetSuite({
           throw new Error(errData.error || "Failed to update Annex 8 document");
         }
 
+        if (submitDirectly) {
+          await fetch(`/api/documents/${documentId}/submit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ comment: "Submitted from Annex 8 Suite" }),
+          });
+        }
+
         setSaveSuccess(true);
+        if (onSaved && documentId) onSaved(documentId);
         setTimeout(() => setSaveSuccess(false), 3000);
       }
     } catch (err: unknown) {
@@ -371,7 +401,8 @@ export function Annex8SheetSuite({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Annex_8_RCI_${formData.reportNo.replace(/\s+/g, "_") || "Report"}.xlsx`;
+      const safeReportNo = String(formData?.reportNo || "Report").replace(/[^a-zA-Z0-9_-]/g, "_");
+      a.download = `Annex_8_RCI_${safeReportNo}.xlsx`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -389,14 +420,15 @@ export function Annex8SheetSuite({
 
   // Filtered entries for search
   const filteredEntries = useMemo(() => {
-    if (!searchTerm.trim()) return formData.entries;
+    const list = Array.isArray(formData.entries) ? formData.entries : [];
+    if (!searchTerm.trim()) return list;
     const term = searchTerm.toLowerCase();
-    return formData.entries.filter(
+    return list.filter(
       (e) =>
-        e.checkNo.toLowerCase().includes(term) ||
-        e.payee.toLowerCase().includes(term) ||
-        e.dvPayrollNo.toLowerCase().includes(term) ||
-        e.purposeOfPayment.toLowerCase().includes(term)
+        String(e.checkNo || "").toLowerCase().includes(term) ||
+        String(e.payee || "").toLowerCase().includes(term) ||
+        String(e.dvPayrollNo || "").toLowerCase().includes(term) ||
+        String(e.purposeOfPayment || "").toLowerCase().includes(term)
     );
   }, [formData.entries, searchTerm]);
 
@@ -424,11 +456,10 @@ export function Annex8SheetSuite({
             <button
               type="button"
               onClick={() => setViewMode("workspace")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
-                viewMode === "workspace"
-                  ? "bg-white text-ink shadow-sm"
-                  : "text-ink-muted hover:text-ink"
-              }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${viewMode === "workspace"
+                ? "bg-white text-ink shadow-sm"
+                : "text-ink-muted hover:text-ink"
+                }`}
             >
               <LayoutDashboard className="w-3.5 h-3.5 inline mr-1.5" />
               Workspace Mode
@@ -436,11 +467,10 @@ export function Annex8SheetSuite({
             <button
               type="button"
               onClick={() => setViewMode("sheet")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
-                viewMode === "sheet"
-                  ? "bg-minsu-green-700 text-white shadow-sm"
-                  : "text-ink-muted hover:text-ink"
-              }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${viewMode === "sheet"
+                ? "bg-minsu-green-700 text-white shadow-sm"
+                : "text-ink-muted hover:text-ink"
+                }`}
             >
               <FileText className="w-3.5 h-3.5 inline mr-1.5" />
               Official Sheet Canvas
@@ -517,7 +547,7 @@ export function Annex8SheetSuite({
             <div className="bg-white p-4 rounded-xl border border-line shadow-sm">
               <span className="text-xs text-ink-muted block mb-1">Total Checks Issued</span>
               <div className="text-2xl font-bold text-ink flex items-baseline gap-2">
-                <span>{formData.entries.length}</span>
+                <span>{(formData.entries || []).length}</span>
                 <span className="text-xs text-ink-muted font-normal">checks</span>
               </div>
               <span className="text-[11px] text-minsu-green-700 mt-1 block font-medium">
@@ -528,7 +558,7 @@ export function Annex8SheetSuite({
             <div className="bg-white p-4 rounded-xl border border-line shadow-sm">
               <span className="text-xs text-ink-muted block mb-1">Total Amount Disbursed</span>
               <div className="text-2xl font-bold text-minsu-green-700 font-mono">
-                ₱{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{(formData.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
               <span className="text-[11px] text-ink-muted mt-1 block">
                 Total commercial / MDS check value
@@ -561,23 +591,21 @@ export function Annex8SheetSuite({
             <button
               type="button"
               onClick={() => setWorkspaceTab("entries")}
-              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${
-                workspaceTab === "entries"
-                  ? "border-minsu-green-700 text-minsu-green-700"
-                  : "border-transparent text-ink-muted hover:text-ink"
-              }`}
+              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${workspaceTab === "entries"
+                ? "border-minsu-green-700 text-minsu-green-700"
+                : "border-transparent text-ink-muted hover:text-ink"
+                }`}
             >
               <CheckSquare className="w-4 h-4" />
-              Check Register Entries ({formData.entries.length})
+              Check Register Entries ({(formData.entries || []).length})
             </button>
             <button
               type="button"
               onClick={() => setWorkspaceTab("identification")}
-              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${
-                workspaceTab === "identification"
-                  ? "border-minsu-green-700 text-minsu-green-700"
-                  : "border-transparent text-ink-muted hover:text-ink"
-              }`}
+              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${workspaceTab === "identification"
+                ? "border-minsu-green-700 text-minsu-green-700"
+                : "border-transparent text-ink-muted hover:text-ink"
+                }`}
             >
               <Building className="w-4 h-4" />
               HEI & Report Parameters
@@ -585,11 +613,10 @@ export function Annex8SheetSuite({
             <button
               type="button"
               onClick={() => setWorkspaceTab("signatories")}
-              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${
-                workspaceTab === "signatories"
-                  ? "border-minsu-green-700 text-minsu-green-700"
-                  : "border-transparent text-ink-muted hover:text-ink"
-              }`}
+              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${workspaceTab === "signatories"
+                ? "border-minsu-green-700 text-minsu-green-700"
+                : "border-transparent text-ink-muted hover:text-ink"
+                }`}
             >
               <ShieldCheck className="w-4 h-4" />
               Certification & Audit Signatories
@@ -753,7 +780,7 @@ export function Annex8SheetSuite({
                           Total Checks Issued:
                         </td>
                         <td className="py-3 px-3 text-right font-mono text-minsu-green-800 text-sm font-bold">
-                          ₱{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          ₱{(formData.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </td>
                         <td></td>
                       </tr>
@@ -920,236 +947,237 @@ export function Annex8SheetSuite({
         </div>
       )}
 
-      {/* OFFICIAL CANVAS MODE (Pixel-perfect reproduction of RCI_tab_preview.png) */}
-      {(viewMode === "sheet" || typeof window !== "undefined") && (
-        <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
-          <div className="annex-printable-document bg-neutral-100 p-4 md:p-8 rounded-2xl flex justify-center overflow-x-auto print:bg-white print:p-0">
-            {/* Standard Letter Paper Canvas */}
-            <div className="w-[1020px] bg-white text-black p-10 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight">
-              
-              {/* Top Tag */}
-              <div className="flex justify-end mb-2">
-                <span className="italic text-xs font-sans font-semibold tracking-wide text-neutral-800">
-                  TDP Form - Annex 8 (RCI)
-                </span>
+      {/* OFFICIAL CANVAS RENDER FUNCTION */}
+      {(() => {
+        const renderOfficialRciSheet = (editableLogo: boolean = true) => (
+          <div className="w-[1020px] bg-white text-black p-10 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight text-left">
+            {/* Top Tag */}
+            <div className="flex justify-end mb-2">
+              <span className="italic text-xs font-sans font-semibold tracking-wide text-neutral-800">
+                TDP Form - Annex 8 (RCI)
+              </span>
+            </div>
+
+            {/* Dual Logo Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-20 h-20 flex items-center justify-center">
+                <AnnexLogo
+                  position="left"
+                  config={formData.headerLogos?.leftLogo}
+                  defaultPreset="ched"
+                  editable={editableLogo}
+                  documentId={documentId}
+                  className="w-20 h-20"
+                  onLogoChange={handleLeftLogoChange}
+                />
               </div>
-
-              {/* Dual Logo Header */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-20 h-20 flex items-center justify-center">
-                  <AnnexLogo
-                    position="left"
-                    config={formData.headerLogos?.leftLogo}
-                    defaultPreset="ched"
-                    editable={true}
-                    documentId={documentId}
-                    className="w-20 h-20"
-                    onLogoChange={handleLeftLogoChange}
-                  />
-                </div>
-                <div className="text-center flex-1 px-4">
-                  <h1 className="text-base font-bold tracking-tight uppercase font-sans mb-1">
-                    REPORT OF CHECKS ISSUED
-                  </h1>
-                  <p className="text-xs font-sans font-bold uppercase">{formData.heiName}</p>
-                  <p className="text-[10px] font-sans text-neutral-700">{formData.heiAddress}</p>
-                  <p className="text-xs font-sans mt-2">
-                    Date: <span className="font-semibold underline decoration-neutral-400">{formData.reportDate || "___________________________"}</span>
-                  </p>
-                </div>
-                <div className="w-20 h-20 flex items-center justify-center">
-                  <AnnexLogo
-                    position="right"
-                    config={formData.headerLogos?.rightLogo}
-                    defaultPreset="unifast"
-                    editable={true}
-                    documentId={documentId}
-                    className="w-20 h-20"
-                    onLogoChange={handleRightLogoChange}
-                  />
-                </div>
-              </div>
-
-              {/* Identification Fields */}
-              <div className="grid grid-cols-12 gap-y-1 mb-4 text-[10px] font-sans">
-                <div className="col-span-8 flex items-baseline">
-                  <span className="font-bold w-24">HEI Name:</span>
-                  <span className="font-medium text-[11px]">{formData.heiName}</span>
-                </div>
-                <div className="col-span-4 space-y-0.5 pl-6">
-                  <div className="flex">
-                    <span className="font-bold w-24">Report No.:</span>
-                    <span className="border-b border-black flex-1 font-mono font-medium">{formData.reportNo}</span>
-                  </div>
-                  <div className="flex">
-                    <span className="font-bold w-24">Sheet No.:</span>
-                    <span className="border-b border-black flex-1">{formData.sheetNo}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Main Official Grid (7 visible columns matching preview) */}
-              <table className="w-full border-collapse border border-black text-[9px] font-sans">
-                <thead>
-                  <tr className="border border-black bg-neutral-50/70 text-center font-bold">
-                    <th colSpan={2} className="border border-black p-1.5 w-40">
-                      Check Issued
-                    </th>
-                    <th rowSpan={2} className="border border-black p-1.5 w-32">
-                      DV/Payroll No.
-                    </th>
-                    <th rowSpan={2} className="border border-black p-1.5 min-w-[200px]">
-                      Payee
-                    </th>
-                    <th rowSpan={2} className="border border-black p-1.5 w-36">
-                      Purpose of Payment<br />(TES/ASC)
-                    </th>
-                    <th rowSpan={2} className="border border-black p-1.5 w-32 text-right">
-                      Amount
-                    </th>
-                  </tr>
-                  <tr className="border border-black bg-neutral-50/70 text-center font-bold">
-                    <th className="border border-black p-1 w-20">Date</th>
-                    <th className="border border-black p-1 w-20">Check No.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {formData.entries.map((entry) => (
-                    <tr key={entry.id} className="border-b border-neutral-300">
-                      <td className="border-r border-black p-1.5 text-center font-mono">{entry.checkDate}</td>
-                      <td className="border-r border-black p-1.5 text-center font-mono font-medium">{entry.checkNo}</td>
-                      <td className="border-r border-black p-1.5 text-center font-mono">{entry.dvPayrollNo}</td>
-                      <td className="border-r border-black p-1.5 font-medium">{entry.payee}</td>
-                      <td className="border-r border-black p-1.5 text-center font-semibold">{entry.purposeOfPayment}</td>
-                      <td className="border-r border-black p-1.5 text-right font-mono font-medium">
-                        {Number(entry.amount).toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </td>
-                    </tr>
-                  ))}
-
-                  {/* Empty filler rows to match official government paper height */}
-                  {Array.from({ length: Math.max(0, 10 - formData.entries.length) }).map((_, i) => (
-                    <tr key={`fill-${i}`} className="border-b border-neutral-200 h-6">
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-black font-bold">
-                    <td colSpan={5} className="border-r border-black p-2 text-right uppercase tracking-wider text-[10px]">
-                      TOTAL
-                    </td>
-                    <td className="p-2 text-right font-mono text-[10px] border-b-4 border-double border-black">
-                      {formData.totalAmount > 0
-                        ? `₱${formData.totalAmount.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}`
-                        : "-"}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-
-              {/* Certification Block */}
-              <div className="mt-6 border border-black p-4 text-[10px] font-sans">
-                <div className="text-center font-bold tracking-wider uppercase mb-3">
-                  C E R T I F I C A T I O N
-                </div>
-                <p className="text-center max-w-2xl mx-auto leading-relaxed mb-6">
-                  I hereby certify on my official oath that this Report of Checks Issued in one (1) sheet is a full, true and correct statement of all checks issued by me during the period stated above for which Check Nos.{" "}
-                  <span className="font-bold underline font-mono px-2">{formData.checkNoFrom || "__________"}</span> to{" "}
-                  <span className="font-bold underline font-mono px-2">{formData.checkNoTo || "__________"}</span>{" "}
-                  inclusive, were actually issued by me in payment for obligations shown in the attached disbursement vouchers/payroll.
+              <div className="text-center flex-1 px-4">
+                <h1 className="text-base font-bold tracking-tight uppercase font-sans mb-1">
+                  REPORT OF CHECKS ISSUED
+                </h1>
+                <p className="text-xs font-sans font-bold uppercase">{formData.heiName || "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS"}</p>
+                <p className="text-[10px] font-sans text-neutral-700">{formData.heiAddress || "Labasan, Bongabong, Oriental Mindoro"}</p>
+                <p className="text-xs font-sans mt-2">
+                  Date: <span className="font-semibold underline decoration-neutral-400">{formData.reportDate || "___________________________"}</span>
                 </p>
+              </div>
+              <div className="w-20 h-20 flex items-center justify-center">
+                <AnnexLogo
+                  position="right"
+                  config={formData.headerLogos?.rightLogo}
+                  defaultPreset="unifast"
+                  editable={editableLogo}
+                  documentId={documentId}
+                  className="w-20 h-20"
+                  onLogoChange={handleRightLogoChange}
+                />
+              </div>
+            </div>
 
-                <div className="flex flex-col items-center">
-                  <div className="font-bold uppercase tracking-wide text-[10px]">
-                    {formData.cashierName}
-                  </div>
-                  <div className="text-[9px] text-neutral-600 mb-1">
-                    (Signature above printed name)
-                  </div>
-                  <div className="font-semibold text-[10px] mb-4">Cashier</div>
-
-                  <div className="text-[9px]">
-                    Date Signed: <span className="font-mono font-medium underline px-2">{formData.dateSigned}</span>
-                  </div>
+            {/* Identification Fields */}
+            <div className="grid grid-cols-12 gap-y-1 mb-4 text-[10px] font-sans">
+              <div className="col-span-8 flex items-baseline">
+                <span className="font-bold w-24">HEI Name:</span>
+                <span className="font-medium text-[11px]">{formData.heiName || "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS"}</span>
+              </div>
+              <div className="col-span-4 space-y-0.5 pl-6">
+                <div className="flex">
+                  <span className="font-bold w-24">Report No.:</span>
+                  <span className="border-b border-black flex-1 font-mono font-medium">{formData.reportNo || "---"}</span>
+                </div>
+                <div className="flex">
+                  <span className="font-bold w-24">Sheet No.:</span>
+                  <span className="border-b border-black flex-1">{formData.sheetNo || "1 of 1"}</span>
                 </div>
               </div>
+            </div>
 
-              {/* Lower Signatory Tri-Block */}
-              <div className="mt-8 space-y-6 text-[10px] font-sans">
-                {/* Accountant */}
+            {/* Main Official Grid (7 visible columns matching preview) */}
+            <table className="w-full border-collapse border border-black text-[9px] font-sans">
+              <thead>
+                <tr className="border border-black bg-neutral-50/70 text-center font-bold">
+                  <th colSpan={2} className="border border-black p-1.5 w-40">
+                    Check Issued
+                  </th>
+                  <th rowSpan={2} className="border border-black p-1.5 w-32">
+                    DV/Payroll No.
+                  </th>
+                  <th rowSpan={2} className="border border-black p-1.5 min-w-[200px]">
+                    Payee
+                  </th>
+                  <th rowSpan={2} className="border border-black p-1.5 w-36">
+                    Purpose of Payment<br />(TES/ASC)
+                  </th>
+                  <th rowSpan={2} className="border border-black p-1.5 w-32 text-right">
+                    Amount
+                  </th>
+                </tr>
+                <tr className="border border-black bg-neutral-50/70 text-center font-bold">
+                  <th className="border border-black p-1 w-20">Date</th>
+                  <th className="border border-black p-1 w-20">Check No.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(formData.entries || []).map((entry) => (
+                  <tr key={entry.id} className="border-b border-neutral-300">
+                    <td className="border-r border-black p-1.5 text-center font-mono">{entry.checkDate}</td>
+                    <td className="border-r border-black p-1.5 text-center font-mono font-medium">{entry.checkNo}</td>
+                    <td className="border-r border-black p-1.5 text-center font-mono">{entry.dvPayrollNo}</td>
+                    <td className="border-r border-black p-1.5 font-medium">{entry.payee}</td>
+                    <td className="border-r border-black p-1.5 text-center font-semibold">{entry.purposeOfPayment}</td>
+                    <td className="border-r border-black p-1.5 text-right font-mono font-medium">
+                      {Number(entry.amount || 0).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+                  </tr>
+                ))}
+
+                {/* Empty filler rows to match official government paper height */}
+                {Array.from({ length: Math.max(0, 10 - (formData.entries || []).length) }).map((_, i) => (
+                  <tr key={`fill-${i}`} className="border-b border-neutral-200 h-6">
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-black font-bold">
+                  <td colSpan={5} className="border-r border-black p-2 text-right uppercase tracking-wider text-[10px]">
+                    TOTAL
+                  </td>
+                  <td className="p-2 text-right font-mono text-[10px] border-b-4 border-double border-black">
+                    {(formData.totalAmount || 0) > 0
+                      ? `₱${(formData.totalAmount || 0).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`
+                      : "-"}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+
+            {/* Certification Block */}
+            <div className="mt-6 border border-black p-4 text-[10px] font-sans">
+              <div className="text-center font-bold tracking-wider uppercase mb-3">
+                C E R T I F I C A T I O N
+              </div>
+              <p className="text-center max-w-2xl mx-auto leading-relaxed mb-6">
+                I hereby certify on my official oath that this Report of Checks Issued in one (1) sheet is a full, true and correct statement of all checks issued by me during the period stated above for which Check Nos.{" "}
+                <span className="font-bold underline font-mono px-2">{formData.checkNoFrom || "__________"}</span> to{" "}
+                <span className="font-bold underline font-mono px-2">{formData.checkNoTo || "__________"}</span>{" "}
+                inclusive, were actually issued by me in payment for obligations shown in the attached disbursement vouchers/payroll.
+              </p>
+
+              <div className="flex flex-col items-center">
+                <div className="font-bold uppercase tracking-wide text-[10px]">
+                  {formData.cashierName || "MARIA LIZA M. HERNANDEZ"}
+                </div>
+                <div className="text-[9px] text-neutral-600 mb-1">
+                  (Signature above printed name)
+                </div>
+                <div className="font-semibold text-[10px] mb-4">Cashier</div>
+
+                <div className="text-[9px]">
+                  Date Signed: <span className="font-mono font-medium underline px-2">{formData.dateSigned || "June 30, 2024"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Lower Signatory Tri-Block */}
+            <div className="mt-8 space-y-6 text-[10px] font-sans">
+              {/* Accountant */}
+              <div>
+                <div className="text-[9px] mb-6">Certified true and correct by:</div>
+                <div className="w-64 border-b border-black mb-0.5 text-center font-bold uppercase">
+                  {formData.accountantName || "MA. ELENA L. BAUTISTA, CPA"}
+                </div>
+                <div className="text-[8px] text-neutral-600">(Signature over printed name)</div>
+                <div className="font-semibold text-[9px]">Accountant</div>
+              </div>
+
+              {/* President & Auditor in 2 columns */}
+              <div className="grid grid-cols-2 gap-8 pt-4">
                 <div>
-                  <div className="text-[9px] mb-6">Certified true and correct by:</div>
+                  <div className="text-[9px] mb-6">Approved by:</div>
                   <div className="w-64 border-b border-black mb-0.5 text-center font-bold uppercase">
-                    {formData.accountantName}
+                    {formData.presidentName || "DR. EMMANUEL C. MACALALAD"}
                   </div>
                   <div className="text-[8px] text-neutral-600">(Signature over printed name)</div>
-                  <div className="font-semibold text-[9px]">Accountant</div>
+                  <div className="font-semibold text-[9px]">Head/President of HEI</div>
                 </div>
 
-                {/* President & Auditor in 2 columns */}
-                <div className="grid grid-cols-2 gap-8 pt-4">
-                  <div>
-                    <div className="text-[9px] mb-6">Approved by:</div>
-                    <div className="w-64 border-b border-black mb-0.5 text-center font-bold uppercase">
-                      {formData.presidentName}
-                    </div>
-                    <div className="text-[8px] text-neutral-600">(Signature over printed name)</div>
-                    <div className="font-semibold text-[9px]">Head/President of HEI</div>
+                <div>
+                  <div className="text-[9px] mb-6">Verified by:</div>
+                  <div className="w-64 border-b border-black mb-0.5 text-center font-bold uppercase">
+                    {formData.auditorName || "ATTY. CRISTINA M. MERCADO"}
                   </div>
-
-                  <div>
-                    <div className="text-[9px] mb-6">Verified by:</div>
-                    <div className="w-64 border-b border-black mb-0.5 text-center font-bold uppercase">
-                      {formData.auditorName}
-                    </div>
-                    <div className="text-[8px] text-neutral-600">(Signature over printed name)</div>
-                    <div className="italic text-[8px] text-neutral-700">For Public HEIs: COA/State Auditor</div>
-                    <div className="italic text-[8px] text-neutral-700">For Private HEIs: Internal/External Auditor</div>
-                  </div>
+                  <div className="text-[8px] text-neutral-600">(Signature over printed name)</div>
+                  <div className="italic text-[8px] text-neutral-700">For Public HEIs: COA/State Auditor</div>
+                  <div className="italic text-[8px] text-neutral-700">For Private HEIs: Internal/External Auditor</div>
                 </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Apple-styled Fluid Print / PDF Preview Modal */}
-      <PrintPreviewModal
-        isOpen={isPrintModalOpen}
-        onClose={() => setIsPrintModalOpen(false)}
-        documentTitle={documentTitle || "Annex 8 - Report of Checks Issued and Cancelled (RCII)"}
-        annexNumber={8}
-        orientation={printOrientation}
-        onOrientationChange={setPrintOrientation}
-        previewContent={
-          <div className="text-black text-xs space-y-3">
-            <div className="p-4 border border-dashed border-neutral-300 rounded bg-[#F1F8F1]">
-              <div className="font-bold text-sm text-[#123F17]">
-                TDP Annex 8 - Report of Checks Issued and Cancelled (RCII)
-              </div>
-              <div className="text-xs text-neutral-600 mt-1">
-                HEI: {formData.heiName} • Total Checks: {formData.entries.length} • Total Amount: ₱{formData.totalAmount.toLocaleString()}
-              </div>
-              <div className="text-[11px] text-neutral-500 mt-2 italic">
-                Official check disbursement ledger formatted in Landscape orientation.
               </div>
             </div>
           </div>
-        }
-      />
+        );
+
+        return (
+          <>
+            {/* OFFICIAL CANVAS MODE (Pixel-perfect reproduction of RCI_tab_preview.png) */}
+            {(viewMode === "sheet" || typeof window !== "undefined") && (
+              <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
+                <div className="annex-printable-document bg-neutral-100 p-4 md:p-8 rounded-2xl flex justify-center overflow-x-auto print:bg-white print:p-0">
+                  {renderOfficialRciSheet(true)}
+                </div>
+              </div>
+            )}
+
+            {/* Apple-styled Fluid Print / PDF Preview Modal */}
+            <PrintPreviewModal
+              isOpen={isPrintModalOpen}
+              onClose={() => setIsPrintModalOpen(false)}
+              documentTitle={documentTitle || "Annex 8 - Report of Checks Issued and Cancelled (RCII)"}
+              annexNumber={8}
+              orientation={printOrientation}
+              onOrientationChange={setPrintOrientation}
+              onPrint={() => {
+                setViewMode("sheet");
+              }}
+              previewContent={
+                <div className="w-full flex justify-center py-4">
+                  {renderOfficialRciSheet(false)}
+                </div>
+              }
+            />
+          </>
+        );
+      })()}
     </div>
   );
 }

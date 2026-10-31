@@ -77,13 +77,13 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border transition-all duration-150 select-none",
+        "inline-flex items-center gap-1.5 rounded-full border transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] transform-gpu select-none",
         size === "sm" ? "px-2.5 py-0.5 text-[11px] leading-tight" : "px-3.5 py-1 text-xs",
         style,
         className
       )}
     >
-      <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", dotColor)} />
+      <span className={cn("w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-200", dotColor)} />
       <span>{label}</span>
     </span>
   );

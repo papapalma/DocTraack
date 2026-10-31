@@ -1,34 +1,57 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSession } from "@/hooks/use-session";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Megaphone, PlusCircle, Calendar, Users, ArrowRight } from "lucide-react";
+import { Megaphone, PlusCircle } from "lucide-react";
 import { SkeletonTableRows } from "@/components/ui/skeleton";
+import { StateContainer, ErrorStateConfig } from "@/components/ui/state-container";
+
+interface CallItem {
+  id: string;
+  title: string;
+  description?: string;
+  deadline: string;
+  _count?: { applications: number };
+}
 
 export default function CallsManagementPage() {
+  const router = useRouter();
   const { user } = useSession();
-  const [calls, setCalls] = useState<any[]>([]);
+  const [calls, setCalls] = useState<CallItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<ErrorStateConfig | null>(null);
+
+  const loadCalls = useCallback(async () => {
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+      const res = await fetch("/api/calls");
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: Failed to load calls`);
+      }
+      const data = await res.json();
+      setCalls(data.calls || []);
+    } catch (e) {
+      console.error("Error loading calls:", e);
+      setFetchError({
+        whatWentWrong: "Unable to load Annex 2 applicant calls",
+        context: typeof navigator !== "undefined" && !navigator.onLine
+          ? "Your device is currently offline. Reconnect to load open student application windows."
+          : "The server timed out or was temporarily unreachable. Please retry.",
+        onRetry: () => loadCalls(),
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    async function loadCalls() {
-      try {
-        const res = await fetch("/api/calls");
-        if (res.ok) {
-          const data = await res.json();
-          setCalls(data.calls || []);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsLoading(false);
-      }
-    }
     loadCalls();
-  }, []);
+  }, [loadCalls]);
 
   if (!user) return null;
 
@@ -79,29 +102,19 @@ export default function CallsManagementPage() {
       {/* Calls Grid */}
       <Card>
         <CardContent className="p-0">
-          {isLoading ? (
-            <SkeletonTableRows count={4} />
-          ) : calls.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="w-12 h-12 rounded-full bg-[#F1F8F1] text-[#1B5E20] flex items-center justify-center mx-auto mb-3">
-                <Megaphone className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-semibold text-[#1F2A24]">
-                No Applicant Calls Published
-              </h3>
-              <p className="text-xs text-[#55645B] max-w-sm mx-auto mt-1 mb-4">
-                Open a new call for applicants to begin receiving online student grant submissions.
-              </p>
-              {user.role === "STAFF" && (
-                <Link href="/calls/new">
-                  <Button variant="primary" size="sm">
-                    <PlusCircle className="w-4 h-4 mr-1.5" />
-                    Publish Call (Annex 2)
-                  </Button>
-                </Link>
-              )}
-            </div>
-          ) : (
+          <StateContainer
+            isLoading={isLoading}
+            skeletonFallback={<SkeletonTableRows count={4} />}
+            error={fetchError}
+            isEmpty={!isLoading && !fetchError && calls.length === 0}
+            emptyConfig={{
+              title: "No Applicant Calls Published",
+              description: "Open a new call for applicants to begin receiving online student grant submissions.",
+              icon: Megaphone,
+              actionLabel: user.role === "STAFF" ? "Publish Call (Annex 2)" : undefined,
+              onAction: user.role === "STAFF" ? () => router.push("/calls/new") : undefined,
+            }}
+          >
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-[#F1F8F1] text-xs font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8]">
@@ -163,7 +176,7 @@ export default function CallsManagementPage() {
                 </tbody>
               </table>
             </div>
-          )}
+          </StateContainer>
         </CardContent>
       </Card>
     </div>

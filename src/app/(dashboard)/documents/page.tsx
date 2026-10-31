@@ -1,49 +1,71 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSession } from "@/hooks/use-session";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/documents/status-badge";
 import { SkeletonTableRows } from "@/components/ui/skeleton";
-import { DocumentStatus } from "@/types";
+import { StateContainer, ErrorStateConfig } from "@/components/ui/state-container";
 import {
   FileText,
   PlusCircle,
   Search,
+  SearchX,
   Filter,
-  ArrowRight,
   Eye,
-  CheckCircle,
-  Clock,
   RotateCcw,
 } from "lucide-react";
+import { DocumentStatus } from "@/types";
+
+interface DocItem {
+  id: string;
+  title: string;
+  status: DocumentStatus;
+  updatedAt: string;
+  createdBy?: { name: string; role?: string };
+  annexType?: { number: number; name: string };
+}
 
 export default function DocumentsPage() {
+  const router = useRouter();
   const { user } = useSession();
-  const [documents, setDocuments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<DocItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<ErrorStateConfig | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAnnex, setSelectedAnnex] = useState<string>("ALL");
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
 
-  useEffect(() => {
-    async function loadDocuments() {
-      try {
-        const res = await fetch("/api/documents");
-        if (res.ok) {
-          const data = await res.json();
-          setDocuments(data.documents || []);
-        }
-      } catch (err) {
-        console.error("Error loading documents:", err);
-      } finally {
-        setIsLoading(false);
+  const loadDocuments = useCallback(async () => {
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+      const res = await fetch("/api/documents");
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: Failed to load documents`);
       }
+      const data = await res.json();
+      setDocuments(data.documents || []);
+    } catch (err) {
+      console.error("Error loading documents:", err);
+      setFetchError({
+        whatWentWrong: "Unable to load Annex documents",
+        context: typeof navigator !== "undefined" && !navigator.onLine
+          ? "Your device is currently offline. Showing cached layout. Reconnect to load the latest records from the server."
+          : "The document service experienced a temporary timeout or connection issue. Your existing drafts remain safe.",
+        onRetry: () => loadDocuments(),
+      });
+    } finally {
+      setIsLoading(false);
     }
-    loadDocuments();
   }, []);
+
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
 
   const filteredDocs = useMemo(() => {
     return documents.filter((doc) => {
@@ -64,6 +86,25 @@ export default function DocumentsPage() {
       return matchesSearch && matchesAnnex && matchesStatus;
     });
   }, [documents, searchQuery, selectedAnnex, selectedStatus]);
+
+  // Typo suggestion for zero search results
+  const suggestedCorrection = useMemo(() => {
+    if (!searchQuery.trim() || filteredDocs.length > 0 || documents.length === 0) {
+      return null;
+    }
+    const q = searchQuery.toLowerCase().trim();
+    const dictionary = [
+      "annex", "transmittal", "tuition", "billing", "stipend", "grantee",
+      "applicant", "masterlist", "payroll", "debit", "checks", "liquidation",
+      "calapan", "victoria", "bongabong", "accounting", "coordinator"
+    ];
+    for (const term of dictionary) {
+      if (term !== q && (term.includes(q) || (q.length > 3 && term.startsWith(q.slice(0, 3))))) {
+        return term;
+      }
+    }
+    return null;
+  }, [searchQuery, filteredDocs.length, documents.length]);
 
   if (!user) return null;
 
@@ -185,32 +226,60 @@ export default function DocumentsPage() {
       {/* Documents Table */}
       <Card>
         <CardContent className="p-0">
-          {isLoading ? (
-            <SkeletonTableRows count={6} />
-          ) : filteredDocs.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="w-12 h-12 rounded-full bg-[#F1F8F1] text-[#1B5E20] flex items-center justify-center mx-auto mb-3">
-                <FileText className="w-6 h-6" />
+          <StateContainer
+            isLoading={isLoading}
+            skeletonFallback={<SkeletonTableRows count={6} />}
+            error={fetchError}
+            isEmpty={!isLoading && !fetchError && documents.length === 0}
+            emptyConfig={{
+              title: "No Annex Documents Yet",
+              description: "There are currently no annex documents created in the system. Prepare your first annex to begin the verification and transmission workflow.",
+              icon: FileText,
+              actionLabel: (user.role === "STAFF" || user.role === "ACCOUNTING") ? "Prepare New Annex" : undefined,
+              onAction: (user.role === "STAFF" || user.role === "ACCOUNTING") ? () => router.push("/documents/new") : undefined,
+            }}
+          >
+            {filteredDocs.length === 0 && documents.length > 0 ? (
+              <div className="py-14 text-center px-4">
+                <div className="w-12 h-12 rounded-full bg-neutral-100 flex items-center justify-center text-[#55645B] mx-auto mb-3">
+                  <SearchX className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-semibold text-[#1F2A24]">
+                  No documents found matching &ldquo;{searchQuery || "active filters"}&rdquo;
+                </h3>
+                {suggestedCorrection ? (
+                  <p className="text-xs text-[#55645B] mt-1 mb-4">
+                    Did you mean{" "}
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery(suggestedCorrection)}
+                      className="text-[#1B5E20] font-semibold underline underline-offset-2 hover:text-[#25702A]"
+                    >
+                      {suggestedCorrection}
+                    </button>
+                    ?
+                  </p>
+                ) : (
+                  <p className="text-xs text-[#55645B] max-w-sm mx-auto mt-1 mb-4">
+                    Check for spelling mistakes, broaden search terms, or reset active filters.
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSelectedAnnex("ALL");
+                    setSelectedStatus("ALL");
+                  }}
+                  className="text-xs"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                  Clear Search & Filters
+                </Button>
               </div>
-              <h3 className="text-base font-semibold text-[#1F2A24]">
-                No documents found
-              </h3>
-              <p className="text-xs text-[#55645B] max-w-sm mx-auto mt-1 mb-4">
-                {documents.length === 0
-                  ? "There are currently no annex documents in the system."
-                  : "Try adjusting your search or filter criteria."}
-              </p>
-              {(user.role === "STAFF" || user.role === "ACCOUNTING") && (
-                <Link href="/documents/new">
-                  <Button variant="primary" size="sm">
-                    <PlusCircle className="w-4 h-4 mr-1.5" />
-                    Prepare New Annex
-                  </Button>
-                </Link>
-              )}
-            </div>
-          ) : (
-            <>
+            ) : (
+              <>
               {/* Mobile Cards View (< md) */}
               <div className="md:hidden divide-y divide-[#D6DDD8] p-3">
                 {filteredDocs.map((doc) => (
@@ -325,6 +394,7 @@ export default function DocumentsPage() {
               </div>
             </>
           )}
+          </StateContainer>
         </CardContent>
       </Card>
     </div>

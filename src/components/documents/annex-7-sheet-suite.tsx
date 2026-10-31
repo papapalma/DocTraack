@@ -6,6 +6,9 @@ import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
 import { Annex7FormData, Annex7Entry, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
+import { useDraftAutoSave } from "@/hooks/use-draft-autosave";
+import { SuccessConfirmationModal } from "@/components/ui/success-confirmation-modal";
+import { SessionRecoveryModal } from "@/components/ui/session-recovery-modal";
 import {
   FileSpreadsheet,
   Printer,
@@ -62,8 +65,6 @@ export function Annex7SheetSuite({
 
   // Default initial values
   const defaultData: Annex7FormData = useMemo(() => {
-    if (initialData) return initialData;
-
     const initialEntries: Annex7Entry[] = [
       {
         id: "ada-1",
@@ -117,7 +118,7 @@ export function Annex7SheetSuite({
 
     const totalAmt = initialEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-    return {
+    const baseDefaults: Annex7FormData = {
       periodCovered: "January 1, 2024 to June 30, 2024",
       entityName: "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS",
       fundCluster: "01 - Regular Agency Fund",
@@ -132,6 +133,23 @@ export function Annex7SheetSuite({
       disbursingOfficerDesignation: "Disbursing Officer / Cashier II",
       certificationDate: "June 30, 2024",
     };
+
+    if (!initialData) return baseDefaults;
+
+    const resolvedEntries = Array.isArray(initialData.entries) && initialData.entries.length > 0
+      ? initialData.entries
+      : (Array.isArray(initialData.entries) ? initialData.entries : initialEntries);
+
+    const resolvedTotal = initialData.totalAmount !== undefined && initialData.totalAmount !== null
+      ? Number(initialData.totalAmount)
+      : resolvedEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    return {
+      ...baseDefaults,
+      ...initialData,
+      entries: resolvedEntries,
+      totalAmount: resolvedTotal,
+    };
   }, [initialData]);
 
   const [formData, setFormData] = useState<Annex7FormData>(defaultData);
@@ -141,6 +159,31 @@ export function Annex7SheetSuite({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tableNotice, setTableNotice] = useState<string | null>(null);
+
+  // Draft auto-save and state preservation
+  const draftKey = documentId || "annex_7_new";
+  const { getSavedDraft, clearSavedDraft } = useDraftAutoSave(draftKey, formData, true);
+
+  // Session recovery & 3-part success confirmation states
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [successConfirmation, setSuccessConfirmation] = useState<{
+    isOpen: boolean;
+    docId: string;
+    refCode?: string;
+  } | null>(null);
+
+  // Check for existing draft on mount in create mode
+  useEffect(() => {
+    if (mode === "create" && !initialData) {
+      const saved = getSavedDraft();
+      if (saved?.data?.entries && saved.data.entries.length > 0) {
+        setTableNotice("Restored your unsaved draft entries from earlier session.");
+        setFormData(saved.data);
+        setTimeout(() => setTableNotice(null), 5000);
+      }
+    }
+  }, [mode, initialData, getSavedDraft]);
 
   const handleLeftLogoChange = (newConfig: LogoConfig) => {
     setFormData((prev) => ({
@@ -164,19 +207,20 @@ export function Annex7SheetSuite({
 
   // Auto-compute total and ADA serial bounds
   const updateEntriesAndTotals = (newEntries: Annex7Entry[]) => {
-    const totalAmount = newEntries.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
-    
+    const safeEntries = Array.isArray(newEntries) ? newEntries : [];
+    const totalAmount = safeEntries.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
+
     // Auto-detect serial bounds if present
-    const serials = newEntries
-      .map((e) => e.adaSerialNo.trim())
+    const serials = safeEntries
+      .map((e) => String(e.adaSerialNo || "").trim())
       .filter((s) => s.length > 0);
-    
+
     const adaNoFrom = serials.length > 0 ? serials[0] : "";
     const adaNoTo = serials.length > 0 ? serials[serials.length - 1] : "";
 
     setFormData((prev) => ({
       ...prev,
-      entries: newEntries,
+      entries: safeEntries,
       totalAmount,
       adaNoFrom: prev.adaNoFrom || adaNoFrom,
       adaNoTo: prev.adaNoTo || adaNoTo,
@@ -185,7 +229,8 @@ export function Annex7SheetSuite({
 
   // Add new blank row
   const handleAddRow = () => {
-    const nextSeq = formData.entries.length + 1;
+    const currentList = Array.isArray(formData.entries) ? formData.entries : [];
+    const nextSeq = currentList.length + 1;
     const padded = String(nextSeq).padStart(3, "0");
     const newEntry: Annex7Entry = {
       id: `ada-${Date.now()}-${nextSeq}`,
@@ -199,12 +244,13 @@ export function Annex7SheetSuite({
       natureOfPayment: "Tulong Dunong Program - Student Stipend",
       amount: 0,
     };
-    updateEntriesAndTotals([...formData.entries, newEntry]);
+    updateEntriesAndTotals([...currentList, newEntry]);
   };
 
   // Update specific row field
   const handleEntryChange = (id: string, field: keyof Annex7Entry, value: string | number) => {
-    const updated = formData.entries.map((item) => {
+    const currentList = Array.isArray(formData.entries) ? formData.entries : [];
+    const updated = currentList.map((item) => {
       if (item.id === id) {
         return {
           ...item,
@@ -216,13 +262,15 @@ export function Annex7SheetSuite({
     updateEntriesAndTotals(updated);
   };
 
-  // Delete row
+  // Delete row (with non-blocking validation warning)
   const handleDeleteRow = (id: string) => {
-    if (formData.entries.length <= 1) {
-      alert("At least one entry is required.");
+    const currentList = Array.isArray(formData.entries) ? formData.entries : [];
+    if (currentList.length <= 1) {
+      setTableNotice("At least one disbursement row is required in the RADAI schedule.");
+      setTimeout(() => setTableNotice(null), 4000);
       return;
     }
-    const updated = formData.entries.filter((item) => item.id !== id);
+    const updated = currentList.filter((item) => item.id !== id);
     updateEntriesAndTotals(updated);
   };
 
@@ -243,12 +291,12 @@ export function Annex7SheetSuite({
         annexType?: { number?: number };
         formData?: {
           batchNumber?: string;
-          termCode?: string;
-          academicYear?: string;
           totalGrantees?: number;
           totalSubsidy?: number | string;
           managementFeeAmount?: number | string;
           billingDate?: string;
+          termCode?: string;
+          academicYear?: string;
         };
       }
 
@@ -323,7 +371,7 @@ export function Annex7SheetSuite({
           title: docTitle,
           annexTypeId: annexTypeId,
           formData: formData,
-          status: submitDirectly ? "SUBMITTED" : "DRAFT",
+          submitDirectly,
         };
 
         const res = await fetch("/api/documents", {
@@ -332,34 +380,64 @@ export function Annex7SheetSuite({
           body: JSON.stringify(payload),
         });
 
+        if (res.status === 401) {
+          setSessionExpired(true);
+          return;
+        }
+
         if (!res.ok) {
           const errData = await res.json();
           throw new Error(errData.error || "Failed to create Annex 7 document");
         }
 
         const createdDoc = await res.json();
+        const docId = createdDoc.document?.id || createdDoc.id;
+        clearSavedDraft();
         setSaveSuccess(true);
-        if (onSaved) onSaved(createdDoc.id);
-        else router.push(`/documents/${createdDoc.id}`);
+        setSuccessConfirmation({
+          isOpen: true,
+          docId,
+          refCode: formData.adaNoFrom || "RADAI-NEW",
+        });
+        if (onSaved) onSaved(docId);
       } else {
         const payload = {
+          title: docTitle,
           formData: formData,
-          status: submitDirectly ? "SUBMITTED" : undefined,
         };
 
         const res = await fetch(`/api/documents/${documentId}`, {
-          method: "PATCH",
+          method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+
+        if (res.status === 401) {
+          setSessionExpired(true);
+          return;
+        }
 
         if (!res.ok) {
           const errData = await res.json();
           throw new Error(errData.error || "Failed to update Annex 7 document");
         }
 
+        if (submitDirectly) {
+          await fetch(`/api/documents/${documentId}/submit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ comment: "Submitted from Annex 7 Suite" }),
+          });
+        }
+
+        clearSavedDraft();
         setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        setSuccessConfirmation({
+          isOpen: true,
+          docId: documentId || "",
+          refCode: formData.adaNoFrom || "RADAI-SAVED",
+        });
+        if (onSaved && documentId) onSaved(documentId);
       }
     } catch (err: unknown) {
       console.error(err);
@@ -384,7 +462,8 @@ export function Annex7SheetSuite({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Annex_7_RADAI_${formData.reportNo.replace(/\s+/g, "_") || "Report"}.xlsx`;
+      const safeReportNo = String(formData?.reportNo || "Report").replace(/[^a-zA-Z0-9_-]/g, "_");
+      a.download = `Annex_7_RADAI_${safeReportNo}.xlsx`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -402,15 +481,16 @@ export function Annex7SheetSuite({
 
   // Filtered entries for search
   const filteredEntries = useMemo(() => {
-    if (!searchTerm.trim()) return formData.entries;
+    const list = Array.isArray(formData.entries) ? formData.entries : [];
+    if (!searchTerm.trim()) return list;
     const term = searchTerm.toLowerCase();
-    return formData.entries.filter(
+    return list.filter(
       (e) =>
-        e.adaSerialNo.toLowerCase().includes(term) ||
-        e.payee.toLowerCase().includes(term) ||
-        e.dvPayrollNo.toLowerCase().includes(term) ||
-        e.natureOfPayment.toLowerCase().includes(term) ||
-        e.orsBursNo.toLowerCase().includes(term)
+        String(e.adaSerialNo || "").toLowerCase().includes(term) ||
+        String(e.payee || "").toLowerCase().includes(term) ||
+        String(e.dvPayrollNo || "").toLowerCase().includes(term) ||
+        String(e.natureOfPayment || "").toLowerCase().includes(term) ||
+        String(e.orsBursNo || "").toLowerCase().includes(term)
     );
   }, [formData.entries, searchTerm]);
 
@@ -438,11 +518,10 @@ export function Annex7SheetSuite({
             <button
               type="button"
               onClick={() => setViewMode("workspace")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
-                viewMode === "workspace"
-                  ? "bg-white text-ink shadow-sm"
-                  : "text-ink-muted hover:text-ink"
-              }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${viewMode === "workspace"
+                ? "bg-white text-ink shadow-sm"
+                : "text-ink-muted hover:text-ink"
+                }`}
             >
               <LayoutDashboard className="w-3.5 h-3.5 inline mr-1.5" />
               Workspace Mode
@@ -450,11 +529,10 @@ export function Annex7SheetSuite({
             <button
               type="button"
               onClick={() => setViewMode("sheet")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
-                viewMode === "sheet"
-                  ? "bg-minsu-green-700 text-white shadow-sm"
-                  : "text-ink-muted hover:text-ink"
-              }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${viewMode === "sheet"
+                ? "bg-minsu-green-700 text-white shadow-sm"
+                : "text-ink-muted hover:text-ink"
+                }`}
             >
               <FileText className="w-3.5 h-3.5 inline mr-1.5" />
               Official Sheet Canvas
@@ -504,6 +582,12 @@ export function Annex7SheetSuite({
       </div>
 
       {/* Notifications */}
+      {tableNotice && (
+        <div className="p-3 bg-amber-50 border border-amber-300/80 text-amber-900 text-xs rounded-xl flex items-center gap-2 print:hidden animate-in fade-in">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>{tableNotice}</span>
+        </div>
+      )}
       {saveSuccess && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg flex items-center gap-2 print:hidden">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -531,7 +615,7 @@ export function Annex7SheetSuite({
             <div className="bg-white p-4 rounded-xl border border-line shadow-sm">
               <span className="text-xs text-ink-muted block mb-1">Total ADAs Recorded</span>
               <div className="text-2xl font-bold text-ink flex items-baseline gap-2">
-                <span>{formData.entries.length}</span>
+                <span>{(formData.entries || []).length}</span>
                 <span className="text-xs text-ink-muted font-normal">transactions</span>
               </div>
               <span className="text-[11px] text-minsu-green-700 mt-1 block font-medium">
@@ -542,7 +626,7 @@ export function Annex7SheetSuite({
             <div className="bg-white p-4 rounded-xl border border-line shadow-sm">
               <span className="text-xs text-ink-muted block mb-1">Total Disbursed Amount</span>
               <div className="text-2xl font-bold text-minsu-green-700 font-mono">
-                ₱{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{(formData.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
               <span className="text-[11px] text-ink-muted mt-1 block">
                 Total debit instruction to bank
@@ -575,23 +659,21 @@ export function Annex7SheetSuite({
             <button
               type="button"
               onClick={() => setWorkspaceTab("entries")}
-              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${
-                workspaceTab === "entries"
-                  ? "border-minsu-green-700 text-minsu-green-700"
-                  : "border-transparent text-ink-muted hover:text-ink"
-              }`}
+              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${workspaceTab === "entries"
+                ? "border-minsu-green-700 text-minsu-green-700"
+                : "border-transparent text-ink-muted hover:text-ink"
+                }`}
             >
               <CreditCard className="w-4 h-4" />
-              ADA Disbursement Entries ({formData.entries.length})
+              ADA Disbursement Entries ({(formData.entries || []).length})
             </button>
             <button
               type="button"
               onClick={() => setWorkspaceTab("identification")}
-              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${
-                workspaceTab === "identification"
-                  ? "border-minsu-green-700 text-minsu-green-700"
-                  : "border-transparent text-ink-muted hover:text-ink"
-              }`}
+              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${workspaceTab === "identification"
+                ? "border-minsu-green-700 text-minsu-green-700"
+                : "border-transparent text-ink-muted hover:text-ink"
+                }`}
             >
               <Building className="w-4 h-4" />
               Entity & Bank Details
@@ -599,11 +681,10 @@ export function Annex7SheetSuite({
             <button
               type="button"
               onClick={() => setWorkspaceTab("signatories")}
-              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${
-                workspaceTab === "signatories"
-                  ? "border-minsu-green-700 text-minsu-green-700"
-                  : "border-transparent text-ink-muted hover:text-ink"
-              }`}
+              className={`pb-3 text-sm font-medium border-b-2 transition flex items-center gap-2 ${workspaceTab === "signatories"
+                ? "border-minsu-green-700 text-minsu-green-700"
+                : "border-transparent text-ink-muted hover:text-ink"
+                }`}
             >
               <ShieldCheck className="w-4 h-4" />
               Certification & Oath
@@ -785,7 +866,7 @@ export function Annex7SheetSuite({
                           Total Amount of ADAs Issued:
                         </td>
                         <td className="py-3 px-3 text-right font-mono text-minsu-green-800 text-sm font-bold">
-                          ₱{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          ₱{(formData.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </td>
                         <td></td>
                       </tr>
@@ -936,233 +1017,264 @@ export function Annex7SheetSuite({
         </div>
       )}
 
-      {/* OFFICIAL CANVAS MODE (Pixel-perfect reproduction of RADAI_tab_preview.png) */}
-      {(viewMode === "sheet" || typeof window !== "undefined") && (
-        <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
-          <div className="annex-printable-document bg-neutral-100 p-4 md:p-8 rounded-2xl flex justify-center overflow-x-auto print:bg-white print:p-0">
-            {/* Standard Letter Paper Canvas */}
-            <div className="w-[1020px] bg-white text-black p-10 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight">
-              
-              {/* Top Tag */}
-              <div className="flex justify-end mb-2">
-                <span className="italic text-xs font-sans font-semibold tracking-wide text-neutral-800">
-                  TDP Form - Annex 7
-                </span>
-              </div>
+      {/* OFFICIAL CANVAS RENDER FUNCTION */}
+      {(() => {
+        const renderOfficialRadaiSheet = (editableLogo: boolean = true) => (
+          <div className="w-[1020px] bg-white text-black p-10 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight text-left">
+            {/* Top Tag */}
+            <div className="flex justify-end mb-2">
+              <span className="italic text-xs font-sans font-semibold tracking-wide text-neutral-800">
+                TDP Form - Annex 7
+              </span>
+            </div>
 
-              {/* Dual Logo Header */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-20 h-20 flex items-center justify-center">
-                  <AnnexLogo
-                    position="left"
-                    config={formData.headerLogos?.leftLogo}
-                    defaultPreset="ched"
-                    editable={true}
-                    documentId={documentId}
-                    className="w-20 h-20"
-                    onLogoChange={handleLeftLogoChange}
-                  />
-                </div>
-                <div className="text-center flex-1 px-4">
-                  <h1 className="text-base font-bold tracking-tight uppercase font-sans mb-1">
-                    REPORT OF ADVICE TO DEBIT ACCOUNT ISSUED
-                  </h1>
-                  <p className="text-xs font-sans">
-                    Period Covered: <span className="font-semibold underline decoration-neutral-400">{formData.periodCovered || "___________________________"}</span>
-                  </p>
-                </div>
-                <div className="w-20 h-20 flex items-center justify-center">
-                  <AnnexLogo
-                    position="right"
-                    config={formData.headerLogos?.rightLogo}
-                    defaultPreset="unifast"
-                    editable={true}
-                    documentId={documentId}
-                    className="w-20 h-20"
-                    onLogoChange={handleRightLogoChange}
-                  />
-                </div>
+            {/* Dual Logo Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-20 h-20 flex items-center justify-center">
+                <AnnexLogo
+                  position="left"
+                  config={formData.headerLogos?.leftLogo}
+                  defaultPreset="ched"
+                  editable={editableLogo}
+                  documentId={documentId}
+                  className="w-20 h-20"
+                  onLogoChange={handleLeftLogoChange}
+                />
               </div>
+              <div className="text-center flex-1 px-4">
+                <h1 className="text-base font-bold tracking-tight uppercase font-sans mb-1">
+                  REPORT OF ADVICE TO DEBIT ACCOUNT ISSUED
+                </h1>
+                <p className="text-xs font-sans">
+                  Period Covered: <span className="font-semibold underline decoration-neutral-400">{formData.periodCovered || "___________________________"}</span>
+                </p>
+              </div>
+              <div className="w-20 h-20 flex items-center justify-center">
+                <AnnexLogo
+                  position="right"
+                  config={formData.headerLogos?.rightLogo}
+                  defaultPreset="unifast"
+                  editable={editableLogo}
+                  documentId={documentId}
+                  className="w-20 h-20"
+                  onLogoChange={handleRightLogoChange}
+                />
+              </div>
+            </div>
 
-              {/* Identification Fields */}
-              <div className="grid grid-cols-12 gap-y-1 mb-4 text-[10px] font-sans">
-                <div className="col-span-8 space-y-0.5">
-                  <div className="flex">
-                    <span className="font-semibold w-36">Entity Name :</span>
-                    <span className="border-b border-black flex-1 font-medium">{formData.entityName}</span>
-                  </div>
-                  <div className="flex">
-                    <span className="font-semibold w-36">Fund Cluster :</span>
-                    <span className="border-b border-black flex-1">{formData.fundCluster}</span>
-                  </div>
-                  <div className="flex">
-                    <span className="font-semibold w-36">Bank Name/Account No. :</span>
-                    <span className="border-b border-black flex-1 font-mono">{formData.bankNameAccountNo}</span>
-                  </div>
+            {/* Identification Fields */}
+            <div className="grid grid-cols-12 gap-y-1 mb-4 text-[10px] font-sans">
+              <div className="col-span-8 space-y-0.5">
+                <div className="flex">
+                  <span className="font-semibold w-36">Entity Name :</span>
+                  <span className="border-b border-black flex-1 font-medium">{formData.entityName || "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS"}</span>
                 </div>
-                <div className="col-span-4 space-y-0.5 pl-6">
-                  <div className="flex">
-                    <span className="font-semibold w-24">Report No.:</span>
-                    <span className="border-b border-black flex-1 font-mono font-medium">{formData.reportNo}</span>
-                  </div>
-                  <div className="flex">
-                    <span className="font-semibold w-24">Sheet No.:</span>
-                    <span className="border-b border-black flex-1">{formData.sheetNo}</span>
-                  </div>
+                <div className="flex">
+                  <span className="font-semibold w-36">Fund Cluster :</span>
+                  <span className="border-b border-black flex-1">{formData.fundCluster || "01 - Regular Agency Fund"}</span>
+                </div>
+                <div className="flex">
+                  <span className="font-semibold w-36">Bank Name/Account No. :</span>
+                  <span className="border-b border-black flex-1 font-mono">{formData.bankNameAccountNo || "---"}</span>
                 </div>
               </div>
+              <div className="col-span-4 space-y-0.5 pl-6">
+                <div className="flex">
+                  <span className="font-semibold w-24">Report No.:</span>
+                  <span className="border-b border-black flex-1 font-mono font-medium">{formData.reportNo || "---"}</span>
+                </div>
+                <div className="flex">
+                  <span className="font-semibold w-24">Sheet No.:</span>
+                  <span className="border-b border-black flex-1">{formData.sheetNo || "1 of 1"}</span>
+                </div>
+              </div>
+            </div>
 
-              {/* Main Official Grid */}
-              <table className="w-full border-collapse border border-black text-[9px] font-sans">
-                <thead>
-                  <tr className="border border-black bg-neutral-50/70 text-center font-bold">
-                    <th colSpan={2} className="border border-black p-1.5 w-40">
-                      ADA
-                    </th>
-                    <th rowSpan={2} className="border border-black p-1.5 w-24">
-                      DV/Payroll No.
-                    </th>
-                    <th rowSpan={2} className="border border-black p-1.5 w-24">
-                      ORS/BURS No.
-                    </th>
-                    <th rowSpan={2} className="border border-black p-1.5 w-24">
-                      Responsibility Center Code
-                    </th>
-                    <th rowSpan={2} className="border border-black p-1.5 w-44">
-                      Payee
-                    </th>
-                    <th rowSpan={2} className="border border-black p-1.5 w-24">
-                      UACS Object Code
-                    </th>
-                    <th rowSpan={2} className="border border-black p-1.5 min-w-[150px]">
-                      Nature of Payment
-                    </th>
-                    <th rowSpan={2} className="border border-black p-1.5 w-28 text-right">
-                      Amount
-                    </th>
-                  </tr>
-                  <tr className="border border-black bg-neutral-50/70 text-center font-bold">
-                    <th className="border border-black p-1 w-20">Date</th>
-                    <th className="border border-black p-1 w-20">Serial No.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {formData.entries.map((entry) => (
-                    <tr key={entry.id} className="border-b border-neutral-300">
-                      <td className="border-r border-black p-1.5 text-center font-mono">{entry.adaDate}</td>
-                      <td className="border-r border-black p-1.5 text-center font-mono font-medium">{entry.adaSerialNo}</td>
-                      <td className="border-r border-black p-1.5 text-center font-mono">{entry.dvPayrollNo}</td>
-                      <td className="border-r border-black p-1.5 text-center font-mono">{entry.orsBursNo}</td>
-                      <td className="border-r border-black p-1.5 text-center font-mono">{entry.responsibilityCenterCode}</td>
-                      <td className="border-r border-black p-1.5 font-medium">{entry.payee}</td>
-                      <td className="border-r border-black p-1.5 text-center font-mono">{entry.uacsObjectCode}</td>
-                      <td className="border-r border-black p-1.5">{entry.natureOfPayment}</td>
-                      <td className="border-r border-black p-1.5 text-right font-mono font-medium">
-                        {Number(entry.amount).toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </td>
-                    </tr>
-                  ))}
-
-                  {/* Empty filler rows to match official government paper height */}
-                  {Array.from({ length: Math.max(0, 15 - formData.entries.length) }).map((_, i) => (
-                    <tr key={`fill-${i}`} className="border-b border-neutral-200 h-6">
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-black font-bold">
-                    <td colSpan={8} className="border-r border-black p-2 text-right uppercase tracking-wider text-[10px]">
-                      Total
-                    </td>
-                    <td className="p-2 text-right font-mono text-[10px] border-b-4 border-double border-black">
-                      ₱{formData.totalAmount.toLocaleString(undefined, {
+            {/* Main Official Grid */}
+            <table className="w-full border-collapse border border-black text-[9px] font-sans">
+              <thead>
+                <tr className="border border-black bg-neutral-50/70 text-center font-bold">
+                  <th colSpan={2} className="border border-black p-1.5 w-40">
+                    ADA
+                  </th>
+                  <th rowSpan={2} className="border border-black p-1.5 w-24">
+                    DV/Payroll No.
+                  </th>
+                  <th rowSpan={2} className="border border-black p-1.5 w-24">
+                    ORS/BURS No.
+                  </th>
+                  <th rowSpan={2} className="border border-black p-1.5 w-24">
+                    Responsibility Center Code
+                  </th>
+                  <th rowSpan={2} className="border border-black p-1.5 w-44">
+                    Payee
+                  </th>
+                  <th rowSpan={2} className="border border-black p-1.5 w-24">
+                    UACS Object Code
+                  </th>
+                  <th rowSpan={2} className="border border-black p-1.5 min-w-[150px]">
+                    Nature of Payment
+                  </th>
+                  <th rowSpan={2} className="border border-black p-1.5 w-28 text-right">
+                    Amount
+                  </th>
+                </tr>
+                <tr className="border border-black bg-neutral-50/70 text-center font-bold">
+                  <th className="border border-black p-1 w-20">Date</th>
+                  <th className="border border-black p-1 w-20">Serial No.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(formData.entries || []).map((entry) => (
+                  <tr key={entry.id} className="border-b border-neutral-300">
+                    <td className="border-r border-black p-1.5 text-center font-mono">{entry.adaDate}</td>
+                    <td className="border-r border-black p-1.5 text-center font-mono font-medium">{entry.adaSerialNo}</td>
+                    <td className="border-r border-black p-1.5 text-center font-mono">{entry.dvPayrollNo}</td>
+                    <td className="border-r border-black p-1.5 text-center font-mono">{entry.orsBursNo}</td>
+                    <td className="border-r border-black p-1.5 text-center font-mono">{entry.responsibilityCenterCode}</td>
+                    <td className="border-r border-black p-1.5 font-medium">{entry.payee}</td>
+                    <td className="border-r border-black p-1.5 text-center font-mono">{entry.uacsObjectCode}</td>
+                    <td className="border-r border-black p-1.5">{entry.natureOfPayment}</td>
+                    <td className="border-r border-black p-1.5 text-right font-mono font-medium">
+                      {Number(entry.amount || 0).toLocaleString(undefined, {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
                     </td>
                   </tr>
-                </tfoot>
-              </table>
+                ))}
 
-              {/* Certification Block */}
-              <div className="mt-8 border border-black p-4 text-[10px] font-sans">
-                <div className="text-center font-bold tracking-wider uppercase mb-3">
-                  CERTIFICATION
+                {/* Empty filler rows to match official government paper height */}
+                {Array.from({ length: Math.max(0, 12 - (formData.entries || []).length) }).map((_, i) => (
+                  <tr key={`fill-${i}`} className="border-b border-neutral-200 h-6">
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                    <td className="border-r border-black p-1"></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-black font-bold">
+                  <td colSpan={8} className="border-r border-black p-2 text-right uppercase tracking-wider text-[10px]">
+                    Total
+                  </td>
+                  <td className="p-2 text-right font-mono text-[10px] border-b-4 border-double border-black">
+                    ₱{(formData.totalAmount || 0).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+
+            {/* Certification Block */}
+            <div className="mt-8 border border-black p-4 text-[10px] font-sans">
+              <div className="text-center font-bold tracking-wider uppercase mb-3">
+                CERTIFICATION
+              </div>
+              <p className="text-center max-w-2xl mx-auto leading-relaxed mb-8">
+                I hereby certify on my official oath that the above is a true statement of all ADAs issued by me during the period stated above for which ADA Nos.{" "}
+                <span className="font-bold underline font-mono px-2">{formData.adaNoFrom || "__________"}</span> to{" "}
+                <span className="font-bold underline font-mono px-2">{formData.adaNoTo || "__________"}</span>{" "}
+                inclusive, were actually issued by me in the amounts shown thereon.
+              </p>
+
+              <div className="flex flex-col items-center">
+                <div className="w-80 border-b border-black mb-1"></div>
+                <div className="font-bold uppercase tracking-wide text-[10px]">
+                  {formData.disbursingOfficerName || "MARIA LIZA M. HERNANDEZ"}
                 </div>
-                <p className="text-center max-w-2xl mx-auto leading-relaxed mb-8">
-                  I hereby certify on my official oath that the above is a true statement of all ADAs issued by me during the period stated above for which ADA Nos.{" "}
-                  <span className="font-bold underline font-mono px-2">{formData.adaNoFrom || "__________"}</span> to{" "}
-                  <span className="font-bold underline font-mono px-2">{formData.adaNoTo || "__________"}</span>{" "}
-                  inclusive, were actually issued by me in the amounts shown thereon.
-                </p>
+                <div className="text-[9px] text-neutral-600 mb-6">
+                  Name and Signature of Disbursing Officer/Cashier
+                </div>
 
-                <div className="flex flex-col items-center">
-                  <div className="w-80 border-b border-black mb-1"></div>
-                  <div className="font-bold uppercase tracking-wide text-[10px]">
-                    {formData.disbursingOfficerName}
-                  </div>
-                  <div className="text-[9px] text-neutral-600 mb-6">
-                    Name and Signature of Disbursing Officer/Cashier
-                  </div>
-
-                  <div className="flex justify-between w-full max-w-xl text-[9px] px-8">
-                    <div className="text-center">
-                      <div className="w-48 border-b border-black mb-1 font-medium">
-                        {formData.disbursingOfficerDesignation}
-                      </div>
-                      <span className="text-neutral-600">Official Designation</span>
+                <div className="flex justify-between w-full max-w-xl text-[9px] px-8">
+                  <div className="text-center">
+                    <div className="w-48 border-b border-black mb-1 font-medium">
+                      {formData.disbursingOfficerDesignation || "Disbursing Officer / Cashier II"}
                     </div>
-                    <div className="text-center">
-                      <div className="w-36 border-b border-black mb-1 font-mono">
-                        {formData.certificationDate}
-                      </div>
-                      <span className="text-neutral-600">Date</span>
+                    <span className="text-neutral-600">Official Designation</span>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-36 border-b border-black mb-1 font-mono">
+                      {formData.certificationDate || "June 30, 2024"}
                     </div>
+                    <span className="text-neutral-600">Date</span>
                   </div>
                 </div>
               </div>
-
             </div>
           </div>
-        </div>
-      )}
+        );
 
-      {/* Apple-styled Fluid Print / PDF Preview Modal */}
-      <PrintPreviewModal
-        isOpen={isPrintModalOpen}
-        onClose={() => setIsPrintModalOpen(false)}
-        documentTitle={documentTitle || "Annex 7 - Report of Advice to Debit Account Issued (RADAI)"}
-        annexNumber={7}
-        orientation={printOrientation}
-        onOrientationChange={setPrintOrientation}
-        previewContent={
-          <div className="text-black text-xs space-y-3">
-            <div className="p-4 border border-dashed border-neutral-300 rounded bg-[#F1F8F1]">
-              <div className="font-bold text-sm text-[#123F17]">
-                TDP Annex 7 - Report of Advice to Debit Account Issued (RADAI)
+        return (
+          <>
+            {/* OFFICIAL CANVAS MODE (Pixel-perfect reproduction of RADAI_tab_preview.png) */}
+            {(viewMode === "sheet" || typeof window !== "undefined") && (
+              <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
+                <div className="annex-printable-document bg-neutral-100 p-4 md:p-8 rounded-2xl flex justify-center overflow-x-auto print:bg-white print:p-0">
+                  {renderOfficialRadaiSheet(true)}
+                </div>
               </div>
-              <div className="text-xs text-neutral-600 mt-1">
-                Bank / Account: {formData.bankNameAccountNo} • Total Entries: {formData.entries.length} • Total Amount: ₱{formData.totalAmount.toLocaleString()}
-              </div>
-              <div className="text-[11px] text-neutral-500 mt-2 italic">
-                Official accounting disbursement ledger formatted in Landscape orientation.
-              </div>
-            </div>
-          </div>
-        }
-      />
+            )}
+
+            {/* Apple-styled Fluid Print / PDF Preview Modal */}
+            <PrintPreviewModal
+              isOpen={isPrintModalOpen}
+              onClose={() => setIsPrintModalOpen(false)}
+              documentTitle={documentTitle || "Annex 7 - Report of Advice to Debit Account Issued (RADAI)"}
+              annexNumber={7}
+              orientation={printOrientation}
+              onOrientationChange={setPrintOrientation}
+              onPrint={() => {
+                setViewMode("sheet");
+              }}
+              previewContent={
+                <div className="w-full flex justify-center py-4">
+                  {renderOfficialRadaiSheet(false)}
+                </div>
+              }
+            />
+
+            {/* Session Expiry Modal (Protects active unsaved line items) */}
+            <SessionRecoveryModal
+              isOpen={sessionExpired}
+              onClose={() => setSessionExpired(false)}
+              onReauthenticated={() => {
+                setSessionExpired(false);
+                setTableNotice("Session re-established. You may now continue saving your changes.");
+                setTimeout(() => setTableNotice(null), 4000);
+              }}
+            />
+
+            {/* 3-Step Success Confirmation Arc */}
+            {successConfirmation && (
+              <SuccessConfirmationModal
+                isOpen={successConfirmation.isOpen}
+                onClose={() => setSuccessConfirmation(null)}
+                confirmTitle="RADAI Record Successfully Saved"
+                reassureDetails={{
+                  referenceCode: successConfirmation.refCode,
+                  message: "Advice to Debit Account Issued schedule is safely recorded and ready for validation or transmittal.",
+                }}
+                nextSteps={{
+                  primaryLabel: "Open Official Canvas",
+                  onPrimaryAction: () => setViewMode("sheet"),
+                  secondaryLabel: "Return to Documents",
+                  onSecondaryAction: () => router.push("/documents"),
+                }}
+              />
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }
