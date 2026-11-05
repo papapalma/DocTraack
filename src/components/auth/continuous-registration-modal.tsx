@@ -18,6 +18,14 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
+import {
+  isValidEmail,
+  validatePassword,
+  isValidPhilippineMobile,
+  isValidStudentId,
+  isMinimumAge,
+  isValidPersonName,
+} from "@/lib/validation";
 
 interface ContinuousRegistrationModalProps {
   isOpen: boolean;
@@ -60,6 +68,7 @@ export function ContinuousRegistrationModal({
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Form Fields
   const [formData, setFormData] = useState({
@@ -106,70 +115,131 @@ export function ContinuousRegistrationModal({
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    if (fieldErrors[field]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
   };
 
   const validateStep = (step: number): boolean => {
     setError(null);
+    const errors: Record<string, string> = {};
 
     if (step === 1) {
-      if (!formData.email || !formData.password || !formData.confirmPassword) {
-        setError("Please complete all account fields.");
-        return false;
+      if (!formData.email.trim()) {
+        errors.email = "Email address is required.";
+      } else if (!isValidEmail(formData.email)) {
+        errors.email = "Please enter a valid email format (e.g. name@minsu.edu.ph or name@gmail.com).";
       }
-      if (formData.password !== formData.confirmPassword) {
-        setError("Passwords do not match.");
-        return false;
+
+      if (!formData.password) {
+        errors.password = "Password is required.";
+      } else {
+        const passCheck = validatePassword(formData.password);
+        if (!passCheck.valid) {
+          errors.password = passCheck.message || "Password must be at least 8 characters with letters & numbers.";
+        }
       }
-      if (formData.password.length < 8) {
-        setError("Password must be at least 8 characters long.");
-        return false;
-      }
-      if (!/[a-zA-Z]/.test(formData.password) || !/[0-9]/.test(formData.password)) {
-        setError("Password must contain both letters and numbers.");
-        return false;
+
+      if (!formData.confirmPassword) {
+        errors.confirmPassword = "Confirm password is required.";
+      } else if (formData.password !== formData.confirmPassword) {
+        errors.confirmPassword = "Passwords do not match.";
       }
     }
 
     if (step === 2) {
-      if (!formData.student_id.trim()) {
-        setError("MinSU Student ID number is required.");
-        return false;
+      const cleanId = formData.student_id.trim();
+      if (!cleanId) {
+        errors.student_id = "MinSU Student ID number is required.";
+      } else if (!isValidStudentId(cleanId)) {
+        errors.student_id = "Format must be 6-25 alphanumeric characters with hyphens (e.g. 2024-00123-BC).";
       }
-      if (!formData.last_name.trim() || !formData.given_name.trim()) {
-        setError("Last Name and Given Name are required.");
-        return false;
+
+      if (!formData.last_name.trim()) {
+        errors.last_name = "Last Name is required.";
+      } else if (!isValidPersonName(formData.last_name)) {
+        errors.last_name = "Last Name must contain only letters, spaces, or hyphens.";
+      }
+
+      if (!formData.given_name.trim()) {
+        errors.given_name = "Given Name is required.";
+      } else if (!isValidPersonName(formData.given_name)) {
+        errors.given_name = "Given Name must contain only letters, spaces, or hyphens.";
+      }
+
+      if (formData.middle_name.trim() && !isValidPersonName(formData.middle_name)) {
+        errors.middle_name = "Middle Name must contain only letters, spaces, or hyphens.";
       }
     }
 
     if (step === 3) {
-      if (!formData.course_degree.trim()) {
-        setError("Please enter your complete Course / Degree program.");
-        return false;
-      }
       if (!formData.birthdate) {
-        setError("Please enter your birthdate.");
-        return false;
+        errors.birthdate = "Birthdate is required.";
+      } else {
+        const ageCheck = isMinimumAge(formData.birthdate, 15);
+        if (!ageCheck.valid) {
+          errors.birthdate = ageCheck.message || "Applicant must be at least 15 years old.";
+        }
+      }
+
+      if (!formData.course_degree.trim()) {
+        errors.course_degree = "Please enter your complete Course / Degree program.";
       }
     }
 
     if (step === 4) {
-      if (!formData.street_barangay.trim() || !formData.town_city.trim() || !formData.province.trim()) {
-        setError("Please provide your complete permanent address.");
-        return false;
+      if (!formData.street_barangay.trim()) {
+        errors.street_barangay = "Street and Barangay are required.";
+      }
+      if (!formData.town_city.trim()) {
+        errors.town_city = "Municipality or City is required.";
+      }
+      if (!formData.province.trim()) {
+        errors.province = "Province is required.";
+      }
+      if (!formData.zipcode.trim()) {
+        errors.zipcode = "Zipcode is required.";
       }
       if (!formData.contact_number.trim()) {
-        setError("Please enter an active contact number.");
-        return false;
+        errors.contact_number = "Contact number is required.";
+      } else if (!isValidPhilippineMobile(formData.contact_number)) {
+        errors.contact_number = "Must be a valid 11-digit Philippine mobile number (09XXXXXXXXX).";
       }
     }
 
     if (step === 5) {
-      if (!formData.father_last_name.trim() || !formData.mother_last_name.trim()) {
-        setError("Please provide Father's last name and Mother's maiden last name.");
-        return false;
+      if (!formData.father_last_name.trim()) {
+        errors.father_last_name = "Father's last name is required.";
+      } else if (!isValidPersonName(formData.father_last_name)) {
+        errors.father_last_name = "Father's name must contain only letters and hyphens.";
+      }
+
+      if (!formData.mother_last_name.trim()) {
+        errors.mother_last_name = "Mother's maiden last name is required.";
+      } else if (!isValidPersonName(formData.mother_last_name)) {
+        errors.mother_last_name = "Mother's maiden name must contain only letters and hyphens.";
+      }
+
+      if (formData.father_contact_number.trim() && !isValidPhilippineMobile(formData.father_contact_number)) {
+        errors.father_contact_number = "Must be a valid 11-digit Philippine mobile number.";
+      }
+      if (formData.mother_contact_number.trim() && !isValidPhilippineMobile(formData.mother_contact_number)) {
+        errors.mother_contact_number = "Must be a valid 11-digit Philippine mobile number.";
       }
     }
 
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError("Please correct the highlighted fields before proceeding.");
+      return false;
+    }
+
+    setFieldErrors({});
+    setError(null);
     return true;
   };
 
@@ -309,6 +379,7 @@ export function ContinuousRegistrationModal({
                 placeholder="student@minsu.edu.ph"
                 value={formData.email}
                 onChange={(e) => handleChange("email", e.target.value)}
+                error={fieldErrors.email}
                 required
               />
             </div>
@@ -324,6 +395,7 @@ export function ContinuousRegistrationModal({
                   placeholder="••••••••••••"
                   value={formData.password}
                   onChange={(e) => handleChange("password", e.target.value)}
+                  error={fieldErrors.password}
                   required
                 />
               </div>
@@ -338,6 +410,7 @@ export function ContinuousRegistrationModal({
                   placeholder="••••••••••••"
                   value={formData.confirmPassword}
                   onChange={(e) => handleChange("confirmPassword", e.target.value)}
+                  error={fieldErrors.confirmPassword}
                   required
                 />
               </div>
@@ -367,6 +440,7 @@ export function ContinuousRegistrationModal({
                 placeholder="e.g. 2023-01234-MC"
                 value={formData.student_id}
                 onChange={(e) => handleChange("student_id", e.target.value)}
+                error={fieldErrors.student_id}
                 required
               />
             </div>
@@ -381,6 +455,7 @@ export function ContinuousRegistrationModal({
                   placeholder="e.g. DELA CRUZ"
                   value={formData.last_name}
                   onChange={(e) => handleChange("last_name", e.target.value)}
+                  error={fieldErrors.last_name}
                   required
                 />
               </div>
@@ -394,6 +469,7 @@ export function ContinuousRegistrationModal({
                   placeholder="e.g. JUAN"
                   value={formData.given_name}
                   onChange={(e) => handleChange("given_name", e.target.value)}
+                  error={fieldErrors.given_name}
                   required
                 />
               </div>
@@ -419,6 +495,7 @@ export function ContinuousRegistrationModal({
                   placeholder="e.g. SANTOS"
                   value={formData.middle_name}
                   onChange={(e) => handleChange("middle_name", e.target.value)}
+                  error={fieldErrors.middle_name}
                 />
               </div>
             </div>
@@ -464,6 +541,7 @@ export function ContinuousRegistrationModal({
                   type="date"
                   value={formData.birthdate}
                   onChange={(e) => handleChange("birthdate", e.target.value)}
+                  error={fieldErrors.birthdate}
                   required
                 />
               </div>
@@ -477,6 +555,7 @@ export function ContinuousRegistrationModal({
                   placeholder="e.g. Bachelor of Science in Information Technology"
                   value={formData.course_degree}
                   onChange={(e) => handleChange("course_degree", e.target.value)}
+                  error={fieldErrors.course_degree}
                   required
                 />
                 <span className="text-[11px] text-[#55645B]">
@@ -559,6 +638,7 @@ export function ContinuousRegistrationModal({
                 placeholder="e.g. Sitio Ilang-Ilang, Brgy. Masipit"
                 value={formData.street_barangay}
                 onChange={(e) => handleChange("street_barangay", e.target.value)}
+                error={fieldErrors.street_barangay}
                 required
               />
             </div>
@@ -573,6 +653,7 @@ export function ContinuousRegistrationModal({
                   placeholder="e.g. Calapan City"
                   value={formData.town_city}
                   onChange={(e) => handleChange("town_city", e.target.value)}
+                  error={fieldErrors.town_city}
                   required
                 />
               </div>
@@ -586,6 +667,7 @@ export function ContinuousRegistrationModal({
                   placeholder="e.g. Oriental Mindoro"
                   value={formData.province}
                   onChange={(e) => handleChange("province", e.target.value)}
+                  error={fieldErrors.province}
                   required
                 />
               </div>
@@ -599,6 +681,7 @@ export function ContinuousRegistrationModal({
                   placeholder="e.g. 5200"
                   value={formData.zipcode}
                   onChange={(e) => handleChange("zipcode", e.target.value)}
+                  error={fieldErrors.zipcode}
                   required
                 />
               </div>
@@ -613,6 +696,7 @@ export function ContinuousRegistrationModal({
                 placeholder="e.g. 0917-123-4567"
                 value={formData.contact_number}
                 onChange={(e) => handleChange("contact_number", e.target.value)}
+                error={fieldErrors.contact_number}
                 required
               />
             </div>
@@ -642,6 +726,7 @@ export function ContinuousRegistrationModal({
                   placeholder="Last Name"
                   value={formData.father_last_name}
                   onChange={(e) => handleChange("father_last_name", e.target.value)}
+                  error={fieldErrors.father_last_name}
                   required
                 />
                 <Input
@@ -667,6 +752,7 @@ export function ContinuousRegistrationModal({
                     placeholder="e.g. 0918-123-4567"
                     value={formData.father_contact_number}
                     onChange={(e) => handleChange("father_contact_number", e.target.value)}
+                    error={fieldErrors.father_contact_number}
                   />
                 </div>
                 <div className="space-y-1">
@@ -694,6 +780,7 @@ export function ContinuousRegistrationModal({
                   placeholder="Maiden Last Name"
                   value={formData.mother_last_name}
                   onChange={(e) => handleChange("mother_last_name", e.target.value)}
+                  error={fieldErrors.mother_last_name}
                   required
                 />
                 <Input
@@ -719,6 +806,7 @@ export function ContinuousRegistrationModal({
                     placeholder="e.g. 0919-876-5432"
                     value={formData.mother_contact_number}
                     onChange={(e) => handleChange("mother_contact_number", e.target.value)}
+                    error={fieldErrors.mother_contact_number}
                   />
                 </div>
                 <div className="space-y-1">

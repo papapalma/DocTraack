@@ -20,14 +20,22 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const batch = searchParams.get("batch") || "3";
+    const batch = searchParams.get("batch") || "1";
     const campus = searchParams.get("campus");
+
+    const whereClause: any = {
+      status: ApplicationStatus.ACCEPTED,
+    };
+    if (batch && batch !== "ALL") {
+      const parsedBatch = parseInt(batch, 10);
+      if (!isNaN(parsedBatch)) {
+        whereClause.batchNumber = parsedBatch;
+      }
+    }
 
     // Fetch accepted applications as candidate continuing grantees
     const applications = await prisma.application.findMany({
-      where: {
-        status: ApplicationStatus.ACCEPTED,
-      },
+      where: whereClause,
       include: {
         student: { select: { id: true, name: true, email: true } },
       },
@@ -54,7 +62,7 @@ export async function GET(req: NextRequest) {
         yearLevel: String(data.year_level || "2"),
         email: data.email || app.student.email,
         phone: data.contact_number || "09170000000",
-        tdpBatch: batch,
+        tdpBatch: String(app.batchNumber || batch),
         semesterAmount: 7500,
         totalAmount: 7500,
         campus: rawCampus,

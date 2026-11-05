@@ -26,6 +26,9 @@ export function isStudent(role: Role): boolean {
  * Annex 6, 7, 8, 9: STAFF and ACCOUNTING
  */
 export function canCreateAnnex(role: Role, annexNumber: number): boolean {
+  if (role === "SYSTEM_ADMIN") {
+    return true;
+  }
   if (role === "STAFF") {
     return annexNumber >= 1 && annexNumber <= 10;
   }

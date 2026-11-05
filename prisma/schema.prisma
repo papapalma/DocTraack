@@ -52,6 +52,7 @@ model User {
   applications  Application[]
   applicantCalls ApplicantCall[]
   transmittals  Transmittal[]
+  verificationRuns VerificationRun[]
 
   @@map("users")
 }
@@ -150,6 +151,8 @@ model ApplicantCall {
   id           String        @id @default(cuid())
   title        String
   description  String?
+  batchNumber  Int           @default(1)
+  startDate    DateTime      @default(now())
   deadline     DateTime
   formSchema   Json
   isActive     Boolean       @default(true)
@@ -161,6 +164,8 @@ model ApplicantCall {
   applications Application[]
 
   @@index([isActive])
+  @@index([batchNumber])
+  @@index([startDate, deadline])
   @@map("applicant_calls")
 }
 
@@ -170,6 +175,7 @@ model Application {
   call             ApplicantCall?    @relation(fields: [callId], references: [id], onDelete: Cascade)
   studentId        String
   student          User              @relation(fields: [studentId], references: [id])
+  batchNumber      Int               @default(1)
   formData         Json
   trackingCode     String            @unique
   status           ApplicationStatus @default(SUBMITTED)
@@ -182,6 +188,7 @@ model Application {
   @@index([studentId])
   @@index([callId])
   @@index([status])
+  @@index([batchNumber])
   @@map("applications")
 }
 

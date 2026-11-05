@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Bell, CheckCheck, Clock, ArrowRight } from "lucide-react";
+import { StaggerContainer, StaggerItem } from "@/components/ui/page-transition";
 
 export default function NotificationsPage() {
   const { user } = useSession();
@@ -118,53 +119,54 @@ export default function NotificationsPage() {
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-[#D6DDD8]">
+            <StaggerContainer className="divide-y divide-[#D6DDD8]">
               {notifications.map((n) => (
-                <div
-                  key={n.id}
-                  className={`p-4 flex items-start justify-between gap-4 transition-colors duration-200 ${
-                    !n.read ? "bg-[#FFF1C2]/30" : "hover:bg-[#F6F8F6]"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 transition-all duration-200 ease-out ${
-                        !n.read ? "bg-[#F2B705] scale-100 opacity-100" : "bg-transparent scale-0 opacity-0"
-                      }`}
-                    />
-                    <div>
-                      <h4 className="text-sm font-semibold text-[#1F2A24]">
-                        {n.title}
-                      </h4>
-                      <p className="text-xs text-[#55645B] mt-0.5 leading-relaxed">
-                        {n.message}
-                      </p>
-                      <span className="text-[10px] text-[#55645B] mt-1 block">
-                        {new Date(n.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
+                <StaggerItem key={n.id}>
+                  <div
+                    className={`p-4 flex items-start justify-between gap-4 transition-colors duration-200 ${
+                      !n.read ? "bg-[#FFF1C2]/30" : "hover:bg-[#F6F8F6]"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 transition-all duration-200 ease-out ${
+                          !n.read ? "bg-[#F2B705] scale-100 opacity-100" : "bg-transparent scale-0 opacity-0"
+                        }`}
+                      />
+                      <div>
+                        <h4 className="text-sm font-semibold text-[#1F2A24]">
+                          {n.title}
+                        </h4>
+                        <p className="text-xs text-[#55645B] mt-0.5 leading-relaxed">
+                          {n.message}
+                        </p>
+                        <span className="text-[10px] text-[#55645B] mt-1 block">
+                          {new Date(n.createdAt).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  {n.link && (
-                    <Link
-                      href={n.link}
-                      onClick={() => handleMarkOne(n.id)}
-                      className="shrink-0"
-                    >
-                      <Button variant="ghost" size="sm" className="h-8 text-xs text-[#1B5E20]">
-                        View
-                        <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                      </Button>
-                    </Link>
-                  )}
-                </div>
+                    {n.link && (
+                      <Link
+                        href={n.link}
+                        onClick={() => handleMarkOne(n.id)}
+                        className="shrink-0"
+                      >
+                        <Button variant="ghost" size="sm" className="h-8 text-xs text-[#1B5E20] apple-press">
+                          View
+                          <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
+                </StaggerItem>
               ))}
-            </div>
+            </StaggerContainer>
           )}
         </CardContent>
       </Card>

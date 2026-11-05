@@ -216,17 +216,43 @@ async function main() {
     });
   }
 
-  // 3. Seed Sample Applicant Call (Annex 2)
+  // 3. Seed Sample Applicant Calls (Annex 2)
   const staffUser = await prisma.user.findUnique({ where: { email: "staff@minsu.edu.ph" } });
   if (staffUser) {
     await prisma.applicantCall.upsert({
       where: { id: "call-2026-sem1" },
-      update: {},
+      update: {
+        batchNumber: 1,
+        startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
       create: {
         id: "call-2026-sem1",
-        title: "TDP Call for Applicants - 1st Semester A.Y. 2026-2027",
-        description: "Official call for regular undergraduate applicants across all Mindoro State University campuses.",
+        title: "TDP Call for Applicants (Batch 1) - 1st Semester A.Y. 2026-2027",
+        description: "Official call for regular undergraduate applicants across all Mindoro State University campuses (Batch 1 Intake).",
+        batchNumber: 1,
+        startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Opened 7 days ago
         deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+        formSchema: annexes[1].formSchema,
+        isActive: true,
+        createdById: staffUser.id,
+      },
+    });
+
+    await prisma.applicantCall.upsert({
+      where: { id: "call-2026-sem1-b2" },
+      update: {
+        batchNumber: 2,
+        startDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000),
+        deadline: new Date(Date.now() + 65 * 24 * 60 * 60 * 1000),
+      },
+      create: {
+        id: "call-2026-sem1-b2",
+        title: "TDP Call for Applicants (Batch 2) - 1st Semester A.Y. 2026-2027",
+        description: "Secondary intake window for regular undergraduate applicants across all Mindoro State University campuses (Batch 2 Intake).",
+        batchNumber: 2,
+        startDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000), // Upcoming in 35 days
+        deadline: new Date(Date.now() + 65 * 24 * 60 * 60 * 1000),
         formSchema: annexes[1].formSchema,
         isActive: true,
         createdById: staffUser.id,

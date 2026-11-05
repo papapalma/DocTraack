@@ -35,8 +35,9 @@ export const Topbar: React.FC = () => {
   };
 
   return (
-    <header className="shrink-0 z-40 h-16 w-full bg-[#1B5E20]/95 backdrop-blur-xl text-white shadow-[0_4px_20px_rgba(0,0,0,0.06)] border-b border-[#F2B705]/30 flex items-center justify-between px-3 sm:px-6 transition-colors">
-      {/* Brand & Sidebar Toggle Button */}
+    <>
+      <header className="shrink-0 z-40 h-16 w-full bg-[#1B5E20]/95 backdrop-blur-xl text-white shadow-[0_4px_20px_rgba(0,0,0,0.06)] border-b border-[#F2B705]/30 flex items-center justify-between px-3 sm:px-6 transition-colors">
+        {/* Brand & Sidebar Toggle Button */}
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Universal Sidebar Toggle Button */}
         <button
@@ -164,6 +165,8 @@ export const Topbar: React.FC = () => {
         )}
       </div>
 
+      </header>
+
       {/* Confirmation Modal Before Logout */}
       <LogoutModal
         isOpen={showLogoutModal}
@@ -177,6 +180,6 @@ export const Topbar: React.FC = () => {
         isOpen={showBrandingModal}
         onClose={() => setShowBrandingModal(false)}
       />
-    </header>
+    </>
   );
 };

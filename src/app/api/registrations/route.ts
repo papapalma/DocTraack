@@ -3,7 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, createSession, getCurrentUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { Role, ApplicationStatus } from "@prisma/client";
-import { isValidEmail, validatePassword, sanitizeText } from "@/lib/validation";
+import {
+  isValidEmail,
+  validatePassword,
+  sanitizeText,
+  isValidPhilippineMobile,
+  normalizePhilippineMobile,
+  isValidStudentId,
+  isMinimumAge,
+  isValidPersonName,
+} from "@/lib/validation";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +26,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const statusFilter = searchParams.get("status") as ApplicationStatus | null;
+    const batchFilter = searchParams.get("batch");
 
     // Students only see their own application
     if (user.role === Role.STUDENT) {
@@ -39,6 +49,12 @@ export async function GET(req: NextRequest) {
     const whereClause: any = {};
     if (statusFilter && Object.values(ApplicationStatus).includes(statusFilter)) {
       whereClause.status = statusFilter;
+    }
+    if (batchFilter && batchFilter !== "ALL") {
+      const parsed = parseInt(batchFilter, 10);
+      if (!isNaN(parsed)) {
+        whereClause.batchNumber = parsed;
+      }
     }
 
     const applications = await prisma.application.findMany({
@@ -127,10 +143,62 @@ export async function POST(req: NextRequest) {
     // Validate required Annex 1 fields
     if (!student_id || !last_name || !given_name) {
       return NextResponse.json(
-        { error: "Student ID, Last Name, and Given Name are required" },
+        { error: "Student ID, Last Name, and Given Name are required." },
         { status: 400 }
       );
     }
+
+    const cleanStudentId = sanitizeText(student_id, 30).trim().toUpperCase();
+    if (!isValidStudentId(cleanStudentId)) {
+      return NextResponse.json(
+        { error: "Invalid Student ID format. MinSU IDs must be 6-25 alphanumeric characters with hyphens (e.g., 2024-00123-BC)." },
+        { status: 400 }
+      );
+    }
+
+    // Security & Anti-Impersonation: Ensure Student ID is not already claimed
+    const existingWithStudentId = await prisma.application.findFirst({
+      where: {
+        formData: {
+          path: ["student_id"],
+          equals: cleanStudentId,
+        },
+      },
+    });
+    if (existingWithStudentId) {
+      return NextResponse.json(
+        {
+          error: `The Student ID "${cleanStudentId}" is already registered to an existing account. Please sign in or contact the TDP Coordinator if you believe this is an error.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    // Validate person names
+    if (!isValidPersonName(given_name) || !isValidPersonName(last_name)) {
+      return NextResponse.json(
+        { error: "Given Name and Last Name must contain only valid name characters (letters, hyphens, spaces)." },
+        { status: 400 }
+      );
+    }
+
+    // Validate birthdate & age >= 15
+    const ageCheck = isMinimumAge(birthdate, 15);
+    if (!ageCheck.valid) {
+      return NextResponse.json(
+        { error: ageCheck.message || "Applicant must be at least 15 years old." },
+        { status: 400 }
+      );
+    }
+
+    // Validate Philippine mobile number
+    if (contact_number && !isValidPhilippineMobile(contact_number)) {
+      return NextResponse.json(
+        { error: "Contact number must be a valid 11-digit Philippine mobile number (e.g., 09171234567 or +639171234567)." },
+        { status: 400 }
+      );
+    }
+    const normalizedContact = contact_number ? normalizePhilippineMobile(contact_number) : "";
 
     if (!course_degree || !year_level) {
       return NextResponse.json(
@@ -146,7 +214,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if user already exists
+    // Check if user email already exists
     const existingUser = await prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
@@ -173,7 +241,7 @@ export async function POST(req: NextRequest) {
 
     // 2. Prepare standardized Annex 1 payload
     const annex1FormData = {
-      student_id: sanitizeText(student_id, 50),
+      student_id: cleanStudentId,
       last_name: sanitizeText(last_name, 60),
       given_name: sanitizeText(given_name, 60),
       ext_name: ext_name ? sanitizeText(ext_name, 20) : "",
@@ -186,7 +254,7 @@ export async function POST(req: NextRequest) {
       town_city: sanitizeText(town_city, 80),
       province: sanitizeText(province, 80),
       zipcode: zipcode ? sanitizeText(zipcode, 20) : "",
-      contact_number: contact_number ? sanitizeText(contact_number, 30) : "",
+      contact_number: normalizedContact,
       email: normalizedEmail,
       hei_uii: hei_uii ? sanitizeText(hei_uii, 20) : "4060",
       hei_name: hei_name ? sanitizeText(hei_name, 120) : "Mindoro State University - Bongabong Campus",
@@ -205,14 +273,21 @@ export async function POST(req: NextRequest) {
       parent_email: parent_email ? sanitizeText(parent_email, 80) : "",
     };
 
-    // Find active call if exists
+    // Find active call within open time window if exists
+    const now = new Date();
     const activeCall = await prisma.applicantCall.findFirst({
-      where: { isActive: true },
-      orderBy: { createdAt: "desc" },
+      where: {
+        isActive: true,
+        startDate: { lte: now },
+        deadline: { gte: now },
+      },
+      orderBy: { batchNumber: "asc" },
     });
 
-    // Generate unique tracking code
-    const trackingCode = `MINSU-TDP-${new Date().getFullYear()}-${crypto
+    const assignedBatch = activeCall ? activeCall.batchNumber : 1;
+
+    // Generate unique batch-prefixed tracking code
+    const trackingCode = `MINSU-TDP-${now.getFullYear()}-B${assignedBatch}-${crypto
       .randomBytes(3)
       .toString("hex")
       .toUpperCase()}`;
@@ -222,6 +297,7 @@ export async function POST(req: NextRequest) {
       data: {
         studentId: newUser.id,
         callId: activeCall ? activeCall.id : null,
+        batchNumber: assignedBatch,
         formData: annex1FormData,
         trackingCode,
         status: ApplicationStatus.SUBMITTED, // Pending Validation

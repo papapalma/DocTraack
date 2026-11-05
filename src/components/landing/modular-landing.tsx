@@ -1,36 +1,67 @@
 "use client";
 
 import React from "react";
-import { LandingSection } from "@/types/landing";
+import { LandingSection, LandingStyleSettings, DEFAULT_STYLE_SETTINGS } from "@/types/landing";
+import { MotionContext } from "@/components/landing/motion/motion-wrapper";
 import { HeroSection } from "@/components/landing/sections/hero-section";
 import { AnnouncementSection } from "@/components/landing/sections/announcement-section";
 import { WorkflowSection } from "@/components/landing/sections/workflow-section";
 import { StatsSection } from "@/components/landing/sections/stats-section";
 import { FaqSection } from "@/components/landing/sections/faq-section";
 import { ContactSection } from "@/components/landing/sections/contact-section";
+import { EligibilityCheckerSection } from "@/components/landing/sections/eligibility-checker-section";
+import { LeadershipTrustSection } from "@/components/landing/sections/leadership-trust-section";
 import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
 
 interface ModularLandingProps {
   sections: LandingSection[];
+  styleSettings?: LandingStyleSettings;
   onAuthAction?: (mode: "login" | "register") => void;
   showHeader?: boolean;
   showFooter?: boolean;
+  className?: string;
+  isEmbeddedPreview?: boolean;
 }
 
 export function ModularLanding({
   sections,
+  styleSettings = DEFAULT_STYLE_SETTINGS,
   onAuthAction,
   showHeader = true,
   showFooter = true,
+  className = "",
+  isEmbeddedPreview = false,
 }: ModularLandingProps) {
   const activeSections = sections.filter((s) => s.enabled);
 
+  const bgImage = styleSettings.customBgImage?.trim() || "/campus-bg.jpg";
+
+  // Dynamic frosted glass opacity
+  const overlayOpacityClasses =
+    styleSettings.bgOverlayOpacity === "light"
+      ? "bg-gradient-to-b from-[#F6F8F6]/76 via-[#EFF5F0]/70 to-[#F6F8F6]/80 backdrop-blur-[1px]"
+      : styleSettings.bgOverlayOpacity === "deep"
+      ? "bg-gradient-to-b from-[#F6F8F6]/95 via-[#EFF5F0]/93 to-[#F6F8F6]/97 backdrop-blur-[2.5px]"
+      : "bg-gradient-to-b from-[#F6F8F6]/88 via-[#EFF5F0]/84 to-[#F6F8F6]/92 backdrop-blur-[1.5px]";
+
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-b from-[#F6F8F6] via-[#EFF5F0] to-[#F6F8F6] flex flex-col selection:bg-[#F2B705]/30">
-      {/* Top Header */}
+    <MotionContext.Provider value={styleSettings}>
+      <div className={`relative min-h-screen flex flex-col selection:bg-[#F2B705]/30 ${isEmbeddedPreview ? "overflow-hidden" : ""} ${className}`}>
+        {/* Fullscreen Campus Photo Layer (Parallax Background) */}
+        <div
+          className={`${isEmbeddedPreview ? "absolute" : "fixed"} inset-0 -z-30 bg-cover bg-center bg-no-repeat pointer-events-none transition-all duration-700`}
+          style={{
+            backgroundImage: `url('${bgImage}'), url('/campus-bg.jpg'), url('/campus-bg.png'), url('/bg.jpg')`,
+          }}
+        />
+
+        {/* Dynamic Frosted MinSU Emerald-Ivory Tint Overlay */}
+        <div className={`${isEmbeddedPreview ? "absolute" : "fixed"} inset-0 -z-20 pointer-events-none transition-all duration-500 ${overlayOpacityClasses}`} />
+
+        {/* Top Header */}
       {showHeader && (
-        <header className="shrink-0 z-40 h-16 sm:h-20 bg-[#1B5E20]/95 backdrop-blur-xl border-b border-[#F2B705]/40 text-white flex items-center justify-between px-3 sm:px-8 md:px-12 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
+        <header className="sticky top-0 z-40 h-16 sm:h-20 bg-[#1B5E20]/95 backdrop-blur-xl border-b border-[#F2B705]/40 text-white flex items-center justify-between px-3 sm:px-8 md:px-12 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
           <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
             <Logo size="md" className="sm:hidden" />
             <Logo size="lg" className="hidden sm:flex" />
@@ -38,8 +69,9 @@ export function ModularLanding({
               <h1 className="font-heading font-bold text-base sm:text-2xl tracking-tight text-white leading-tight truncate">
                 MinSU DocTrack
               </h1>
-              <p className="text-[10px] sm:text-xs text-[#DCEFDD]/90 font-medium hidden xs:block sm:block truncate">
-                Mindoro State University • Tulong Dunong Program (TDP)
+              <p className="text-[10px] sm:text-xs text-[#DCEFDD]/90 font-medium truncate">
+                <span className="sm:hidden">Mindoro State University</span>
+                <span className="hidden sm:inline">Mindoro State University • Tulong Dunong Program (TDP)</span>
               </p>
             </div>
           </div>
@@ -58,7 +90,7 @@ export function ModularLanding({
       )}
 
       {/* Main Sections */}
-      <main className="flex-1 h-full min-h-0 overflow-y-auto w-full flex flex-col items-center apple-scrollbar">
+      <main className="flex-1 w-full flex flex-col items-center">
         {activeSections.map((section) => {
           switch (section.type) {
             case "HERO":
@@ -66,6 +98,7 @@ export function ModularLanding({
                 <HeroSection
                   key={section.id}
                   content={section.content as any}
+                  enable3DOrbit={styleSettings.enable3DOrbit}
                   onAuthAction={onAuthAction}
                 />
               );
@@ -80,6 +113,21 @@ export function ModularLanding({
             case "WORKFLOW":
               return (
                 <WorkflowSection
+                  key={section.id}
+                  content={section.content as any}
+                />
+              );
+            case "ELIGIBILITY_CHECKER":
+              return (
+                <EligibilityCheckerSection
+                  key={section.id}
+                  content={section.content as any}
+                  onAuthAction={onAuthAction}
+                />
+              );
+            case "LEADERSHIP_TRUST":
+              return (
+                <LeadershipTrustSection
                   key={section.id}
                   content={section.content as any}
                 />
@@ -121,5 +169,6 @@ export function ModularLanding({
         )}
       </main>
     </div>
+  </MotionContext.Provider>
   );
 }

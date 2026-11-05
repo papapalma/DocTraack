@@ -14,7 +14,11 @@ interface CallItem {
   id: string;
   title: string;
   description?: string;
+  batchNumber?: number;
+  startDate?: string;
   deadline: string;
+  windowStatus?: "UPCOMING" | "OPEN" | "CLOSED";
+  isCurrentlyOpen?: boolean;
   _count?: { applications: number };
 }
 
@@ -119,21 +123,33 @@ export default function CallsManagementPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-[#F1F8F1] text-xs font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8]">
                   <tr>
+                    <th className="py-3.5 px-4">Batch</th>
                     <th className="py-3.5 px-4">Call Title</th>
-                    <th className="py-3.5 px-4">Deadline</th>
-                    <th className="py-3.5 px-4">Submissions Received</th>
-                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4">Intake Window</th>
+                    <th className="py-3.5 px-4">Applications</th>
+                    <th className="py-3.5 px-4">Window Status</th>
                     <th className="py-3.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#D6DDD8]">
                   {calls.map((call) => {
-                    const isClosed = new Date(call.deadline) < new Date();
+                    const now = new Date();
+                    const start = call.startDate ? new Date(call.startDate) : null;
+                    const end = new Date(call.deadline);
+                    const isUpcoming = start ? now < start : false;
+                    const isClosed = now > end;
+                    const isOpen = !isUpcoming && !isClosed;
+
                     return (
                       <tr
                         key={call.id}
                         className="hover:bg-[#F6F8F6] transition-colors"
                       >
+                        <td className="py-3.5 px-4">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-[#1B5E20] text-white shadow-xs">
+                            Batch {call.batchNumber || 1}
+                          </span>
+                        </td>
                         <td className="py-3.5 px-4">
                           <p className="font-semibold text-[#1F2A24]">
                             {call.title}
@@ -142,31 +158,43 @@ export default function CallsManagementPage() {
                             {call.description}
                           </p>
                         </td>
-                        <td className="py-3.5 px-4 text-xs text-[#55645B]">
-                          {new Date(call.deadline).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
+                        <td className="py-3.5 px-4 text-xs text-[#55645B] space-y-0.5">
+                          {start && (
+                            <p className="text-[11px] text-[#55645B]">
+                              <span className="font-semibold text-[#1F2A24]">Opens:</span>{" "}
+                              {start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </p>
+                          )}
+                          <p className="text-[11px] text-[#55645B]">
+                            <span className="font-semibold text-[#1F2A24]">Closes:</span>{" "}
+                            {end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </p>
                         </td>
                         <td className="py-3.5 px-4 font-semibold text-xs text-[#1B5E20]">
                           {call._count?.applications || 0} Grantees Applied
                         </td>
                         <td className="py-3.5 px-4">
-                          {isClosed ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#FDE8E7] text-[#B3261E]">
-                              Closed
+                          {isOpen && (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#DCEFDD] text-[#123F17] border border-[#2E7D32]/30">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32] animate-pulse" />
+                              Open (Active)
                             </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#DCEFDD] text-[#123F17]">
-                              Active
+                          )}
+                          {isUpcoming && (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#FFF1C2] text-[#B88A00] border border-[#F2B705]/40">
+                              Upcoming Window
+                            </span>
+                          )}
+                          {isClosed && (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#FDE8E7] text-[#B3261E] border border-[#B3261E]/30">
+                              Window Closed
                             </span>
                           )}
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <Link href={`/portal/calls/${call.id}`} target="_blank">
-                            <Button variant="outline" size="sm" className="h-7 text-xs">
-                              View Form
+                            <Button variant="outline" size="sm" className="apple-press h-8 text-xs font-semibold">
+                              View Portal
                             </Button>
                           </Link>
                         </td>

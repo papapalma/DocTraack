@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "@/hooks/use-session";
 import { useRouter } from "next/navigation";
 import {
@@ -12,6 +12,10 @@ import {
   StatsSectionConfig,
   FaqSectionConfig,
   ContactSectionConfig,
+  EligibilitySectionConfig,
+  LeadershipTrustSectionConfig,
+  LandingStyleSettings,
+  DEFAULT_STYLE_SETTINGS,
 } from "@/types/landing";
 import { ModularLanding } from "@/components/landing/modular-landing";
 import { Button } from "@/components/ui/button";
@@ -36,7 +40,81 @@ import {
   AlertTriangle,
   Layers,
   Edit3,
+  Sliders,
+  Image as ImageIcon,
+  Maximize2,
+  X,
+  HelpCircle,
+  BarChart3,
+  PhoneCall,
+  Award,
+  Megaphone,
 } from "lucide-react";
+
+const SECTION_TEMPLATES: {
+  type: SectionType;
+  title: string;
+  badge: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  {
+    type: "HERO",
+    title: "Keynote Hero",
+    badge: "Intro",
+    description: "Keynote headline, MinSU 3D Crest orbit, and primary CTA buttons.",
+    icon: Sparkles,
+  },
+  {
+    type: "ANNOUNCEMENT",
+    title: "Announcement Banner",
+    badge: "Alert",
+    description: "Time-sensitive intake alert bar with optional link.",
+    icon: Megaphone,
+  },
+  {
+    type: "WORKFLOW",
+    title: "Annex Workflow Cards",
+    badge: "Process",
+    description: "Interactive visual cards detailing TDP submission lifecycle.",
+    icon: Layers,
+  },
+  {
+    type: "ELIGIBILITY_CHECKER",
+    title: "Eligibility Checker",
+    badge: "Tool",
+    description: "Interactive 3-step self-assessment for prospective scholars.",
+    icon: CheckCircle2,
+  },
+  {
+    type: "LEADERSHIP_TRUST",
+    title: "Leadership & Trust",
+    badge: "Governance",
+    description: "Director endorsement message, seals, and CHED compliance.",
+    icon: Award,
+  },
+  {
+    type: "STATS",
+    title: "Program Stats Grid",
+    badge: "Metrics",
+    description: "Key performance figures, audited beneficiaries, and campus metrics.",
+    icon: BarChart3,
+  },
+  {
+    type: "FAQ",
+    title: "FAQ Accordion",
+    badge: "Support",
+    description: "Expandable answers to common scholarship applicant questions.",
+    icon: HelpCircle,
+  },
+  {
+    type: "CONTACT",
+    title: "Office Directory",
+    badge: "Contact",
+    description: "MinSU campus office addresses, hotlines, and operating hours.",
+    icon: PhoneCall,
+  },
+];
 
 export default function LandingEditorPage() {
   const { user, isLoading: sessionLoading } = useSession();
@@ -44,11 +122,19 @@ export default function LandingEditorPage() {
 
   const [draftSections, setDraftSections] = useState<LandingSection[]>([]);
   const [publishedSections, setPublishedSections] = useState<LandingSection[]>([]);
+  const [styleSettings, setStyleSettings] = useState<LandingStyleSettings>(DEFAULT_STYLE_SETTINGS);
   const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [activeAccordion, setActiveAccordion] = useState<string | null>(null);
   const [viewport, setViewport] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const previewIframeRef = useRef<HTMLIFrameElement>(null);
+  const fullscreenIframeRef = useRef<HTMLIFrameElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(640);
+  const [showFullscreenPreview, setShowFullscreenPreview] = useState(false);
+  const [fullscreenViewport, setFullscreenViewport] = useState<"desktop" | "tablet" | "mobile">("desktop");
 
   // Confirmation & Preview Modals
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -56,6 +142,92 @@ export default function LandingEditorPage() {
   const [previewAuthOpen, setPreviewAuthOpen] = useState(false);
   const [previewAuthMode, setPreviewAuthMode] = useState<"login" | "register">("login");
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [isAddSectionOpen, setIsAddSectionOpen] = useState(false);
+  const addSectionMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close Add Section menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        addSectionMenuRef.current &&
+        !addSectionMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsAddSectionOpen(false);
+      }
+    };
+    if (isAddSectionOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isAddSectionOpen]);
+
+  // Synchronize state to preview iframes (both in-page and fullscreen)
+  const sendPreviewUpdate = useCallback(
+    (sections: LandingSection[], styles: LandingStyleSettings) => {
+      try {
+        sessionStorage.setItem(
+          "minsu_landing_preview_draft",
+          JSON.stringify({ sections, styleSettings: styles })
+        );
+      } catch {}
+
+      const message = {
+        type: "MINSU_LANDING_PREVIEW_UPDATE",
+        sections,
+        styleSettings: styles,
+      };
+
+      previewIframeRef.current?.contentWindow?.postMessage(message, "*");
+      fullscreenIframeRef.current?.contentWindow?.postMessage(message, "*");
+    },
+    []
+  );
+
+  // Send updates to iframe whenever draftSections or styleSettings change
+  useEffect(() => {
+    if (draftSections.length > 0) {
+      sendPreviewUpdate(draftSections, styleSettings);
+    }
+  }, [draftSections, styleSettings, sendPreviewUpdate]);
+
+  // When preview iframe announces it is ready, send the latest state immediately
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === "MINSU_PREVIEW_READY") {
+        sendPreviewUpdate(draftSections, styleSettings);
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [draftSections, styleSettings, sendPreviewUpdate]);
+
+  // ResizeObserver for dynamic preview container width
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(entry.contentRect.width);
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Keyboard shortcut to close Fullscreen Preview on ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && showFullscreenPreview) {
+        setShowFullscreenPreview(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showFullscreenPreview]);
 
   // Load config on mount
   useEffect(() => {
@@ -70,6 +242,9 @@ export default function LandingEditorPage() {
           const data = await res.json();
           setDraftSections(data.config?.draftSections || []);
           setPublishedSections(data.config?.publishedSections || []);
+          if (data.config?.styleSettings) {
+            setStyleSettings(data.config.styleSettings);
+          }
           setHasUnpublishedChanges(data.config?.hasUnpublishedChanges || false);
           if (data.config?.draftSections?.[0]?.id) {
             setActiveAccordion(data.config.draftSections[0].id);
@@ -91,20 +266,65 @@ export default function LandingEditorPage() {
     }
   }, [user, sessionLoading, router]);
 
-  // Auto-save draft changes to backend (debounced)
-  const saveDraftToBackend = async (newDraft: LandingSection[]) => {
+  // Auto-save draft changes to backend
+  const saveDraftToBackend = async (
+    newDraft: LandingSection[],
+    newStyle?: LandingStyleSettings
+  ) => {
     setIsSaving(true);
     setHasUnpublishedChanges(true);
     try {
       await fetch("/api/landing/admin", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ draftSections: newDraft }),
+        body: JSON.stringify({
+          draftSections: newDraft,
+          styleSettings: newStyle || styleSettings,
+        }),
       });
     } catch (e) {
       console.error("Error auto-saving draft:", e);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const updateStyleSettings = (updates: Partial<LandingStyleSettings>) => {
+    const updated = { ...styleSettings, ...updates };
+    setStyleSettings(updated);
+    saveDraftToBackend(draftSections, updated);
+  };
+
+  const handleUploadImage = async (
+    file: File,
+    category: "background" | "director" | "ched" | "general"
+  ): Promise<string | null> => {
+    setIsUploadingMedia(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("category", category);
+
+      const res = await fetch("/api/landing/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        setFeedbackMsg({ type: "error", text: err.error || "Failed to upload image" });
+        return null;
+      }
+
+      const data = await res.json();
+      setFeedbackMsg({ type: "success", text: "Image uploaded successfully!" });
+      return data.url;
+    } catch (e) {
+      console.error("Upload error:", e);
+      setFeedbackMsg({ type: "error", text: "Image upload failed." });
+      return null;
+    } finally {
+      setIsUploadingMedia(false);
     }
   };
 
@@ -250,6 +470,62 @@ export default function LandingEditorPage() {
           },
         };
         break;
+      case "ELIGIBILITY_CHECKER":
+        newSection = {
+          id: newId,
+          type: "ELIGIBILITY_CHECKER",
+          title: "TDP Eligibility Checker",
+          enabled: true,
+          content: {
+            sectionTitle: "Check Your TDP Grant Eligibility",
+            sectionSubtitle:
+              "Fast 3-step self-assessment for Mindoro State University students under CHED TDP-TES guidelines.",
+            badgeText: "CHED-UniFAST Guidelines",
+            grantAmount: "₱7,500.00 / Semester",
+            guidelinesUrl: "#",
+          },
+        };
+        break;
+      case "LEADERSHIP_TRUST":
+        newSection = {
+          id: newId,
+          type: "LEADERSHIP_TRUST",
+          title: "Leadership & Institutional Trust",
+          enabled: true,
+          content: {
+            sectionTitle: "Institutional Leadership & Trust",
+            sectionSubtitle:
+              "Mindoro State University's commitment to transparent, timely financial assistance through digitized Annex workflows.",
+            directorName: "Campus Director",
+            directorTitle: "Mindoro State University - Bongabong Campus",
+            directorMessage:
+              "MinSU DocTrack upholds our commitment to good governance, accountability, and student welfare. By modernizing our Annex 1 to 10 transmittal pipeline with CHED and UniFAST, we ensure every deserving student receives their financial assistance without delays.",
+            directorImage: "/director.png",
+            chedLogoImage: "/ched-unifast.png",
+            minsuSealImage: "/minsu-seal.png",
+            chedAccreditationTitle: "CHED-UniFAST Compliant Workflow",
+            chedAccreditationDetails:
+              "Fully aligned with UniFAST Memorandum Orders for Tulong Dunong Program fund disbursement, electronic billing (Annex 1), and certified master lists (Annex 3).",
+            coreValues: [
+              {
+                title: "Institutional Excellence",
+                description: "Precision auditing and verifiable agency transmittal archives.",
+                tag: "EXCELLENCE",
+              },
+              {
+                title: "Transparency & Integrity",
+                description: "Immutable digital audit trails for every document decision and approval.",
+                tag: "INTEGRITY",
+              },
+              {
+                title: "Dedicated Public Service",
+                description: "Empowering MinSU scholars through streamlined financial assistance access.",
+                tag: "SERVICE",
+              },
+            ],
+          },
+        };
+        break;
       case "CONTACT":
         newSection = {
           id: newId,
@@ -272,6 +548,18 @@ export default function LandingEditorPage() {
     setDraftSections(updated);
     setActiveAccordion(newId);
     saveDraftToBackend(updated);
+    setFeedbackMsg({
+      type: "success",
+      text: `Added new ${newSection.title} to draft!`,
+    });
+
+    // Smooth scroll to the newly added section in the editor accordion
+    setTimeout(() => {
+      const el = document.getElementById(`section-item-${newId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 150);
   };
 
   // Publish Live Action
@@ -284,7 +572,11 @@ export default function LandingEditorPage() {
         body: JSON.stringify({ action: "publish" }),
       });
       if (res.ok) {
+        const data = await res.json();
         setPublishedSections([...draftSections]);
+        if (data.config?.styleSettings) {
+          setStyleSettings(data.config.styleSettings);
+        }
         setHasUnpublishedChanges(false);
         setShowPublishModal(false);
         setFeedbackMsg({ type: "success", text: "Landing page published live to the public!" });
@@ -306,7 +598,11 @@ export default function LandingEditorPage() {
         body: JSON.stringify({ action: "discard" }),
       });
       if (res.ok) {
+        const data = await res.json();
         setDraftSections([...publishedSections]);
+        if (data.config?.styleSettings) {
+          setStyleSettings(data.config.styleSettings);
+        }
         setHasUnpublishedChanges(false);
         setShowDiscardModal(false);
         setFeedbackMsg({ type: "success", text: "Unpublished draft changes were discarded." });
@@ -326,6 +622,29 @@ export default function LandingEditorPage() {
       </div>
     );
   }
+
+  // Scaled preview dimensions
+  const availableWidth = Math.max(containerWidth - 32, 280);
+  let targetWidth = 1280;
+  let targetHeight = 840;
+  let scale = 1;
+
+  if (viewport === "desktop") {
+    targetWidth = 1280;
+    targetHeight = 840;
+    scale = Math.min(1, availableWidth / 1280);
+  } else if (viewport === "tablet") {
+    targetWidth = 768;
+    targetHeight = 900;
+    scale = Math.min(1, availableWidth / 768);
+  } else {
+    targetWidth = 375;
+    targetHeight = 740;
+    scale = Math.min(1, availableWidth / 375);
+  }
+
+  const outerWidth = Math.round(targetWidth * scale);
+  const outerHeight = Math.min(760, Math.round(targetHeight * scale));
 
   return (
     <div className="space-y-6">
@@ -403,6 +722,182 @@ export default function LandingEditorPage() {
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         {/* LEFT PANE: Section Manager & Field Editors (5 Cols on XL) */}
         <div className="xl:col-span-5 space-y-4">
+          {/* Visual & Motion Studio Card */}
+          <div className="bg-white rounded-3xl border border-[#D6DDD8]/80 p-5 sm:p-6 shadow-xs space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-[#D6DDD8]/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#FFF1C2] text-[#8C6B00] flex items-center justify-center border border-[#F2B705]/40 shadow-2xs">
+                  <Sparkles className="w-4 h-4 text-[#B88A00]" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-bold text-base text-[#1F2A24] leading-tight">
+                    Motion & Styling Studio
+                  </h3>
+                  <p className="text-[11px] text-[#55645B]">
+                    Apple-grade physics, background imagery, & contrast controls
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 1. Motion Experience Level */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-[#1F2A24] flex items-center justify-between">
+                <span>Motion Experience</span>
+                <span className="text-[10px] font-normal text-[#55645B] capitalize">
+                  Current: {styleSettings.motionLevel}
+                </span>
+              </Label>
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#F6F8F6] rounded-xl border border-[#D6DDD8]">
+                <button
+                  type="button"
+                  onClick={() => updateStyleSettings({ motionLevel: "fluid" })}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex flex-col items-center gap-0.5 ${
+                    styleSettings.motionLevel === "fluid"
+                      ? "bg-[#1B5E20] text-white shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  <span className="flex items-center gap-1">Fluid ✦</span>
+                  <span className="text-[9px] opacity-80">Apple Springs</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateStyleSettings({ motionLevel: "subtle" })}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex flex-col items-center gap-0.5 ${
+                    styleSettings.motionLevel === "subtle"
+                      ? "bg-[#1B5E20] text-white shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  <span>Subtle</span>
+                  <span className="text-[9px] opacity-80">Soft Fades</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateStyleSettings({ motionLevel: "off" })}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex flex-col items-center gap-0.5 ${
+                    styleSettings.motionLevel === "off"
+                      ? "bg-[#1B5E20] text-white shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  <span>Off</span>
+                  <span className="text-[9px] opacity-80">Zero Motion</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Campus Background Image & Uploader */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-[#1F2A24]">
+                Campus Background Photo
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  value={styleSettings.customBgImage || ""}
+                  onChange={(e) => updateStyleSettings({ customBgImage: e.target.value })}
+                  placeholder="/campus-bg.jpg"
+                  className="h-9 text-xs rounded-xl flex-1"
+                />
+                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#DCEFDD] text-[#123F17] hover:bg-[#c9e7cb] rounded-xl cursor-pointer border border-[#1B5E20]/20 transition shrink-0">
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span>{isUploadingMedia ? "..." : "Upload"}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={isUploadingMedia}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const url = await handleUploadImage(file, "background");
+                      if (url) updateStyleSettings({ customBgImage: url });
+                    }}
+                  />
+                </label>
+              </div>
+              <p className="text-[10px] text-[#55645B]">
+                Upload high-res aerial MinSU campus photograph (JPEG, PNG, WebP up to 10MB).
+              </p>
+            </div>
+
+            {/* 3. Frosted Glass Tint & Contrast */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-[#1F2A24] flex items-center justify-between">
+                <span>Frosted Glass Tint & Contrast</span>
+                <span className="text-[10px] font-normal text-[#55645B]">
+                  {styleSettings.bgOverlayOpacity === "light"
+                    ? "75% Tint"
+                    : styleSettings.bgOverlayOpacity === "balanced"
+                    ? "85% Tint (Recommended)"
+                    : "94% Deep Tint"}
+                </span>
+              </Label>
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#F6F8F6] rounded-xl border border-[#D6DDD8]">
+                <button
+                  type="button"
+                  onClick={() => updateStyleSettings({ bgOverlayOpacity: "light" })}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
+                    styleSettings.bgOverlayOpacity === "light"
+                      ? "bg-[#1B5E20] text-white shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  Light (75%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateStyleSettings({ bgOverlayOpacity: "balanced" })}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
+                    styleSettings.bgOverlayOpacity === "balanced"
+                      ? "bg-[#1B5E20] text-white shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  Balanced (85%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateStyleSettings({ bgOverlayOpacity: "deep" })}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
+                    styleSettings.bgOverlayOpacity === "deep"
+                      ? "bg-[#1B5E20] text-white shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  Deep (94%)
+                </button>
+              </div>
+            </div>
+
+            {/* 4. Interactive 3D MinSU Crest Orbit */}
+            <div className="pt-2 border-t border-[#D6DDD8]/60 flex items-center justify-between">
+              <div>
+                <Label className="text-xs font-bold text-[#1F2A24]">
+                  3D Interactive Shield Orbit
+                </Label>
+                <p className="text-[10px] text-[#55645B]">
+                  Golden gyroscopic rings & floating particle dust in hero
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateStyleSettings({ enable3DOrbit: !styleSettings.enable3DOrbit })}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  styleSettings.enable3DOrbit ? "bg-[#1B5E20]" : "bg-neutral-300"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    styleSettings.enable3DOrbit ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Section Accordions */}
           <div className="bg-white rounded-3xl border border-[#D6DDD8]/80 p-5 sm:p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#D6DDD8]/60">
               <div className="flex items-center gap-2">
@@ -412,50 +907,66 @@ export default function LandingEditorPage() {
                 </h3>
               </div>
 
-              {/* Add Section Dropdown */}
-              <div className="relative group">
-                <Button variant="secondary" size="sm" className="h-8 text-xs font-semibold">
-                  <Plus className="w-3.5 h-3.5 mr-1" />
+              {/* Add Section Dropdown Menu */}
+              <div ref={addSectionMenuRef} className="relative">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsAddSectionOpen((prev) => !prev)}
+                  className="h-8 text-xs font-semibold apple-press flex items-center gap-1.5 border-[#1B5E20]/30 text-[#1B5E20] hover:bg-[#F1F8F1]"
+                  aria-expanded={isAddSectionOpen}
+                >
+                  <Plus className={`w-3.5 h-3.5 transition-transform duration-200 ${isAddSectionOpen ? "rotate-45" : ""}`} />
                   Add Section
                 </Button>
-                <div className="absolute right-0 top-full mt-1.5 w-48 bg-white rounded-2xl border border-[#D6DDD8]/80 shadow-xl p-1.5 z-50 hidden group-hover:block animate-in fade-in">
-                  <button
-                    onClick={() => addSection("HERO")}
-                    className="w-full text-left px-3 py-2 text-xs font-medium rounded-xl hover:bg-[#F1F8F1] text-[#1F2A24]"
-                  >
-                    + Keynote Hero
-                  </button>
-                  <button
-                    onClick={() => addSection("ANNOUNCEMENT")}
-                    className="w-full text-left px-3 py-2 text-xs font-medium rounded-xl hover:bg-[#F1F8F1] text-[#1F2A24]"
-                  >
-                    + Announcement Banner
-                  </button>
-                  <button
-                    onClick={() => addSection("WORKFLOW")}
-                    className="w-full text-left px-3 py-2 text-xs font-medium rounded-xl hover:bg-[#F1F8F1] text-[#1F2A24]"
-                  >
-                    + Annex Workflow Cards
-                  </button>
-                  <button
-                    onClick={() => addSection("STATS")}
-                    className="w-full text-left px-3 py-2 text-xs font-medium rounded-xl hover:bg-[#F1F8F1] text-[#1F2A24]"
-                  >
-                    + Program Stats Grid
-                  </button>
-                  <button
-                    onClick={() => addSection("FAQ")}
-                    className="w-full text-left px-3 py-2 text-xs font-medium rounded-xl hover:bg-[#F1F8F1] text-[#1F2A24]"
-                  >
-                    + FAQ Accordion
-                  </button>
-                  <button
-                    onClick={() => addSection("CONTACT")}
-                    className="w-full text-left px-3 py-2 text-xs font-medium rounded-xl hover:bg-[#F1F8F1] text-[#1F2A24]"
-                  >
-                    + Campus Office Info
-                  </button>
-                </div>
+
+                {isAddSectionOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white rounded-2xl border border-[#D6DDD8] shadow-[0_12px_32px_rgba(0,0,0,0.12)] p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-2 border-b border-[#D6DDD8]/60 mb-1 flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-[#1F2A24] uppercase tracking-wider">
+                        Choose Section Type
+                      </span>
+                      <span className="text-[10px] text-[#55645B]">
+                        Click to append
+                      </span>
+                    </div>
+
+                    <div className="max-h-[340px] overflow-y-auto space-y-1 apple-scrollbar p-1">
+                      {SECTION_TEMPLATES.map((tmpl) => {
+                        const Icon = tmpl.icon;
+                        return (
+                          <button
+                            key={tmpl.type}
+                            type="button"
+                            onClick={() => {
+                              addSection(tmpl.type);
+                              setIsAddSectionOpen(false);
+                            }}
+                            className="w-full text-left p-2.5 rounded-xl hover:bg-[#F1F8F1] transition-all flex items-start gap-2.5 group apple-press border border-transparent hover:border-[#1B5E20]/20"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-[#DCEFDD] text-[#1B5E20] flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#1B5E20] group-hover:text-white transition-colors">
+                              <Icon className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="font-heading font-bold text-xs text-[#1F2A24] group-hover:text-[#1B5E20] transition-colors truncate">
+                                  {tmpl.title}
+                                </span>
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-neutral-100 text-[#55645B] font-semibold uppercase">
+                                  {tmpl.badge}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-[#55645B] line-clamp-1 mt-0.5 leading-snug">
+                                {tmpl.description}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -467,6 +978,7 @@ export default function LandingEditorPage() {
                 return (
                   <div
                     key={section.id}
+                    id={`section-item-${section.id}`}
                     className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
                       isExpanded
                         ? "border-[#1B5E20]/40 shadow-sm bg-white"
@@ -886,6 +1398,139 @@ export default function LandingEditorPage() {
                             </div>
                           </div>
                         )}
+
+                        {/* Section 7: ELIGIBILITY_CHECKER Config Editor */}
+                        {section.type === "ELIGIBILITY_CHECKER" && (
+                          <div className="space-y-3">
+                            <div>
+                              <Label className="text-[11px] font-bold text-[#1F2A24]">Section Title</Label>
+                              <Input
+                                value={(section.content as EligibilitySectionConfig).sectionTitle}
+                                onChange={(e) =>
+                                  updateSectionContent(section.id, { sectionTitle: e.target.value })
+                                }
+                                className="h-9 text-xs rounded-xl mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] font-bold text-[#1F2A24]">Section Subtitle</Label>
+                              <Input
+                                value={(section.content as EligibilitySectionConfig).sectionSubtitle}
+                                onChange={(e) =>
+                                  updateSectionContent(section.id, { sectionSubtitle: e.target.value })
+                                }
+                                className="h-9 text-xs rounded-xl mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] font-bold text-[#1F2A24]">Estimated Grant Stipend</Label>
+                              <Input
+                                value={(section.content as EligibilitySectionConfig).grantAmount}
+                                onChange={(e) =>
+                                  updateSectionContent(section.id, { grantAmount: e.target.value })
+                                }
+                                className="h-9 text-xs rounded-xl mt-1"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section 8: LEADERSHIP_TRUST Config Editor */}
+                        {section.type === "LEADERSHIP_TRUST" && (
+                          <div className="space-y-3">
+                            <div>
+                              <Label className="text-[11px] font-bold text-[#1F2A24]">Campus Director Name</Label>
+                              <Input
+                                value={(section.content as LeadershipTrustSectionConfig).directorName}
+                                onChange={(e) =>
+                                  updateSectionContent(section.id, { directorName: e.target.value })
+                                }
+                                className="h-9 text-xs rounded-xl mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] font-bold text-[#1F2A24]">Campus Director Title</Label>
+                              <Input
+                                value={(section.content as LeadershipTrustSectionConfig).directorTitle}
+                                onChange={(e) =>
+                                  updateSectionContent(section.id, { directorTitle: e.target.value })
+                                }
+                                className="h-9 text-xs rounded-xl mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] font-bold text-[#1F2A24]">Director Endorsement Quote</Label>
+                              <textarea
+                                value={(section.content as LeadershipTrustSectionConfig).directorMessage}
+                                onChange={(e) =>
+                                  updateSectionContent(section.id, { directorMessage: e.target.value })
+                                }
+                                rows={3}
+                                className="w-full p-2.5 rounded-xl border border-[#D6DDD8] text-xs focus:outline-none focus:ring-1 focus:ring-[#1B5E20] mt-1"
+                              />
+                            </div>
+                            <div className="space-y-3 pt-1">
+                              <div className="space-y-1">
+                                <Label className="text-[11px] font-bold text-[#1F2A24]">Campus Director Portrait</Label>
+                                <div className="flex gap-1.5">
+                                  <Input
+                                    value={(section.content as LeadershipTrustSectionConfig).directorImage || ""}
+                                    onChange={(e) =>
+                                      updateSectionContent(section.id, { directorImage: e.target.value })
+                                    }
+                                    placeholder="/director.jpg"
+                                    className="h-9 text-xs rounded-xl flex-1"
+                                  />
+                                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#DCEFDD] text-[#123F17] hover:bg-[#c9e7cb] rounded-xl cursor-pointer border border-[#1B5E20]/20 transition shrink-0">
+                                    <UploadCloud className="w-3.5 h-3.5" />
+                                    <span>Upload</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      disabled={isUploadingMedia}
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        const url = await handleUploadImage(file, "director");
+                                        if (url) updateSectionContent(section.id, { directorImage: url });
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[11px] font-bold text-[#1F2A24]">CHED & Institutional Partner Logo</Label>
+                                <div className="flex gap-1.5">
+                                  <Input
+                                    value={(section.content as LeadershipTrustSectionConfig).chedLogoImage || ""}
+                                    onChange={(e) =>
+                                      updateSectionContent(section.id, { chedLogoImage: e.target.value })
+                                    }
+                                    placeholder="/ched-unifast.png"
+                                    className="h-9 text-xs rounded-xl flex-1"
+                                  />
+                                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#FFF1C2] text-[#8C6B00] hover:bg-[#fee79a] rounded-xl cursor-pointer border border-[#F2B705]/40 transition shrink-0">
+                                    <UploadCloud className="w-3.5 h-3.5" />
+                                    <span>Upload</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      disabled={isUploadingMedia}
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        const url = await handleUploadImage(file, "ched");
+                                        if (url) updateSectionContent(section.id, { chedLogoImage: url });
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -899,75 +1544,204 @@ export default function LandingEditorPage() {
         <div className="xl:col-span-7 sticky top-20">
           <div className="bg-white rounded-3xl border border-[#D6DDD8]/80 p-4 shadow-sm space-y-3">
             {/* Viewport & Device Controls */}
-            <div className="flex items-center justify-between px-2 pb-2 border-b border-[#D6DDD8]/60">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#1B5E20]">
-                <Sparkles className="w-3.5 h-3.5 text-[#F2B705]" />
-                <span>Live Interactive Preview</span>
+            <div className="flex items-center justify-between px-2 pb-2 border-b border-[#D6DDD8]/60 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#1B5E20]">
+                  <Sparkles className="w-3.5 h-3.5 text-[#F2B705]" />
+                  <span>Live Interactive Preview</span>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#F1F8F1] text-[#55645B] border border-[#D6DDD8] hidden sm:inline font-semibold">
+                  {viewport === "desktop" ? "1280px" : viewport === "tablet" ? "768px" : "375px"}
+                  {scale < 1 && ` • ${Math.round(scale * 100)}%`}
+                </span>
               </div>
 
-              {/* Viewport switchers */}
-              <div className="inline-flex p-1 bg-[#F1F8F1] rounded-xl border border-[#D6DDD8]/70 text-xs">
-                <button
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Viewport switchers */}
+                <div className="inline-flex p-0.5 bg-[#F1F8F1] rounded-xl border border-[#D6DDD8]/70 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setViewport("desktop")}
+                    className={`px-2.5 py-1 rounded-lg flex items-center gap-1 font-semibold transition-all apple-press ${
+                      viewport === "desktop" ? "bg-white text-[#1B5E20] shadow-2xs font-bold" : "text-[#55645B]"
+                    }`}
+                    title="Desktop View (1280px)"
+                  >
+                    <Monitor className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Desktop</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewport("tablet")}
+                    className={`px-2.5 py-1 rounded-lg flex items-center gap-1 font-semibold transition-all apple-press ${
+                      viewport === "tablet" ? "bg-white text-[#1B5E20] shadow-2xs font-bold" : "text-[#55645B]"
+                    }`}
+                    title="Tablet View (768px)"
+                  >
+                    <Tablet className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Tablet</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewport("mobile")}
+                    className={`px-2.5 py-1 rounded-lg flex items-center gap-1 font-semibold transition-all apple-press ${
+                      viewport === "mobile" ? "bg-white text-[#1B5E20] shadow-2xs font-bold" : "text-[#55645B]"
+                    }`}
+                    title="Mobile View (375px)"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Mobile</span>
+                  </button>
+                </div>
+
+                {/* Expand Fullscreen Preview Button */}
+                <Button
                   type="button"
-                  onClick={() => setViewport("desktop")}
-                  className={`px-3 py-1 rounded-lg flex items-center gap-1.5 font-semibold transition-all ${
-                    viewport === "desktop" ? "bg-white text-[#1B5E20] shadow-2xs font-bold" : "text-[#55645B]"
-                  }`}
-                  title="Desktop View"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFullscreenPreview(true)}
+                  className="apple-press text-xs font-semibold text-[#1B5E20] border-[#1B5E20]/30 hover:bg-[#DCEFDD]/50 h-7 px-2.5"
+                  title="Open In-App Fullscreen Studio (ESC to exit)"
                 >
-                  <Monitor className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Desktop</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewport("tablet")}
-                  className={`px-3 py-1 rounded-lg flex items-center gap-1.5 font-semibold transition-all ${
-                    viewport === "tablet" ? "bg-white text-[#1B5E20] shadow-2xs font-bold" : "text-[#55645B]"
-                  }`}
-                  title="Tablet View"
-                >
-                  <Tablet className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Tablet</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewport("mobile")}
-                  className={`px-3 py-1 rounded-lg flex items-center gap-1.5 font-semibold transition-all ${
-                    viewport === "mobile" ? "bg-white text-[#1B5E20] shadow-2xs font-bold" : "text-[#55645B]"
-                  }`}
-                  title="Mobile View"
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Mobile</span>
-                </button>
+                  <Maximize2 className="w-3.5 h-3.5 sm:mr-1 text-[#1B5E20]" />
+                  <span className="hidden sm:inline">Fullscreen</span>
+                </Button>
               </div>
             </div>
 
-            {/* Responsive Simulation Container */}
-            <div className="bg-[#EAEFEA] p-2 sm:p-4 rounded-2xl flex justify-center items-start min-h-[550px] max-h-[750px] overflow-y-auto">
+            {/* Responsive Scaled Simulation Container */}
+            <div
+              ref={previewContainerRef}
+              className="bg-[#EAEFEA] p-2 sm:p-4 rounded-2xl flex justify-center items-start min-h-[550px] max-h-[780px] overflow-hidden"
+            >
               <div
-                className={`bg-white rounded-2xl shadow-md border border-[#D6DDD8] overflow-hidden transition-all duration-300 ${
-                  viewport === "desktop"
-                    ? "w-full"
-                    : viewport === "tablet"
-                    ? "w-[768px] max-w-full"
-                    : "w-[375px] max-w-full"
-                }`}
+                style={{
+                  width: `${outerWidth}px`,
+                  height: `${outerHeight}px`,
+                }}
+                className="relative bg-white rounded-2xl shadow-md border border-[#D6DDD8] overflow-hidden transition-all duration-300"
               >
-                <ModularLanding
-                  sections={draftSections}
-                  showHeader={true}
-                  showFooter={true}
-                  onAuthAction={(mode) => {
-                    setPreviewAuthMode(mode);
-                    setPreviewAuthOpen(true);
+                <div
+                  style={{
+                    width: `${targetWidth}px`,
+                    height: `${outerHeight / scale}px`,
+                    transform: `scale(${scale})`,
+                    transformOrigin: "top left",
                   }}
-                />
+                  className="w-full h-full overflow-hidden"
+                >
+                  <iframe
+                    ref={previewIframeRef}
+                    src="/landing-preview"
+                    title="Live Device Preview"
+                    className="w-full h-full border-0 bg-white"
+                  />
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Floating Glass Fullscreen Studio Modal */}
+      {showFullscreenPreview && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex flex-col animate-in fade-in duration-200">
+          {/* Top Floating Glass Header */}
+          <div className="h-14 sm:h-16 bg-white/90 backdrop-blur-xl border-b border-[#D6DDD8] px-3 sm:px-6 flex items-center justify-between shadow-sm shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#1B5E20] animate-pulse" />
+                <span className="text-xs sm:text-sm font-bold text-[#1B5E20] uppercase tracking-wide">
+                  Fullscreen Studio Preview
+                </span>
+              </div>
+              <span className="text-xs text-[#55645B] hidden md:inline">
+                • Live Interactive Simulation (ESC to exit)
+              </span>
+            </div>
+
+            {/* Viewport Toggles inside Fullscreen */}
+            <div className="inline-flex p-1 bg-[#F1F8F1] rounded-xl border border-[#D6DDD8]/70 text-xs">
+              <button
+                type="button"
+                onClick={() => setFullscreenViewport("desktop")}
+                className={`px-3 py-1 rounded-lg flex items-center gap-1.5 font-semibold transition-all apple-press ${
+                  fullscreenViewport === "desktop" ? "bg-white text-[#1B5E20] shadow-2xs font-bold" : "text-[#55645B]"
+                }`}
+              >
+                <Monitor className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Desktop</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFullscreenViewport("tablet")}
+                className={`px-3 py-1 rounded-lg flex items-center gap-1.5 font-semibold transition-all apple-press ${
+                  fullscreenViewport === "tablet" ? "bg-white text-[#1B5E20] shadow-2xs font-bold" : "text-[#55645B]"
+                }`}
+              >
+                <Tablet className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Tablet</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFullscreenViewport("mobile")}
+                className={`px-3 py-1 rounded-lg flex items-center gap-1.5 font-semibold transition-all apple-press ${
+                  fullscreenViewport === "mobile" ? "bg-white text-[#1B5E20] shadow-2xs font-bold" : "text-[#55645B]"
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Mobile</span>
+              </button>
+            </div>
+
+            {/* Top Bar Actions: Publish Live & Close */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setShowFullscreenPreview(false);
+                  setShowPublishModal(true);
+                }}
+                disabled={!hasUnpublishedChanges || isSaving}
+                className="apple-press text-xs font-bold shadow-xs bg-[#1B5E20] hover:bg-[#164D1C]"
+              >
+                <UploadCloud className="w-3.5 h-3.5 mr-1.5" />
+                Publish Live
+              </Button>
+
+              <button
+                type="button"
+                onClick={() => setShowFullscreenPreview(false)}
+                className="p-1.5 rounded-lg text-[#55645B] hover:text-[#1F2A24] hover:bg-black/5 transition apple-press"
+                title="Close Fullscreen (ESC)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Fullscreen Body Frame */}
+          <div className="flex-1 overflow-y-auto bg-[#EAEFEA] flex justify-center items-start p-0 sm:p-4">
+            <div
+              className={`bg-white shadow-2xl transition-all duration-300 ${
+                fullscreenViewport === "desktop"
+                  ? "w-full h-full"
+                  : fullscreenViewport === "tablet"
+                  ? "w-[768px] h-[95vh] my-4 rounded-2xl border border-[#D6DDD8] overflow-hidden"
+                  : "w-[375px] h-[812px] my-4 rounded-3xl border-4 border-[#1F2A24] shadow-2xl overflow-hidden"
+              }`}
+            >
+              <iframe
+                ref={fullscreenIframeRef}
+                src="/landing-preview"
+                title="Fullscreen Preview"
+                className="w-full h-full border-0 bg-white"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Preview Auth Modal */}
       <AuthModal

@@ -105,6 +105,7 @@ export default function MyApplicationsPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-[#F1F8F1] text-xs font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8]">
                   <tr>
+                    <th className="py-3.5 px-4">Batch</th>
                     <th className="py-3.5 px-4">TDP Call Program</th>
                     <th className="py-3.5 px-4">Tracking Reference</th>
                     <th className="py-3.5 px-4">Date Submitted</th>
@@ -117,6 +118,11 @@ export default function MyApplicationsPage() {
                       key={app.id}
                       className="hover:bg-[#F6F8F6] transition-colors"
                     >
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-[#1B5E20] text-white">
+                          Batch {app.batchNumber || 1}
+                        </span>
+                      </td>
                       <td className="py-3.5 px-4 font-semibold text-[#1F2A24]">
                         {app.call?.title || "TDP Grant Call"}
                       </td>

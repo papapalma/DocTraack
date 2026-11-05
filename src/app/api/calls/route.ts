@@ -1,20 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
-
-export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
+    const now = new Date();
     const calls = await prisma.applicantCall.findMany({
       where: { isActive: true },
       include: {
         _count: { select: { applications: true } },
       },
-      orderBy: { deadline: "asc" },
+      orderBy: [
+        { batchNumber: "asc" },
+        { startDate: "asc" },
+      ],
     });
 
-    return NextResponse.json({ calls });
+    const enrichedCalls = calls.map((call) => {
+      const start = new Date(call.startDate);
+      const end = new Date(call.deadline);
+      let windowStatus: "UPCOMING" | "OPEN" | "CLOSED" = "OPEN";
+      if (now < start) {
+        windowStatus = "UPCOMING";
+      } else if (now > end) {
+        windowStatus = "CLOSED";
+      }
+
+      return {
+        ...call,
+        windowStatus,
+        isCurrentlyOpen: windowStatus === "OPEN",
+      };
+    });
+
+    return NextResponse.json({ calls: enrichedCalls });
   } catch (error) {
     console.error("Fetch calls error:", error);
     return NextResponse.json(
@@ -31,7 +53,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
-    const { title, description, deadline, formSchema } = await req.json();
+    const { title, description, batchNumber, startDate, deadline, formSchema } = await req.json();
 
     if (!title || !deadline) {
       return NextResponse.json(
@@ -40,13 +62,46 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const parsedBatch = Math.max(1, parseInt(batchNumber, 10) || 1);
+    const parsedStart = startDate ? new Date(startDate) : new Date();
+    const parsedDeadline = new Date(deadline);
+
+    if (isNaN(parsedDeadline.getTime())) {
+      return NextResponse.json(
+        { error: "Please provide a valid deadline date." },
+        { status: 400 }
+      );
+    }
+
+    if (parsedStart >= parsedDeadline) {
+      return NextResponse.json(
+        { error: "Start date must be earlier than the application deadline." },
+        { status: 400 }
+      );
+    }
+
     const newCall = await prisma.applicantCall.create({
       data: {
-        title,
-        description,
-        deadline: new Date(deadline),
+        title: title.trim(),
+        description: description?.trim() || null,
+        batchNumber: parsedBatch,
+        startDate: parsedStart,
+        deadline: parsedDeadline,
         formSchema: formSchema || { fields: [] },
         createdById: user.id,
+      },
+    });
+
+    await logAudit({
+      actorId: user.id,
+      action: "APPLICANT_CALL_CREATED",
+      entity: "call",
+      entityId: newCall.id,
+      details: {
+        title: newCall.title,
+        batchNumber: newCall.batchNumber,
+        startDate: newCall.startDate,
+        deadline: newCall.deadline,
       },
     });
 

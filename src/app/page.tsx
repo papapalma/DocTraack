@@ -4,12 +4,13 @@ import React, { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthModal } from "@/components/auth/auth-modal";
 import { ModularLanding } from "@/components/landing/modular-landing";
-import { DEFAULT_LANDING_SECTIONS, LandingSection } from "@/types/landing";
+import { DEFAULT_LANDING_SECTIONS, LandingSection, LandingStyleSettings, DEFAULT_STYLE_SETTINGS } from "@/types/landing";
 
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [sections, setSections] = useState<LandingSection[]>(DEFAULT_LANDING_SECTIONS);
+  const [styleSettings, setStyleSettings] = useState<LandingStyleSettings>(DEFAULT_STYLE_SETTINGS);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
 
@@ -36,6 +37,9 @@ function HomeContent() {
       .then((data) => {
         if (data?.sections && Array.isArray(data.sections)) {
           setSections(data.sections);
+        }
+        if (data?.styleSettings) {
+          setStyleSettings(data.styleSettings);
         }
       })
       .catch(() => {});
@@ -70,7 +74,11 @@ function HomeContent() {
 
   return (
     <>
-      <ModularLanding sections={sections} onAuthAction={handleOpenAuth} />
+      <ModularLanding
+        sections={sections}
+        styleSettings={styleSettings}
+        onAuthAction={handleOpenAuth}
+      />
       <AuthModal
         isOpen={authOpen}
         onClose={handleCloseAuth}

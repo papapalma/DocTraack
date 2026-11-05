@@ -8,6 +8,7 @@ import { FormField } from "@/components/ui/form-field";
 import { LogIn, Sparkles } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { ContinuousRegistrationModal } from "@/components/auth/continuous-registration-modal";
+import { motion } from "motion/react";
 
 export interface AuthModalProps {
   isOpen: boolean;
@@ -127,17 +128,22 @@ export function AuthModal({
         </p>
 
         {/* Tab Switcher Pills */}
-        <div className="inline-flex p-1 mt-2.5 bg-[#F1F8F1] rounded-xl border border-[#D6DDD8]/80 text-xs font-semibold">
+        <div className="relative inline-flex p-1 mt-2.5 bg-[#F1F8F1] rounded-xl border border-[#D6DDD8]/80 text-xs font-semibold">
           <button
             type="button"
-            className="px-3 sm:px-4 py-1.5 rounded-lg bg-white text-[#1B5E20] shadow-xs font-bold transition-all"
+            className="relative z-10 px-3 sm:px-4 py-1.5 rounded-lg text-[#1B5E20] font-bold transition-all active:scale-95"
           >
+            <motion.div
+              layoutId="auth-tab-pill"
+              className="absolute inset-0 bg-white rounded-lg shadow-xs -z-10"
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            />
             Sign In
           </button>
           <button
             type="button"
             onClick={() => switchMode("register")}
-            className="px-3 sm:px-4 py-1.5 rounded-lg text-[#55645B] hover:text-[#1F2A24] transition-all"
+            className="relative z-10 px-3 sm:px-4 py-1.5 rounded-lg text-[#55645B] hover:text-[#1F2A24] transition-all active:scale-95"
           >
             Register Student (Annex 1)
           </button>
@@ -153,7 +159,7 @@ export function AuthModal({
           error={error && error.toLowerCase().includes("email") ? error : undefined}
           helperText="Use your registered MinSU email account"
         >
-          {({ id, className, ...fieldProps }) => (
+          {({ id, className, hasError, ...fieldProps }) => (
             <input
               id={id}
               type="email"
@@ -177,7 +183,7 @@ export function AuthModal({
           required
           error={error && !error.toLowerCase().includes("email") ? error : undefined}
         >
-          {({ id, className, ...fieldProps }) => (
+          {({ id, className, hasError, ...fieldProps }) => (
             <input
               id={id}
               type="password"

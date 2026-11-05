@@ -22,6 +22,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { motion } from "motion/react";
 
 interface NavItem {
   label: string;
@@ -148,16 +149,27 @@ export const Sidebar: React.FC = () => {
                   onClick={closeMobile}
                   title={isCollapsed ? item.label : undefined}
                   className={cn(
-                    "flex items-center rounded-xl text-sm font-medium transition-all duration-150 active:scale-[0.98] group",
+                    "relative flex items-center rounded-xl text-sm font-medium transition-all duration-150 active:scale-[0.97] group",
                     isCollapsed
                       ? "justify-center p-3"
                       : "justify-between px-3.5 py-2.5",
                     isActive
-                      ? "bg-[#DCEFDD] text-[#123F17] font-semibold shadow-xs"
+                      ? "text-[#123F17] font-semibold"
                       : "text-[#1F2A24] hover:bg-[#F1F8F1] hover:text-[#1B5E20]"
                   )}
                 >
-                  <div className={cn("flex items-center gap-3", isCollapsed && "justify-center")}>
+                  {isActive && (
+                    <motion.div
+                      layoutId="sidebar-active-indicator"
+                      className="absolute inset-0 bg-[#DCEFDD] rounded-xl border border-[#1B5E20]/20 shadow-2xs -z-0"
+                      transition={{
+                        type: "spring",
+                        stiffness: 380,
+                        damping: 30,
+                      }}
+                    />
+                  )}
+                  <div className={cn("relative z-10 flex items-center gap-3", isCollapsed && "justify-center")}>
                     <Icon
                       className={cn(
                         "w-4 h-4 transition-transform duration-150 group-hover:scale-110 shrink-0",
@@ -169,7 +181,7 @@ export const Sidebar: React.FC = () => {
                     {!isCollapsed && <span>{item.label}</span>}
                   </div>
                   {!isCollapsed && isActive && (
-                    <span className="w-1.5 h-4 rounded-full bg-[#F2B705] shadow-xs" />
+                    <span className="relative z-10 w-1.5 h-4 rounded-full bg-[#F2B705] shadow-xs" />
                   )}
                 </Link>
               );

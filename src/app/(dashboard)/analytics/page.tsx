@@ -17,6 +17,8 @@ import {
   GraduationCap,
   Layers,
 } from "lucide-react";
+import { StaggerContainer, StaggerItem } from "@/components/ui/page-transition";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 
 export default function AnalyticsPage() {
   const { user } = useSession();
@@ -102,93 +104,101 @@ export default function AnalyticsPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-l-4 border-l-[#1B5E20]">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-[#55645B] uppercase tracking-wider">
-                Total Documents
-              </p>
-              {isLoading ? (
-                <Skeleton className="h-9 w-16 my-1" />
-              ) : (
-                <h3 className="text-3xl font-bold font-heading text-[#1F2A24] mt-1">
-                  {summary.totalDocs || 0}
-                </h3>
-              )}
-              <p className="text-[11px] text-[#55645B] mt-0.5">Across Annexes 1–10</p>
-            </div>
-            <div className="w-11 h-11 rounded-lg bg-[#DCEFDD] text-[#1B5E20] flex items-center justify-center">
-              <FileText className="w-6 h-6" />
-            </div>
-          </CardContent>
-        </Card>
+      <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StaggerItem>
+          <Card className="border-l-4 border-l-[#1B5E20] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-[#55645B] uppercase tracking-wider">
+                  Total Documents
+                </p>
+                {isLoading ? (
+                  <Skeleton className="h-9 w-16 my-1" />
+                ) : (
+                  <h3 className="text-3xl font-bold font-heading text-[#1F2A24] mt-1">
+                    <AnimatedNumber value={summary.totalDocs || 0} />
+                  </h3>
+                )}
+                <p className="text-[11px] text-[#55645B] mt-0.5">Across Annexes 1–10</p>
+              </div>
+              <div className="w-11 h-11 rounded-lg bg-[#DCEFDD] text-[#1B5E20] flex items-center justify-center">
+                <FileText className="w-6 h-6" />
+              </div>
+            </CardContent>
+          </Card>
+        </StaggerItem>
 
-        <Card className="border-l-4 border-l-[#F2B705]">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-[#55645B] uppercase tracking-wider">
-                Pending Review
-              </p>
-              {isLoading ? (
-                <Skeleton className="h-9 w-16 my-1" />
-              ) : (
-                <h3 className="text-3xl font-bold font-heading text-[#B88A00] mt-1">
-                  {summary.pendingReview || 0}
-                </h3>
-              )}
-              <p className="text-[11px] text-[#55645B] mt-0.5">Awaiting signature</p>
-            </div>
-            <div className="w-11 h-11 rounded-lg bg-[#FFF1C2] text-[#B88A00] flex items-center justify-center">
-              <Clock className="w-6 h-6" />
-            </div>
-          </CardContent>
-        </Card>
+        <StaggerItem>
+          <Card className="border-l-4 border-l-[#F2B705] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-[#55645B] uppercase tracking-wider">
+                  Pending Review
+                </p>
+                {isLoading ? (
+                  <Skeleton className="h-9 w-16 my-1" />
+                ) : (
+                  <h3 className="text-3xl font-bold font-heading text-[#B88A00] mt-1">
+                    <AnimatedNumber value={summary.pendingReview || 0} />
+                  </h3>
+                )}
+                <p className="text-[11px] text-[#55645B] mt-0.5">Awaiting signature</p>
+              </div>
+              <div className="w-11 h-11 rounded-lg bg-[#FFF1C2] text-[#B88A00] flex items-center justify-center">
+                <Clock className="w-6 h-6" />
+              </div>
+            </CardContent>
+          </Card>
+        </StaggerItem>
 
-        <Card className="border-l-4 border-l-[#2E7D32]">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-[#55645B] uppercase tracking-wider">
-                Approval Rate
-              </p>
-              {isLoading ? (
-                <Skeleton className="h-9 w-16 my-1" />
-              ) : (
-                <h3 className="text-3xl font-bold font-heading text-[#2E7D32] mt-1">
-                  {summary.approvalRate || 0}%
-                </h3>
-              )}
-              <p className="text-[11px] text-[#55645B] mt-0.5">
-                {summary.approvedTotal || 0} endorsed
-              </p>
-            </div>
-            <div className="w-11 h-11 rounded-lg bg-[#DCEFDD] text-[#2E7D32] flex items-center justify-center">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-          </CardContent>
-        </Card>
+        <StaggerItem>
+          <Card className="border-l-4 border-l-[#2E7D32] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-[#55645B] uppercase tracking-wider">
+                  Approval Rate
+                </p>
+                {isLoading ? (
+                  <Skeleton className="h-9 w-16 my-1" />
+                ) : (
+                  <h3 className="text-3xl font-bold font-heading text-[#2E7D32] mt-1">
+                    <AnimatedNumber value={`${summary.approvalRate || 0}%`} />
+                  </h3>
+                )}
+                <p className="text-[11px] text-[#55645B] mt-0.5">
+                  {summary.approvedTotal || 0} endorsed
+                </p>
+              </div>
+              <div className="w-11 h-11 rounded-lg bg-[#DCEFDD] text-[#2E7D32] flex items-center justify-center">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+            </CardContent>
+          </Card>
+        </StaggerItem>
 
-        <Card className="border-l-4 border-l-[#123F17]">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-[#55645B] uppercase tracking-wider">
-                Student Applicants
-              </p>
-              {isLoading ? (
-                <Skeleton className="h-9 w-16 my-1" />
-              ) : (
-                <h3 className="text-3xl font-bold font-heading text-[#123F17] mt-1">
-                  {summary.totalApplications || 0}
-                </h3>
-              )}
-              <p className="text-[11px] text-[#55645B] mt-0.5">Annex 2 Online Portal</p>
-            </div>
-            <div className="w-11 h-11 rounded-lg bg-[#DCEFDD] text-[#123F17] flex items-center justify-center">
-              <GraduationCap className="w-6 h-6" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <StaggerItem>
+          <Card className="border-l-4 border-l-[#123F17] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-[#55645B] uppercase tracking-wider">
+                  Student Applicants
+                </p>
+                {isLoading ? (
+                  <Skeleton className="h-9 w-16 my-1" />
+                ) : (
+                  <h3 className="text-3xl font-bold font-heading text-[#123F17] mt-1">
+                    <AnimatedNumber value={summary.totalApplications || 0} />
+                  </h3>
+                )}
+                <p className="text-[11px] text-[#55645B] mt-0.5">Annex 2 Online Portal</p>
+              </div>
+              <div className="w-11 h-11 rounded-lg bg-[#DCEFDD] text-[#123F17] flex items-center justify-center">
+                <GraduationCap className="w-6 h-6" />
+              </div>
+            </CardContent>
+          </Card>
+        </StaggerItem>
+      </StaggerContainer>
 
       {/* Two Column Visual Breakdowns */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

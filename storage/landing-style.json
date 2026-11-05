@@ -1,0 +1,14 @@
+{
+  "published": {
+    "motionLevel": "fluid",
+    "bgOverlayOpacity": "balanced",
+    "customBgImage": "/campus-bg.jpg",
+    "enable3DOrbit": true
+  },
+  "draft": {
+    "motionLevel": "fluid",
+    "bgOverlayOpacity": "deep",
+    "customBgImage": "/campus-bg.jpg",
+    "enable3DOrbit": true
+  }
+}

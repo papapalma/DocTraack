@@ -23,7 +23,18 @@ export default function NewCallPage() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [deadline, setDeadline] = useState("");
+  const [batchNumber, setBatchNumber] = useState<number>(1);
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  });
+  const [deadline, setDeadline] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  });
   const [customFields, setCustomFields] = useState<CustomQuestion[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +66,11 @@ export default function NewCallPage() {
       return;
     }
 
+    if (new Date(startDate) >= new Date(deadline)) {
+      setError("Start date and time must be earlier than the submission deadline.");
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -65,7 +81,9 @@ export default function NewCallPage() {
         body: JSON.stringify({
           title,
           description,
-          deadline,
+          batchNumber: Number(batchNumber) || 1,
+          startDate: new Date(startDate).toISOString(),
+          deadline: new Date(deadline).toISOString(),
           formSchema: { fields: customFields },
         }),
       });
@@ -129,31 +147,90 @@ export default function NewCallPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1.5">
               <Label htmlFor="title" required>
                 Call Announcement Title
               </Label>
               <Input
                 id="title"
-                placeholder="e.g. Call for TDP Applicants - 1st Semester A.Y. 2026-2027"
+                placeholder="e.g. Call for TDP Applicants (Batch 1) - 1st Semester A.Y. 2026-2027"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
               />
             </div>
 
+            {/* Batch Designation */}
             <div className="space-y-1.5">
-              <Label htmlFor="deadline" required>
-                Submission Deadline Date
+              <Label required>
+                TDP Grant Intake Batch
               </Label>
-              <Input
-                id="deadline"
-                type="date"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                required
-              />
+              <div className="flex items-center gap-3">
+                {[1, 2, 3].map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => setBatchNumber(b)}
+                    className={`apple-press px-4 py-2 rounded-lg text-xs font-semibold border transition-all duration-150 ${
+                      batchNumber === b
+                        ? "bg-[#1B5E20] text-white border-[#1B5E20] shadow-sm"
+                        : "bg-white text-[#55645B] border-[#D6DDD8] hover:bg-[#F6F8F6]"
+                    }`}
+                  >
+                    Batch {b}
+                  </button>
+                ))}
+                <div className="flex items-center gap-1.5 text-xs text-[#55645B]">
+                  <span>Custom Batch:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={batchNumber}
+                    onChange={(e) => setBatchNumber(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    className="w-16 h-8 text-center rounded-lg border border-[#D6DDD8] bg-white text-xs font-bold text-[#1B5E20] focus:ring-2 focus:ring-[#1B5E20] focus:border-[#1B5E20]"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-[#55645B]">
+                All scholars applying during this call will automatically be stamped as <strong>Batch {batchNumber}</strong> with tracking codes formatted as <code>MINSU-TDP-YYYY-B{batchNumber}-XXXX</code>.
+              </p>
+            </div>
+
+            {/* Time Window (Start and Deadline) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-[#F6F8F6] border border-[#D6DDD8]">
+              <div className="space-y-1.5">
+                <Label htmlFor="startDate" required>
+                  Application Window Opens
+                </Label>
+                <Input
+                  id="startDate"
+                  type="datetime-local"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  required
+                />
+                <span className="text-[10px] text-[#55645B] block">
+                  Students cannot submit before this time.
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="deadline" required>
+                  Application Window Closes (Deadline)
+                </Label>
+                <Input
+                  id="deadline"
+                  type="datetime-local"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  required
+                />
+                <span className="text-[10px] text-[#55645B] block">
+                  Submissions lock automatically upon expiration.
+                </span>
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -166,7 +243,7 @@ export default function NewCallPage() {
                 placeholder="Stipulate eligibility requirements, priority student groups, accredited courses, and submission rules..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full rounded-lg border border-[#D6DDD8] bg-white p-3 text-sm focus-visible:outline-none"
+                className="w-full rounded-lg border border-[#D6DDD8] bg-white p-3 text-sm focus-visible:outline-none focus:ring-2 focus:ring-[#1B5E20]"
               />
             </div>
 

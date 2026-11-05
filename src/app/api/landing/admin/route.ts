@@ -3,7 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { Role } from "@prisma/client";
 import { logAudit } from "@/lib/audit";
-import { DEFAULT_LANDING_SECTIONS, LandingSection } from "@/types/landing";
+import { DEFAULT_LANDING_SECTIONS, LandingSection, LandingStyleSettings } from "@/types/landing";
+import {
+  getLandingStyles,
+  saveDraftLandingStyle,
+  publishLandingStyle,
+  resetLandingStyle,
+} from "@/lib/landing-style";
 
 export const dynamic = "force-dynamic";
 
@@ -32,13 +38,33 @@ export async function GET() {
       });
     }
 
+    const mergeMissing = (sectionsList: any[]) => {
+      if (!Array.isArray(sectionsList)) return DEFAULT_LANDING_SECTIONS;
+      const existingTypes = new Set(sectionsList.map((s) => s.type));
+      const missing = DEFAULT_LANDING_SECTIONS.filter((def) => !existingTypes.has(def.type));
+      if (missing.length === 0) return sectionsList;
+      const copy = [...sectionsList];
+      const statsIdx = copy.findIndex((s) => s.type === "STATS");
+      if (statsIdx !== -1) {
+        copy.splice(statsIdx, 0, ...missing);
+      } else {
+        copy.push(...missing);
+      }
+      return copy;
+    };
+
+    const published = mergeMissing(config.publishedSections);
+    const drafts = mergeMissing(config.draftSections);
+    const styles = await getLandingStyles();
+
     return NextResponse.json({
       config: {
-        publishedSections: config.publishedSections,
-        draftSections: config.draftSections,
+        publishedSections: published,
+        draftSections: drafts,
         hasUnpublishedChanges: config.hasUnpublishedChanges,
         publishedAt: config.publishedAt,
         updatedAt: config.updatedAt,
+        styleSettings: styles.draft,
       },
     });
   } catch (error) {
@@ -56,35 +82,55 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { draftSections } = body as { draftSections: LandingSection[] };
+    const { draftSections, styleSettings } = body as {
+      draftSections?: LandingSection[];
+      styleSettings?: Partial<LandingStyleSettings>;
+    };
 
-    if (!Array.isArray(draftSections)) {
+    let updatedStyles: LandingStyleSettings | undefined;
+    if (styleSettings) {
+      updatedStyles = await saveDraftLandingStyle(styleSettings);
+    } else {
+      const styles = await getLandingStyles();
+      updatedStyles = styles.draft;
+    }
+
+    if (draftSections && !Array.isArray(draftSections)) {
       return NextResponse.json({ error: "Invalid draft sections format" }, { status: 400 });
     }
 
-    const updated = await (prisma as any).landingPageConfig.upsert({
-      where: { id: "default" },
-      update: {
-        draftSections,
-        hasUnpublishedChanges: true,
-        updatedById: user.id,
-      },
-      create: {
-        id: "default",
-        publishedSections: DEFAULT_LANDING_SECTIONS,
-        draftSections,
-        hasUnpublishedChanges: true,
-        updatedById: user.id,
-      },
-    });
+    let updatedSections = draftSections;
+    let hasUnpublishedChanges = true;
+    let updatedAt = new Date();
+
+    if (draftSections) {
+      const updated = await (prisma as any).landingPageConfig.upsert({
+        where: { id: "default" },
+        update: {
+          draftSections,
+          hasUnpublishedChanges: true,
+          updatedById: user.id,
+        },
+        create: {
+          id: "default",
+          publishedSections: DEFAULT_LANDING_SECTIONS,
+          draftSections,
+          hasUnpublishedChanges: true,
+          updatedById: user.id,
+        },
+      });
+      updatedSections = updated.draftSections;
+      hasUnpublishedChanges = updated.hasUnpublishedChanges;
+      updatedAt = updated.updatedAt;
+    }
 
     return NextResponse.json({
       success: true,
       config: {
-        publishedSections: updated.publishedSections,
-        draftSections: updated.draftSections,
-        hasUnpublishedChanges: updated.hasUnpublishedChanges,
-        updatedAt: updated.updatedAt,
+        draftSections: updatedSections,
+        styleSettings: updatedStyles,
+        hasUnpublishedChanges,
+        updatedAt,
       },
     });
   } catch (error) {
@@ -110,6 +156,7 @@ export async function POST(req: NextRequest) {
 
     if (action === "publish") {
       const draft = currentConfig?.draftSections || DEFAULT_LANDING_SECTIONS;
+      const updatedStyle = await publishLandingStyle();
       const updated = await (prisma as any).landingPageConfig.update({
         where: { id: "default" },
         data: {
@@ -133,7 +180,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         message: "Landing page changes successfully published live.",
-        config: updated,
+        config: {
+          ...updated,
+          styleSettings: updatedStyle,
+        },
       });
     }
 
@@ -163,6 +213,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "reset_default") {
+      const resetStyle = await resetLandingStyle();
       const updated = await (prisma as any).landingPageConfig.update({
         where: { id: "default" },
         data: {
@@ -184,7 +235,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         message: "Landing page reset to default MinSU layout.",
-        config: updated,
+        config: {
+          ...updated,
+          styleSettings: resetStyle,
+        },
       });
     }
 

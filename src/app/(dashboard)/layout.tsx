@@ -4,14 +4,16 @@ import React, { useEffect, Suspense } from "react";
 import { Topbar } from "@/components/layout/topbar";
 import { Sidebar } from "@/components/layout/sidebar";
 import { SessionProvider, useSession } from "@/components/providers/session-provider";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { NavProvider } from "@/components/layout/nav-context";
 import { DashboardSkeleton } from "@/components/ui/skeleton";
 import { OfflineBanner } from "@/components/ui/offline-banner";
+import { PageTransition } from "@/components/ui/page-transition";
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useSession();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -39,7 +41,9 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
             </Suspense>
           </div>
           <main className="flex-1 h-full min-h-0 overflow-y-auto p-3 sm:p-6 md:p-8 max-w-7xl mx-auto w-full min-w-0 apple-scrollbar print:h-auto print:overflow-visible print:p-0 print:m-0 print:max-w-none">
-            {children}
+            <PageTransition key={pathname}>
+              {children}
+            </PageTransition>
           </main>
         </div>
       </div>

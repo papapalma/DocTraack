@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import {
   X,
   Upload,
@@ -9,10 +11,18 @@ import {
   ShieldCheck,
   AlertCircle,
   EyeOff,
+  Trash2,
+  Sparkles,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChedLogo, UniFastLogo } from "@/components/documents/ched-unifast-logos";
-import { LogoConfig, LogoPresetId, HeaderLogosConfig } from "@/types";
+import {
+  LogoConfig,
+  LogoPresetId,
+  HeaderLogosConfig,
+  LogoLibraryItem,
+} from "@/types";
 import { cn } from "@/lib/utils";
 
 interface GlobalBrandingModalProps {
@@ -33,6 +43,9 @@ export function GlobalBrandingModal({
   onClose,
   onSaved,
 }: GlobalBrandingModalProps) {
+  const [mounted, setMounted] = useState<boolean>(false);
+  const prefersReduced = useReducedMotion();
+
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,34 +61,69 @@ export function GlobalBrandingModal({
     presetId: "unifast",
     alt: "UniFAST Logo",
   });
+  const [library, setLibrary] = useState<LogoLibraryItem[]>([]);
 
   const [uploadingSide, setUploadingSide] = useState<"left" | "right" | null>(null);
 
-  // Load existing global settings
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Handle escape key & scroll lock
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    },
+    [onClose]
+  );
+
+  useEffect(() => {
+    if (isOpen) {
+      document.addEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [isOpen, handleKeyDown]);
+
+  // Load existing global settings & logo library
   useEffect(() => {
     if (!isOpen) return;
 
-    let mounted = true;
+    let isMounted = true;
+    setLoading(true);
+    setError(null);
+    setSuccess(false);
 
     fetch("/api/branding")
       .then((res) => res.json())
       .then((data) => {
-        if (!mounted) return;
+        if (!isMounted) return;
         if (data.logos) {
           if (data.logos.leftLogo) setLeftLogo(data.logos.leftLogo);
           if (data.logos.rightLogo) setRightLogo(data.logos.rightLogo);
+          if (Array.isArray(data.logos.library)) setLibrary(data.logos.library);
+        }
+        if (Array.isArray(data.library)) {
+          setLibrary(data.library);
         }
       })
       .catch((err: unknown) => {
         console.error("Failed to load branding:", err);
-        if (mounted) setError("Could not load current branding settings.");
+        if (isMounted) setError("Could not load current branding settings.");
       })
       .finally(() => {
-        if (mounted) setLoading(false);
+        if (isMounted) setLoading(false);
       });
 
     return () => {
-      mounted = false;
+      isMounted = false;
     };
   }, [isOpen]);
 
@@ -98,23 +146,58 @@ export function GlobalBrandingModal({
         throw new Error(json.error || "Upload failed");
       }
 
-      const newLogo: LogoConfig = {
+      const uploadedLogo: LogoConfig = {
         type: "custom",
         url: json.url,
-        alt: file.name.replace(/\.[^/.]+$/, ""),
+        alt: json.libraryItem?.name || `Custom ${side} logo`,
       };
 
       if (side === "left") {
-        setLeftLogo(newLogo);
+        setLeftLogo(uploadedLogo);
       } else {
-        setRightLogo(newLogo);
+        setRightLogo(uploadedLogo);
+      }
+
+      if (json.libraryItem) {
+        setLibrary((prev) => {
+          const exists = prev.some((item) => item.url === json.libraryItem.url);
+          if (exists) return prev;
+          return [json.libraryItem, ...prev];
+        });
       }
     } catch (err: unknown) {
-      console.error("Upload error:", err);
-      const message = err instanceof Error ? err.message : "Failed to upload logo.";
+      const message = err instanceof Error ? err.message : "Upload failed.";
       setError(message);
     } finally {
       setUploadingSide(null);
+    }
+  };
+
+  const handleDeleteLibraryItem = async (e: React.MouseEvent, item: LogoLibraryItem) => {
+    e.stopPropagation();
+    if (!confirm(`Are you sure you want to remove "${item.name}" from the Institutional Logo Library?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/branding?id=${encodeURIComponent(item.id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to remove item");
+
+      setLibrary((prev) => prev.filter((i) => i.id !== item.id && i.url !== item.url));
+
+      // If active logo was deleted, revert that slot to default statutory preset
+      if (leftLogo.type === "custom" && leftLogo.url === item.url) {
+        setLeftLogo({ type: "preset", presetId: "ched", alt: "CHED Logo" });
+      }
+      if (rightLogo.type === "custom" && rightLogo.url === item.url) {
+        setRightLogo({ type: "preset", presetId: "unifast", alt: "UniFAST Logo" });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete item.";
+      setError(message);
     }
   };
 
@@ -124,29 +207,30 @@ export function GlobalBrandingModal({
       setError(null);
       setSuccess(false);
 
-      const payload: HeaderLogosConfig = {
-        leftLogo,
-        rightLogo,
-      };
-
       const res = await fetch("/api/branding", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          leftLogo,
+          rightLogo,
+          library,
+        }),
       });
 
       const json = await res.json();
       if (!res.ok) {
-        throw new Error(json.error || "Failed to save global branding");
+        throw new Error(json.error || "Failed to update branding.");
       }
 
       setSuccess(true);
-      if (onSaved) onSaved(payload);
+      if (onSaved) {
+        onSaved({ leftLogo, rightLogo, library });
+      }
+
       setTimeout(() => {
         onClose();
       }, 900);
     } catch (err: unknown) {
-      console.error("Save branding error:", err);
       const message = err instanceof Error ? err.message : "Failed to save global defaults.";
       setError(message);
     } finally {
@@ -167,258 +251,452 @@ export function GlobalBrandingModal({
     });
   };
 
-  if (!isOpen) return null;
+  if (!mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div
-        className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-line overflow-hidden flex flex-col transform transition-all duration-200 animate-in zoom-in-95"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="bg-gradient-to-r from-minsu-green-900 via-minsu-green-800 to-minsu-green-700 text-white px-6 py-4 flex items-center justify-between border-b border-minsu-green-900">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-minsu-gold-500/20 border border-minsu-gold-500/30 flex items-center justify-center text-minsu-gold-400">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold font-heading text-white">
-                Global Annex Document Branding
-              </h2>
-              <p className="text-xs text-minsu-green-100">
-                Configure default institutional letterhead logos across all TDP Annexes
-              </p>
-            </div>
-          </div>
-          <button
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[9999] overflow-y-auto overscroll-contain p-3 sm:p-6 flex min-h-full items-center justify-center"
+        >
+          {/* Frosted Glass Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center apple-press transition-colors"
+            aria-hidden="true"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm cursor-pointer"
+          />
+
+          {/* Dialog Card with Apple spring motion & proper vertical sizing */}
+          <motion.div
+            initial={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 12 }}
+            animate={prefersReduced ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+            exit={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 8 }}
+            transition={{
+              type: "spring",
+              stiffness: 320,
+              damping: 28,
+              mass: 0.85,
+            }}
+            className="relative w-full max-w-3xl bg-white rounded-3xl shadow-[0_24px_64px_rgba(0,0,0,0.25)] border border-[#D6DDD8] overflow-hidden flex flex-col my-auto max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
           >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-          {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 text-red-700 border border-red-200 rounded-xl text-xs">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {success && (
-            <div className="flex items-center gap-2 p-3 bg-minsu-green-100 text-minsu-green-700 border border-minsu-green-600/30 rounded-xl text-xs font-semibold">
-              <Check className="w-4 h-4 shrink-0" />
-              <span>Global branding defaults saved and updated on disk successfully!</span>
-            </div>
-          )}
-
-          {loading ? (
-            <div className="py-12 text-center space-y-2">
-              <div className="w-8 h-8 border-3 border-minsu-green-700 border-t-transparent rounded-full animate-spin mx-auto" />
-              <p className="text-xs text-ink-muted">Loading branding configurations...</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* LEFT LOGO COLUMN */}
-              <div className="p-4 rounded-xl border border-line bg-neutral-50/50 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-ink uppercase tracking-wider">
-                    Left Header Logo
-                  </span>
-                  <span className="text-[10px] bg-minsu-gold-100 text-minsu-gold-600 font-semibold px-2 py-0.5 rounded-full border border-minsu-gold-400/30">
-                    Default: CHED
-                  </span>
+            {/* Branded MinSU Green Gradient Header */}
+            <div className="bg-gradient-to-r from-[#123F17] via-[#164D1C] to-[#1B5E20] text-white px-5 sm:px-6 py-4 flex items-center justify-between border-b border-[#123F17] shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-[#F2B705]/20 border border-[#F2B705]/30 flex items-center justify-center text-[#F9C733] shrink-0 shadow-xs">
+                  <ShieldCheck className="w-5 h-5" />
                 </div>
-
-                {/* Preview Box */}
-                <div className="w-24 h-24 mx-auto rounded-xl bg-white border border-line p-2 shadow-xs flex items-center justify-center">
-                  {leftLogo.type === "preset" ? (
-                    leftLogo.presetId === "ched" ? (
-                      <ChedLogo className="w-16 h-16" />
-                    ) : leftLogo.presetId === "unifast" ? (
-                      <UniFastLogo className="w-16 h-16" />
-                    ) : leftLogo.presetId === "minsu" ? (
-                      <img src="/logo.png" alt="MinSU" className="w-16 h-16 object-contain" />
-                    ) : (
-                      <EyeOff className="w-6 h-6 text-neutral-400" />
-                    )
-                  ) : leftLogo.url ? (
-                    <img src={leftLogo.url} alt="Custom" className="w-16 h-16 object-contain" />
-                  ) : null}
-                </div>
-
-                {/* Preset Chips */}
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-medium text-ink-muted block">Choose Preset:</span>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {PRESET_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() =>
-                          setLeftLogo({
-                            type: "preset",
-                            presetId: opt.id,
-                            alt: opt.label,
-                          })
-                        }
-                        className={cn(
-                          "py-1.5 px-2 rounded-lg text-xs font-semibold border transition-all apple-press text-center",
-                          leftLogo.type === "preset" && leftLogo.presetId === opt.id
-                            ? "bg-minsu-green-700 text-white border-minsu-green-700 shadow-xs"
-                            : "bg-white text-ink border-line hover:bg-neutral-100"
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* File Upload Trigger */}
-                <div className="pt-1">
-                  <label className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-dashed border-minsu-green-600/40 bg-minsu-green-50/50 hover:bg-minsu-green-50 cursor-pointer transition-all apple-press text-xs font-semibold text-minsu-green-700">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>
-                      {uploadingSide === "left" ? "Uploading to disk..." : "Upload New File"}
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                      className="hidden"
-                      disabled={uploadingSide !== null}
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          handleFileUpload(e.target.files[0], "left");
-                        }
-                      }}
-                    />
-                  </label>
+                <div className="min-w-0">
+                  <h2 className="text-base font-bold font-heading text-white truncate">
+                    Global Annex Document Branding
+                  </h2>
+                  <p className="text-xs text-[#DCEFDD] truncate">
+                    Institutional header logo defaults & persistent logo library for all TDP Annexes
+                  </p>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center apple-press transition-colors shrink-0 ml-2"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-              {/* RIGHT LOGO COLUMN */}
-              <div className="p-4 rounded-xl border border-line bg-neutral-50/50 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-ink uppercase tracking-wider">
-                    Right Header Logo
-                  </span>
-                  <span className="text-[10px] bg-minsu-gold-100 text-minsu-gold-600 font-semibold px-2 py-0.5 rounded-full border border-minsu-gold-400/30">
-                    Default: UniFAST
-                  </span>
+            {/* Scrollable Modal Body */}
+            <div className="p-4 sm:p-6 space-y-6 overflow-y-auto apple-scrollbar flex-1 max-h-[calc(92vh-140px)]">
+              {error && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 text-red-700 border border-red-200 rounded-xl text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{error}</span>
                 </div>
+              )}
 
-                {/* Preview Box */}
-                <div className="w-24 h-24 mx-auto rounded-xl bg-white border border-line p-2 shadow-xs flex items-center justify-center">
-                  {rightLogo.type === "preset" ? (
-                    rightLogo.presetId === "ched" ? (
-                      <ChedLogo className="w-16 h-16" />
-                    ) : rightLogo.presetId === "unifast" ? (
-                      <UniFastLogo className="w-16 h-16" />
-                    ) : rightLogo.presetId === "minsu" ? (
-                      <img src="/logo.png" alt="MinSU" className="w-16 h-16 object-contain" />
-                    ) : (
-                      <EyeOff className="w-6 h-6 text-neutral-400" />
-                    )
-                  ) : rightLogo.url ? (
-                    <img src={rightLogo.url} alt="Custom" className="w-16 h-16 object-contain" />
-                  ) : null}
+              {success && (
+                <div className="flex items-center gap-2 p-3 bg-[#DCEFDD] text-[#123F17] border border-[#1B5E20]/30 rounded-xl text-xs font-semibold">
+                  <Check className="w-4 h-4 shrink-0 text-[#1B5E20]" />
+                  <span>Global branding defaults saved and synchronized across all Annex documents!</span>
                 </div>
+              )}
 
-                {/* Preset Chips */}
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-medium text-ink-muted block">Choose Preset:</span>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {PRESET_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() =>
-                          setRightLogo({
-                            type: "preset",
-                            presetId: opt.id,
-                            alt: opt.label,
-                          })
-                        }
-                        className={cn(
-                          "py-1.5 px-2 rounded-lg text-xs font-semibold border transition-all apple-press text-center",
-                          rightLogo.type === "preset" && rightLogo.presetId === opt.id
-                            ? "bg-minsu-green-700 text-white border-minsu-green-700 shadow-xs"
-                            : "bg-white text-ink border-line hover:bg-neutral-100"
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+              {loading ? (
+                <div className="py-16 text-center space-y-2">
+                  <div className="w-8 h-8 border-3 border-[#1B5E20] border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-xs text-[#55645B]">Loading branding settings and logo library...</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+                  {/* LEFT LOGO COLUMN */}
+                  <div className="p-4 sm:p-5 rounded-2xl border border-[#D6DDD8] bg-[#F6F8F6]/70 space-y-4 flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#1F2A24] uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#1B5E20]" />
+                          Left Header Logo
+                        </span>
+                        <span className="text-[10px] bg-[#FFF1C2] text-[#8C6B00] font-semibold px-2 py-0.5 rounded-full border border-[#F2B705]/40">
+                          Default: CHED
+                        </span>
+                      </div>
+
+                      {/* Animated Logo Preview Box */}
+                      <div className="w-28 h-28 mx-auto rounded-2xl bg-white border border-[#D6DDD8] p-3 shadow-xs flex items-center justify-center overflow-hidden">
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={leftLogo.type === "preset" ? leftLogo.presetId : leftLogo.url || "none"}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ duration: 0.15, ease: "easeOut" }}
+                            className="w-20 h-20 flex items-center justify-center"
+                          >
+                            {leftLogo.type === "preset" ? (
+                              leftLogo.presetId === "ched" ? (
+                                <ChedLogo className="w-20 h-20" />
+                              ) : leftLogo.presetId === "unifast" ? (
+                                <UniFastLogo className="w-20 h-20" />
+                              ) : leftLogo.presetId === "minsu" ? (
+                                <img src="/logo.png" alt="MinSU" className="w-20 h-20 object-contain drop-shadow-xs" />
+                              ) : (
+                                <EyeOff className="w-8 h-8 text-neutral-400" />
+                              )
+                            ) : leftLogo.url ? (
+                              <img src={leftLogo.url} alt="Custom" className="w-20 h-20 object-contain drop-shadow-xs" />
+                            ) : null}
+                          </motion.div>
+                        </AnimatePresence>
+                      </div>
+
+                      {/* Section 1: Official Statutory Presets */}
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[11px] font-semibold text-[#55645B] uppercase tracking-wider block">
+                          Statutory Presets:
+                        </span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {PRESET_OPTIONS.map((opt) => {
+                            const isSelected = leftLogo.type === "preset" && leftLogo.presetId === opt.id;
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() =>
+                                  setLeftLogo({
+                                    type: "preset",
+                                    presetId: opt.id,
+                                    alt: opt.label,
+                                  })
+                                }
+                                className={cn(
+                                  "py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all apple-press text-center flex items-center justify-center gap-1",
+                                  isSelected
+                                    ? "bg-[#1B5E20] text-white border-[#1B5E20] shadow-xs"
+                                    : "bg-white text-[#1F2A24] border-[#D6DDD8] hover:bg-[#F1F8F1]"
+                                )}
+                              >
+                                {isSelected && <Check className="w-3 h-3 text-white" />}
+                                <span>{opt.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Section 2: Institutional Logo Library */}
+                      {library.length > 0 && (
+                        <div className="space-y-1.5 pt-2 border-t border-[#D6DDD8]">
+                          <span className="text-[11px] font-semibold text-[#1B5E20] uppercase tracking-wider flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <Sparkles className="w-3 h-3 text-[#B88A00]" />
+                              Saved Custom Library:
+                            </span>
+                            <span className="text-[10px] text-[#55645B] font-normal">
+                              ({library.length})
+                            </span>
+                          </span>
+                          <div className="space-y-1.5 max-h-36 overflow-y-auto apple-scrollbar pr-0.5">
+                            {library.map((item) => {
+                              const isSelected = leftLogo.type === "custom" && leftLogo.url === item.url;
+                              return (
+                                <div
+                                  key={item.id}
+                                  onClick={() =>
+                                    setLeftLogo({
+                                      type: "custom",
+                                      url: item.url,
+                                      alt: item.name,
+                                    })
+                                  }
+                                  className={cn(
+                                    "p-2 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all apple-press",
+                                    isSelected
+                                      ? "bg-[#DCEFDD] border-[#1B5E20] text-[#123F17] ring-1 ring-[#1B5E20]/20 font-semibold"
+                                      : "bg-white border-[#D6DDD8] hover:bg-[#F1F8F1] text-[#1F2A24]"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-7 h-7 rounded-lg bg-white border border-[#D6DDD8] p-0.5 flex items-center justify-center shrink-0">
+                                      <img src={item.url} alt={item.name} className="w-full h-full object-contain" />
+                                    </div>
+                                    <span className="text-xs truncate">{item.name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {isSelected && (
+                                      <span className="text-[10px] bg-[#1B5E20] text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                                        <Check className="w-2.5 h-2.5" />
+                                        Active
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleDeleteLibraryItem(e, item)}
+                                      className="p-1 text-[#55645B] hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                      title="Remove from library"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* File Upload Trigger */}
+                    <div className="pt-2">
+                      <label className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-dashed border-[#1B5E20]/50 bg-[#DCEFDD]/40 hover:bg-[#DCEFDD]/70 cursor-pointer transition-all apple-press text-xs font-semibold text-[#1B5E20] shadow-xs">
+                        <Upload className="w-4 h-4" />
+                        <span>
+                          {uploadingSide === "left" ? "Uploading & saving to disk..." : "Upload New Institutional Logo"}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                          className="hidden"
+                          disabled={uploadingSide !== null}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleFileUpload(e.target.files[0], "left");
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* RIGHT LOGO COLUMN */}
+                  <div className="p-4 sm:p-5 rounded-2xl border border-[#D6DDD8] bg-[#F6F8F6]/70 space-y-4 flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#1F2A24] uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#B88A00]" />
+                          Right Header Logo
+                        </span>
+                        <span className="text-[10px] bg-[#FFF1C2] text-[#8C6B00] font-semibold px-2 py-0.5 rounded-full border border-[#F2B705]/40">
+                          Default: UniFAST
+                        </span>
+                      </div>
+
+                      {/* Animated Logo Preview Box */}
+                      <div className="w-28 h-28 mx-auto rounded-2xl bg-white border border-[#D6DDD8] p-3 shadow-xs flex items-center justify-center overflow-hidden">
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={rightLogo.type === "preset" ? rightLogo.presetId : rightLogo.url || "none"}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ duration: 0.15, ease: "easeOut" }}
+                            className="w-20 h-20 flex items-center justify-center"
+                          >
+                            {rightLogo.type === "preset" ? (
+                              rightLogo.presetId === "ched" ? (
+                                <ChedLogo className="w-20 h-20" />
+                              ) : rightLogo.presetId === "unifast" ? (
+                                <UniFastLogo className="w-20 h-20" />
+                              ) : rightLogo.presetId === "minsu" ? (
+                                <img src="/logo.png" alt="MinSU" className="w-20 h-20 object-contain drop-shadow-xs" />
+                              ) : (
+                                <EyeOff className="w-8 h-8 text-neutral-400" />
+                              )
+                            ) : rightLogo.url ? (
+                              <img src={rightLogo.url} alt="Custom" className="w-20 h-20 object-contain drop-shadow-xs" />
+                            ) : null}
+                          </motion.div>
+                        </AnimatePresence>
+                      </div>
+
+                      {/* Section 1: Official Statutory Presets */}
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[11px] font-semibold text-[#55645B] uppercase tracking-wider block">
+                          Statutory Presets:
+                        </span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {PRESET_OPTIONS.map((opt) => {
+                            const isSelected = rightLogo.type === "preset" && rightLogo.presetId === opt.id;
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() =>
+                                  setRightLogo({
+                                    type: "preset",
+                                    presetId: opt.id,
+                                    alt: opt.label,
+                                  })
+                                }
+                                className={cn(
+                                  "py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all apple-press text-center flex items-center justify-center gap-1",
+                                  isSelected
+                                    ? "bg-[#1B5E20] text-white border-[#1B5E20] shadow-xs"
+                                    : "bg-white text-[#1F2A24] border-[#D6DDD8] hover:bg-[#F1F8F1]"
+                                )}
+                              >
+                                {isSelected && <Check className="w-3 h-3 text-white" />}
+                                <span>{opt.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Section 2: Institutional Logo Library */}
+                      {library.length > 0 && (
+                        <div className="space-y-1.5 pt-2 border-t border-[#D6DDD8]">
+                          <span className="text-[11px] font-semibold text-[#1B5E20] uppercase tracking-wider flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <Sparkles className="w-3 h-3 text-[#B88A00]" />
+                              Saved Custom Library:
+                            </span>
+                            <span className="text-[10px] text-[#55645B] font-normal">
+                              ({library.length})
+                            </span>
+                          </span>
+                          <div className="space-y-1.5 max-h-36 overflow-y-auto apple-scrollbar pr-0.5">
+                            {library.map((item) => {
+                              const isSelected = rightLogo.type === "custom" && rightLogo.url === item.url;
+                              return (
+                                <div
+                                  key={item.id}
+                                  onClick={() =>
+                                    setRightLogo({
+                                      type: "custom",
+                                      url: item.url,
+                                      alt: item.name,
+                                    })
+                                  }
+                                  className={cn(
+                                    "p-2 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all apple-press",
+                                    isSelected
+                                      ? "bg-[#DCEFDD] border-[#1B5E20] text-[#123F17] ring-1 ring-[#1B5E20]/20 font-semibold"
+                                      : "bg-white border-[#D6DDD8] hover:bg-[#F1F8F1] text-[#1F2A24]"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-7 h-7 rounded-lg bg-white border border-[#D6DDD8] p-0.5 flex items-center justify-center shrink-0">
+                                      <img src={item.url} alt={item.name} className="w-full h-full object-contain" />
+                                    </div>
+                                    <span className="text-xs truncate">{item.name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {isSelected && (
+                                      <span className="text-[10px] bg-[#1B5E20] text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                                        <Check className="w-2.5 h-2.5" />
+                                        Active
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleDeleteLibraryItem(e, item)}
+                                      className="p-1 text-[#55645B] hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                      title="Remove from library"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* File Upload Trigger */}
+                    <div className="pt-2">
+                      <label className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-dashed border-[#1B5E20]/50 bg-[#DCEFDD]/40 hover:bg-[#DCEFDD]/70 cursor-pointer transition-all apple-press text-xs font-semibold text-[#1B5E20] shadow-xs">
+                        <Upload className="w-4 h-4" />
+                        <span>
+                          {uploadingSide === "right" ? "Uploading & saving to disk..." : "Upload New Institutional Logo"}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                          className="hidden"
+                          disabled={uploadingSide !== null}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleFileUpload(e.target.files[0], "right");
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
                   </div>
                 </div>
+              )}
+            </div>
 
-                {/* File Upload Trigger */}
-                <div className="pt-1">
-                  <label className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-dashed border-minsu-green-600/40 bg-minsu-green-50/50 hover:bg-minsu-green-50 cursor-pointer transition-all apple-press text-xs font-semibold text-minsu-green-700">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>
-                      {uploadingSide === "right" ? "Uploading to disk..." : "Upload New File"}
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                      className="hidden"
-                      disabled={uploadingSide !== null}
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          handleFileUpload(e.target.files[0], "right");
-                        }
-                      }}
-                    />
-                  </label>
-                </div>
+            {/* Modal Action Footer */}
+            <div className="px-5 sm:px-6 py-4 bg-[#F6F8F6] border-t border-[#D6DDD8] flex items-center justify-between shrink-0">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleResetDefaults}
+                disabled={saving || loading}
+                className="text-xs text-[#55645B] hover:text-[#1F2A24] apple-press"
+              >
+                <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                Reset to CHED & UniFAST
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onClose}
+                  disabled={saving}
+                  className="text-xs apple-press rounded-xl"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving || loading}
+                  className="text-xs bg-[#1B5E20] hover:bg-[#164D1C] text-white font-semibold apple-press rounded-xl shadow-xs"
+                >
+                  <Check className="w-3.5 h-3.5 mr-1" />
+                  {saving ? "Saving to Disk..." : "Save Global Defaults"}
+                </Button>
               </div>
             </div>
-          )}
+          </motion.div>
         </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 bg-neutral-50 border-t border-line flex items-center justify-between">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleResetDefaults}
-            disabled={saving || loading}
-            className="text-xs text-neutral-600 hover:text-neutral-900 apple-press"
-          >
-            <RotateCcw className="w-3.5 h-3.5 mr-1" />
-            Reset to CHED & UniFAST
-          </Button>
-
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onClose}
-              disabled={saving}
-              className="text-xs apple-press"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={handleSave}
-              disabled={saving || loading}
-              className="text-xs bg-minsu-green-700 hover:bg-minsu-green-600 text-white font-semibold apple-press"
-            >
-              <Check className="w-3.5 h-3.5 mr-1" />
-              {saving ? "Saving to Disk..." : "Save Global Defaults"}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>,
+    document.body
   );
 }

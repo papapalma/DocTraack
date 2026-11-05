@@ -1,0 +1,38 @@
+{
+  "leftLogo": {
+    "type": "custom",
+    "url": "/api/media/logo/logo-1793718455151-d1b4dffbe4e2.png",
+    "alt": "Custom left logo"
+  },
+  "rightLogo": {
+    "type": "custom",
+    "url": "/api/media/logo/logo-1793718328666-3e70a8323e95.png",
+    "alt": "Custom right logo"
+  },
+  "library": [
+    {
+      "id": "logo-logo-1793372883188-ed229bfa1347",
+      "name": "Institutional Custom Logo",
+      "url": "/api/media/logo/logo-1793372883188-ed229bfa1347.png",
+      "uploadedAt": "2026-10-30T15:08:03.219Z",
+      "originalName": "logo-1793372883188-ed229bfa1347.png",
+      "positionPreference": "both"
+    },
+    {
+      "id": "logo-logo-1793718328666-3e70a8323e95",
+      "name": "Institutional Right Seal",
+      "url": "/api/media/logo/logo-1793718328666-3e70a8323e95.png",
+      "uploadedAt": "2026-11-03T15:05:28.674Z",
+      "originalName": "logo-1793718328666-3e70a8323e95.png",
+      "positionPreference": "right"
+    },
+    {
+      "id": "logo-logo-1793718455151-d1b4dffbe4e2",
+      "name": "Institutional Left Seal",
+      "url": "/api/media/logo/logo-1793718455151-d1b4dffbe4e2.png",
+      "uploadedAt": "2026-11-03T15:07:35.154Z",
+      "originalName": "logo-1793718455151-d1b4dffbe4e2.png",
+      "positionPreference": "left"
+    }
+  ]
+}

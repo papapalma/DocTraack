@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { applicationIds, targetAgency, academicYear, remarks } = body;
+    const { applicationIds, batchNumber, targetAgency, academicYear, remarks } = body;
 
     // Find Annex 1 type
     const annex1Type = await prisma.annexType.findFirst({
@@ -39,6 +39,12 @@ export async function POST(req: NextRequest) {
     const whereClause: any = {
       status: ApplicationStatus.ACCEPTED,
     };
+    if (batchNumber && batchNumber !== "ALL") {
+      const parsed = parseInt(batchNumber, 10);
+      if (!isNaN(parsed)) {
+        whereClause.batchNumber = parsed;
+      }
+    }
     if (Array.isArray(applicationIds) && applicationIds.length > 0) {
       whereClause.id = { in: applicationIds };
     }
@@ -98,15 +104,17 @@ export async function POST(req: NextRequest) {
     });
 
     const now = new Date();
-    const docTitle = `Annex 1: Masterlist of TDP Grantees - ${academicYear || `A.Y. ${now.getFullYear()}-${now.getFullYear() + 1}`} (${formattedStudents.length} Students)`;
+    const batchLabel = batchNumber && batchNumber !== "ALL" ? `Batch ${batchNumber}` : "All Batches";
+    const docTitle = `Annex 1: Masterlist of TDP Grantees (${batchLabel}) - ${academicYear || `A.Y. ${now.getFullYear()}-${now.getFullYear() + 1}`} (${formattedStudents.length} Students)`;
 
     const docFormData = {
       target_agency: targetAgency || "Commission on Higher Education (CHED) / UniFAST",
       academic_year: academicYear || `A.Y. ${now.getFullYear()}-${now.getFullYear() + 1}`,
+      batch_number: batchNumber || "1",
       transmittal_number: `MINSU-ANNEX1-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       submission_date: now.toISOString().split("T")[0],
       total_grantees: formattedStudents.length,
-      remarks: remarks || "Officially validated TDP grantees ready for executive confirmation and transmittal.",
+      remarks: remarks || `Officially validated TDP grantees (${batchLabel}) ready for executive confirmation and transmittal.`,
       students: formattedStudents,
     };
 

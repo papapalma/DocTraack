@@ -4,6 +4,8 @@ import fs from "fs/promises";
 import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { addLogoToLibrary } from "@/lib/branding";
+import { LogoLibraryItem } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +81,17 @@ export async function POST(req: NextRequest) {
 
     const mediaUrl = `/api/media/logo/${filename}`;
 
+    const libraryItem: LogoLibraryItem = {
+      id: `logo-${Date.now()}-${randomSuffix}`,
+      name: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ") || "Custom Institutional Logo",
+      url: mediaUrl,
+      uploadedAt: new Date().toISOString(),
+      originalName: file.name,
+      positionPreference: position === "left" || position === "right" ? position : "both",
+    };
+
+    await addLogoToLibrary(libraryItem);
+
     // Audit log
     await logAudit({
       actorId: user.id,
@@ -100,6 +113,7 @@ export async function POST(req: NextRequest) {
       url: mediaUrl,
       filename,
       originalName: file.name,
+      libraryItem,
     });
   } catch (error) {
     console.error("Logo upload error:", error);

@@ -33,6 +33,7 @@ export default function RegistrationsValidationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"ALL" | "SUBMITTED" | "ACCEPTED" | "REJECTED">("SUBMITTED");
+  const [batchFilter, setBatchFilter] = useState<"ALL" | "1" | "2">("ALL");
 
   // Selected student for detail inspection
   const [selectedApp, setSelectedApp] = useState<any | null>(null);
@@ -47,6 +48,7 @@ export default function RegistrationsValidationPage() {
   const [compileModalOpen, setCompileModalOpen] = useState(false);
   const [compileAgency, setCompileAgency] = useState("Commission on Higher Education (CHED) / UniFAST");
   const [compileAY, setCompileAY] = useState("A.Y. 2026-2027, 1st Semester");
+  const [compileBatch, setCompileBatch] = useState<string>("1");
   const [compileRemarks, setCompileRemarks] = useState("Official batch submission of validated student grantees for executive endorsement.");
   const [isCompiling, setIsCompiling] = useState(false);
   const [compileSuccess, setCompileSuccess] = useState<string | null>(null);
@@ -77,6 +79,10 @@ export default function RegistrationsValidationPage() {
       if (activeTab !== "ALL" && app.status !== activeTab) {
         return false;
       }
+      // Batch filter
+      if (batchFilter !== "ALL" && String(app.batchNumber || 1) !== batchFilter) {
+        return false;
+      }
       // Query filter
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -87,7 +93,7 @@ export default function RegistrationsValidationPage() {
       const code = (app.trackingCode || "").toLowerCase();
       return name.includes(q) || studentId.includes(q) || course.includes(q) || code.includes(q);
     });
-  }, [applications, activeTab, searchQuery]);
+  }, [applications, activeTab, batchFilter, searchQuery]);
 
   // Counts
   const counts = useMemo(() => {
@@ -149,6 +155,7 @@ export default function RegistrationsValidationPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          batchNumber: compileBatch,
           targetAgency: compileAgency,
           academicYear: compileAY,
           remarks: compileRemarks,
@@ -284,53 +291,92 @@ export default function RegistrationsValidationPage() {
       {/* Main Table Card */}
       <Card>
         <CardHeader className="pb-3 border-b border-[#D6DDD8] space-y-3">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            {/* Filter Tabs */}
-            <div className="inline-flex p-1 bg-[#F1F8F1] rounded-xl border border-[#D6DDD8]/80 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setActiveTab("SUBMITTED")}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  activeTab === "SUBMITTED"
-                    ? "bg-white text-[#B88A00] shadow-xs font-bold"
-                    : "text-[#55645B] hover:text-[#1F2A24]"
-                }`}
-              >
-                Pending ({counts.pending})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("ACCEPTED")}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  activeTab === "ACCEPTED"
-                    ? "bg-white text-[#1B5E20] shadow-xs font-bold"
-                    : "text-[#55645B] hover:text-[#1F2A24]"
-                }`}
-              >
-                Accepted ({counts.accepted})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("REJECTED")}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  activeTab === "REJECTED"
-                    ? "bg-white text-[#B3261E] shadow-xs font-bold"
-                    : "text-[#55645B] hover:text-[#1F2A24]"
-                }`}
-              >
-                Rejected ({counts.rejected})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("ALL")}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  activeTab === "ALL"
-                    ? "bg-white text-[#1F2A24] shadow-xs font-bold"
-                    : "text-[#55645B] hover:text-[#1F2A24]"
-                }`}
-              >
-                All ({counts.total})
-              </button>
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+            {/* Filter Tabs & Batch Segments */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex p-1 bg-[#F1F8F1] rounded-xl border border-[#D6DDD8]/80 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("SUBMITTED")}
+                  className={`apple-press px-3 py-1.5 rounded-lg transition-all ${
+                    activeTab === "SUBMITTED"
+                      ? "bg-white text-[#B88A00] shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  Pending ({counts.pending})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("ACCEPTED")}
+                  className={`apple-press px-3 py-1.5 rounded-lg transition-all ${
+                    activeTab === "ACCEPTED"
+                      ? "bg-white text-[#1B5E20] shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  Accepted ({counts.accepted})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("REJECTED")}
+                  className={`apple-press px-3 py-1.5 rounded-lg transition-all ${
+                    activeTab === "REJECTED"
+                      ? "bg-white text-[#B3261E] shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  Rejected ({counts.rejected})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("ALL")}
+                  className={`apple-press px-3 py-1.5 rounded-lg transition-all ${
+                    activeTab === "ALL"
+                      ? "bg-white text-[#1F2A24] shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  All ({counts.total})
+                </button>
+              </div>
+
+              {/* Batch Filter Segment */}
+              <div className="inline-flex p-1 bg-white rounded-xl border border-[#D6DDD8] text-xs font-semibold gap-1">
+                <button
+                  type="button"
+                  onClick={() => setBatchFilter("ALL")}
+                  className={`apple-press px-2.5 py-1 rounded-lg transition-all ${
+                    batchFilter === "ALL"
+                      ? "bg-[#1B5E20] text-white shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  All Batches
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchFilter("1")}
+                  className={`apple-press px-2.5 py-1 rounded-lg transition-all ${
+                    batchFilter === "1"
+                      ? "bg-[#1B5E20] text-white shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  Batch 1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchFilter("2")}
+                  className={`apple-press px-2.5 py-1 rounded-lg transition-all ${
+                    batchFilter === "2"
+                      ? "bg-[#1B5E20] text-white shadow-xs font-bold"
+                      : "text-[#55645B] hover:text-[#1F2A24]"
+                  }`}
+                >
+                  Batch 2
+                </button>
+              </div>
             </div>
 
             {/* Search Input */}
@@ -367,6 +413,7 @@ export default function RegistrationsValidationPage() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#F1F8F1] font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8]">
                   <tr>
+                    <th className="py-3 px-4">Batch</th>
                     <th className="py-3 px-4">Student ID</th>
                     <th className="py-3 px-4">Student Full Name</th>
                     <th className="py-3 px-4">Degree Program & Year</th>
@@ -383,6 +430,11 @@ export default function RegistrationsValidationPage() {
 
                     return (
                       <tr key={app.id} className="hover:bg-[#F6F8F6] transition-colors">
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCEFDD] text-[#123F17] border border-[#2E7D32]/30">
+                            Batch {app.batchNumber || 1}
+                          </span>
+                        </td>
                         <td className="py-3 px-4 font-mono font-bold text-[#1B5E20]">
                           {d.student_id || "N/A"}
                         </td>
@@ -757,6 +809,25 @@ export default function RegistrationsValidationPage() {
             </div>
           ) : (
             <div className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="c-batch" required className="text-xs font-semibold">
+                  TDP Intake Batch to Compile
+                </Label>
+                <select
+                  id="c-batch"
+                  value={compileBatch}
+                  onChange={(e) => setCompileBatch(e.target.value)}
+                  className="w-full rounded-lg border border-[#D6DDD8] bg-white p-2.5 text-xs font-semibold focus:ring-2 focus:ring-[#1B5E20]"
+                >
+                  <option value="1">Batch 1 Grantees (Annex 1 - Batch 1 Submission)</option>
+                  <option value="2">Batch 2 Grantees (Annex 1 - Batch 2 Submission)</option>
+                  <option value="ALL">All Validated Grantees (Combined)</option>
+                </select>
+                <p className="text-[11px] text-[#55645B]">
+                  Only accepted scholars matching this batch will be compiled into this submission package.
+                </p>
+              </div>
+
               <div className="space-y-1">
                 <Label htmlFor="c-agency" required className="text-xs font-semibold">
                   Concerned Government Agency

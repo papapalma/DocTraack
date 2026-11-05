@@ -11,6 +11,12 @@ import {
   Sparkles,
 } from "lucide-react";
 import { WorkflowSectionConfig } from "@/types/landing";
+import {
+  StaggerContainer,
+  StaggerItem,
+  AppleTiltCard,
+  ScrollReveal,
+} from "@/components/landing/motion/motion-wrapper";
 
 interface WorkflowSectionProps {
   content: WorkflowSectionConfig;
@@ -52,7 +58,7 @@ export function WorkflowSection({ content }: WorkflowSectionProps) {
   return (
     <section className="max-w-5xl mx-auto w-full px-4 sm:px-6 py-12">
       {(content.sectionTitle || content.sectionSubtitle) && (
-        <div className="text-center max-w-2xl mx-auto mb-10">
+        <ScrollReveal className="text-center max-w-2xl mx-auto mb-10">
           {content.sectionTitle && (
             <h3 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#1F2A24] tracking-tight">
               {content.sectionTitle}
@@ -63,40 +69,43 @@ export function WorkflowSection({ content }: WorkflowSectionProps) {
               {content.sectionSubtitle}
             </p>
           )}
-        </div>
+        </ScrollReveal>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6 w-full text-left">
+      <StaggerContainer className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6 w-full text-left">
         {content.cards?.map((card) => (
-          <div
-            key={card.id}
-            className="p-6 rounded-3xl bg-white/90 backdrop-blur-md border border-[#D6DDD8]/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:-translate-y-1 hover:shadow-lg transition-all duration-200 flex flex-col justify-between"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div
-                  className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-xs border ${getIconBg(
-                    card.icon
-                  )}`}
-                >
-                  {getIcon(card.icon)}
+          <StaggerItem key={card.id}>
+            <AppleTiltCard maxTilt={6}>
+              <div className="group relative p-6 sm:p-7 rounded-3xl bg-white/95 backdrop-blur-md border border-[#D6DDD8]/80 shadow-[0_4px_24px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_32px_rgba(27,94,32,0.12)] transition-all duration-300 flex flex-col justify-between apple-press overflow-hidden h-full">
+                {/* Top gold accent highlight line on hover */}
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#F2B705] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div
+                      className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-xs border transition-transform group-hover:scale-110 duration-200 ${getIconBg(
+                        card.icon
+                      )}`}
+                    >
+                      {getIcon(card.icon)}
+                    </div>
+                    {card.badge && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#F1F8F1] text-[#1B5E20] border border-[#1B5E20]/15 shadow-2xs">
+                        {card.badge}
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="font-heading font-bold text-base sm:text-lg text-[#1F2A24] tracking-tight group-hover:text-[#1B5E20] transition-colors">
+                    {card.title}
+                  </h4>
+                  <p className="text-xs sm:text-sm text-[#55645B] mt-2 leading-relaxed">
+                    {card.description}
+                  </p>
                 </div>
-                {card.badge && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#F1F8F1] text-[#1B5E20] border border-[#1B5E20]/15">
-                    {card.badge}
-                  </span>
-                )}
               </div>
-              <h4 className="font-heading font-bold text-base sm:text-lg text-[#1F2A24] tracking-tight">
-                {card.title}
-              </h4>
-              <p className="text-xs sm:text-sm text-[#55645B] mt-2 leading-relaxed">
-                {card.description}
-              </p>
-            </div>
-          </div>
+            </AppleTiltCard>
+          </StaggerItem>
         ))}
-      </div>
+      </StaggerContainer>
     </section>
   );
 }

@@ -22,6 +22,8 @@ import {
   Lock,
   UserCheck,
 } from "lucide-react";
+import { StaggerContainer, StaggerItem, ApplePress } from "@/components/ui/page-transition";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 
 export default function DashboardPage() {
   const { user } = useSession();
@@ -130,91 +132,99 @@ export default function DashboardPage() {
         </div>
 
         {/* Admin KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
           {/* Total Registered Users */}
-          <Card className="rounded-2xl border border-[#D6DDD8]/80 hover:-translate-y-1 hover:shadow-md transition-all duration-200">
-            <CardContent className="p-5 flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-[#55645B] uppercase tracking-wider">
-                  Total Users
-                </p>
-                {isAdminLoading ? (
-                  <Skeleton className="h-8 w-12 rounded-lg mt-1" />
-                ) : (
-                  <h3 className="text-3xl font-extrabold font-heading text-[#1F2A24] mt-1 tracking-tight">
-                    {adminUsers.length}
-                  </h3>
-                )}
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#DCEFDD] to-[#F1F8F1] text-[#1B5E20] flex items-center justify-center shadow-xs border border-[#1B5E20]/10">
-                <Users className="w-5 h-5" />
-              </div>
-            </CardContent>
-          </Card>
+          <StaggerItem>
+            <Card className="rounded-2xl border border-[#D6DDD8]/80 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-bold text-[#55645B] uppercase tracking-wider">
+                    Total Users
+                  </p>
+                  {isAdminLoading ? (
+                    <Skeleton className="h-8 w-12 rounded-lg mt-1" />
+                  ) : (
+                    <h3 className="text-3xl font-extrabold font-heading text-[#1F2A24] mt-1 tracking-tight">
+                      <AnimatedNumber value={adminUsers.length} />
+                    </h3>
+                  )}
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#DCEFDD] to-[#F1F8F1] text-[#1B5E20] flex items-center justify-center shadow-xs border border-[#1B5E20]/10">
+                  <Users className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+          </StaggerItem>
 
           {/* Active Accounts */}
-          <Card className="rounded-2xl border border-[#2E7D32]/30 bg-gradient-to-br from-white to-[#F4FAF4] hover:-translate-y-1 hover:shadow-md transition-all duration-200">
-            <CardContent className="p-5 flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-[#2E7D32] uppercase tracking-wider">
-                  Active Accounts
-                </p>
-                {isAdminLoading ? (
-                  <Skeleton className="h-8 w-12 rounded-lg mt-1" />
-                ) : (
-                  <h3 className="text-3xl font-extrabold font-heading text-[#2E7D32] mt-1 tracking-tight">
-                    {activeUsersCount}
-                  </h3>
-                )}
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#DCEFDD] to-[#E9F6EA] text-[#2E7D32] flex items-center justify-center shadow-xs border border-[#2E7D32]/20">
-                <UserCheck className="w-5 h-5" />
-              </div>
-            </CardContent>
-          </Card>
+          <StaggerItem>
+            <Card className="rounded-2xl border border-[#2E7D32]/30 bg-gradient-to-br from-white to-[#F4FAF4] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-bold text-[#2E7D32] uppercase tracking-wider">
+                    Active Accounts
+                  </p>
+                  {isAdminLoading ? (
+                    <Skeleton className="h-8 w-12 rounded-lg mt-1" />
+                  ) : (
+                    <h3 className="text-3xl font-extrabold font-heading text-[#2E7D32] mt-1 tracking-tight">
+                      <AnimatedNumber value={activeUsersCount} />
+                    </h3>
+                  )}
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#DCEFDD] to-[#E9F6EA] text-[#2E7D32] flex items-center justify-center shadow-xs border border-[#2E7D32]/20">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+          </StaggerItem>
 
           {/* Today's Events */}
-          <Card className="rounded-2xl border border-[#F2B705]/40 bg-gradient-to-br from-white to-[#FFFDF5] hover:-translate-y-1 hover:shadow-md transition-all duration-200">
-            <CardContent className="p-5 flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-[#B88A00] uppercase tracking-wider">
-                  Events Today
-                </p>
-                {isAdminLoading ? (
-                  <Skeleton className="h-8 w-12 rounded-lg mt-1" />
-                ) : (
-                  <h3 className="text-3xl font-extrabold font-heading text-[#B88A00] mt-1 tracking-tight">
-                    {adminMetrics?.todayEvents ?? 0}
-                  </h3>
-                )}
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FFF1C2] to-[#FFF9E6] text-[#B88A00] flex items-center justify-center shadow-xs border border-[#F2B705]/20">
-                <Activity className="w-5 h-5" />
-              </div>
-            </CardContent>
-          </Card>
+          <StaggerItem>
+            <Card className="rounded-2xl border border-[#F2B705]/40 bg-gradient-to-br from-white to-[#FFFDF5] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-bold text-[#B88A00] uppercase tracking-wider">
+                    Events Today
+                  </p>
+                  {isAdminLoading ? (
+                    <Skeleton className="h-8 w-12 rounded-lg mt-1" />
+                  ) : (
+                    <h3 className="text-3xl font-extrabold font-heading text-[#B88A00] mt-1 tracking-tight">
+                      <AnimatedNumber value={adminMetrics?.todayEvents ?? 0} />
+                    </h3>
+                  )}
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FFF1C2] to-[#FFF9E6] text-[#B88A00] flex items-center justify-center shadow-xs border border-[#F2B705]/20">
+                  <Activity className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+          </StaggerItem>
 
           {/* Total Audit Logs */}
-          <Card className="rounded-2xl border border-[#123F17]/30 bg-gradient-to-br from-white to-[#F1F8F1] hover:-translate-y-1 hover:shadow-md transition-all duration-200">
-            <CardContent className="p-5 flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-[#123F17] uppercase tracking-wider">
-                  Total Audit Trail
-                </p>
-                {isAdminLoading ? (
-                  <Skeleton className="h-8 w-12 rounded-lg mt-1" />
-                ) : (
-                  <h3 className="text-3xl font-extrabold font-heading text-[#123F17] mt-1 tracking-tight">
-                    {adminMetrics?.totalEvents ?? 0}
-                  </h3>
-                )}
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#123F17] to-[#1B5E20] text-white flex items-center justify-center shadow-xs border border-white/20">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+          <StaggerItem>
+            <Card className="rounded-2xl border border-[#123F17]/30 bg-gradient-to-br from-white to-[#F1F8F1] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-bold text-[#123F17] uppercase tracking-wider">
+                    Total Audit Trail
+                  </p>
+                  {isAdminLoading ? (
+                    <Skeleton className="h-8 w-12 rounded-lg mt-1" />
+                  ) : (
+                    <h3 className="text-3xl font-extrabold font-heading text-[#123F17] mt-1 tracking-tight">
+                      <AnimatedNumber value={adminMetrics?.totalEvents ?? 0} />
+                    </h3>
+                  )}
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#123F17] to-[#1B5E20] text-white flex items-center justify-center shadow-xs border border-white/20">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+        </StaggerContainer>
 
         {/* Quick Management Links */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -413,91 +423,99 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards: Apple Rounded-2xl with Gentle Lift */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+      <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
         {/* Total Documents */}
-        <Card className="rounded-2xl border border-[#D6DDD8]/80 hover:-translate-y-1 hover:shadow-md transition-all duration-200">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-[#55645B] uppercase tracking-wider">
-                Total Documents
-              </p>
-              {isDocsLoading ? (
-                <Skeleton className="h-8 w-12 rounded-lg mt-1" />
-              ) : (
-                <h3 className="text-3xl font-extrabold font-heading text-[#1F2A24] mt-1 tracking-tight">
-                  {documents.length}
-                </h3>
-              )}
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#DCEFDD] to-[#F1F8F1] text-[#1B5E20] flex items-center justify-center shadow-xs border border-[#1B5E20]/10">
-              <FileText className="w-5 h-5" />
-            </div>
-          </CardContent>
-        </Card>
+        <StaggerItem>
+          <Card className="rounded-2xl border border-[#D6DDD8]/80 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-[#55645B] uppercase tracking-wider">
+                  Total Documents
+                </p>
+                {isDocsLoading ? (
+                  <Skeleton className="h-8 w-12 rounded-lg mt-1" />
+                ) : (
+                  <h3 className="text-3xl font-extrabold font-heading text-[#1F2A24] mt-1 tracking-tight">
+                    <AnimatedNumber value={documents.length} />
+                  </h3>
+                )}
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#DCEFDD] to-[#F1F8F1] text-[#1B5E20] flex items-center justify-center shadow-xs border border-[#1B5E20]/10">
+                <FileText className="w-5 h-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </StaggerItem>
 
         {/* Pending Review */}
-        <Card className="rounded-2xl border border-[#F2B705]/40 bg-gradient-to-br from-white to-[#FFFDF5] hover:-translate-y-1 hover:shadow-md transition-all duration-200">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-[#B88A00] uppercase tracking-wider">
-                Pending Review
-              </p>
-              {isDocsLoading ? (
-                <Skeleton className="h-8 w-12 rounded-lg mt-1" />
-              ) : (
-                <h3 className="text-3xl font-extrabold font-heading text-[#B88A00] mt-1 tracking-tight">
-                  {submittedCount}
-                </h3>
-              )}
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FFF1C2] to-[#FFF9E6] text-[#B88A00] flex items-center justify-center shadow-xs border border-[#F2B705]/20">
-              <Clock className="w-5 h-5" />
-            </div>
-          </CardContent>
-        </Card>
+        <StaggerItem>
+          <Card className="rounded-2xl border border-[#F2B705]/40 bg-gradient-to-br from-white to-[#FFFDF5] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-[#B88A00] uppercase tracking-wider">
+                  Pending Review
+                </p>
+                {isDocsLoading ? (
+                  <Skeleton className="h-8 w-12 rounded-lg mt-1" />
+                ) : (
+                  <h3 className="text-3xl font-extrabold font-heading text-[#B88A00] mt-1 tracking-tight">
+                    <AnimatedNumber value={submittedCount} />
+                  </h3>
+                )}
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FFF1C2] to-[#FFF9E6] text-[#B88A00] flex items-center justify-center shadow-xs border border-[#F2B705]/20">
+                <Clock className="w-5 h-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </StaggerItem>
 
         {/* Approved */}
-        <Card className="rounded-2xl border border-[#2E7D32]/30 bg-gradient-to-br from-white to-[#F4FAF4] hover:-translate-y-1 hover:shadow-md transition-all duration-200">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-[#2E7D32] uppercase tracking-wider">
-                Approved
-              </p>
-              {isDocsLoading ? (
-                <Skeleton className="h-8 w-12 rounded-lg mt-1" />
-              ) : (
-                <h3 className="text-3xl font-extrabold font-heading text-[#2E7D32] mt-1 tracking-tight">
-                  {approvedCount}
-                </h3>
-              )}
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#DCEFDD] to-[#E9F6EA] text-[#2E7D32] flex items-center justify-center shadow-xs border border-[#2E7D32]/20">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
-          </CardContent>
-        </Card>
+        <StaggerItem>
+          <Card className="rounded-2xl border border-[#2E7D32]/30 bg-gradient-to-br from-white to-[#F4FAF4] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-[#2E7D32] uppercase tracking-wider">
+                  Approved
+                </p>
+                {isDocsLoading ? (
+                  <Skeleton className="h-8 w-12 rounded-lg mt-1" />
+                ) : (
+                  <h3 className="text-3xl font-extrabold font-heading text-[#2E7D32] mt-1 tracking-tight">
+                    <AnimatedNumber value={approvedCount} />
+                  </h3>
+                )}
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#DCEFDD] to-[#E9F6EA] text-[#2E7D32] flex items-center justify-center shadow-xs border border-[#2E7D32]/20">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </StaggerItem>
 
         {/* Transmitted */}
-        <Card className="rounded-2xl border border-[#123F17]/30 bg-gradient-to-br from-white to-[#F1F8F1] hover:-translate-y-1 hover:shadow-md transition-all duration-200">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-[#123F17] uppercase tracking-wider">
-                Transmitted
-              </p>
-              {isDocsLoading ? (
-                <Skeleton className="h-8 w-12 rounded-lg mt-1" />
-              ) : (
-                <h3 className="text-3xl font-extrabold font-heading text-[#123F17] mt-1 tracking-tight">
-                  {transmittedCount}
-                </h3>
-              )}
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#123F17] to-[#1B5E20] text-white flex items-center justify-center shadow-xs border border-white/20">
-              <Send className="w-5 h-5" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <StaggerItem>
+          <Card className="rounded-2xl border border-[#123F17]/30 bg-gradient-to-br from-white to-[#F1F8F1] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-[#123F17] uppercase tracking-wider">
+                  Transmitted
+                </p>
+                {isDocsLoading ? (
+                  <Skeleton className="h-8 w-12 rounded-lg mt-1" />
+                ) : (
+                  <h3 className="text-3xl font-extrabold font-heading text-[#123F17] mt-1 tracking-tight">
+                    <AnimatedNumber value={transmittedCount} />
+                  </h3>
+                )}
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#123F17] to-[#1B5E20] text-white flex items-center justify-center shadow-xs border border-white/20">
+                <Send className="w-5 h-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </StaggerItem>
+      </StaggerContainer>
 
       {/* Review Queue Alert for Director */}
       {user.role === "DIRECTOR" && submittedCount > 0 && (

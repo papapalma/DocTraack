@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 import { PortalSkeleton } from "@/components/ui/skeleton";
 import { LogoutModal } from "@/components/auth/logout-modal";
 import { Logo } from "@/components/ui/logo";
+import { motion } from "motion/react";
+import { PageTransition } from "@/components/ui/page-transition";
 
 function StudentNav() {
   const pathname = usePathname();
@@ -33,14 +35,25 @@ function StudentNav() {
               key={link.href}
               href={link.href}
               className={cn(
-                "flex items-center gap-2 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap",
+                "relative flex items-center gap-2 py-3 text-sm font-semibold transition-colors whitespace-nowrap active:scale-95",
                 isActive
-                  ? "border-[#1B5E20] text-[#1B5E20]"
-                  : "border-transparent text-[#55645B] hover:text-[#1F2A24]"
+                  ? "text-[#1B5E20]"
+                  : "text-[#55645B] hover:text-[#1F2A24]"
               )}
             >
               <Icon className="w-4 h-4" />
-              {link.label}
+              <span>{link.label}</span>
+              {isActive && (
+                <motion.div
+                  layoutId="student-nav-indicator"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1B5E20]"
+                  transition={{
+                    type: "spring",
+                    stiffness: 380,
+                    damping: 30,
+                  }}
+                />
+              )}
             </Link>
           );
         })}
@@ -56,6 +69,7 @@ function StudentPortalContent({
 }) {
   const { user, isLoading, logout } = useSession();
   const router = useRouter();
+  const pathname = usePathname();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
@@ -130,7 +144,9 @@ function StudentPortalContent({
       {/* Main Scrollable Content */}
       <main className="flex-1 h-full min-h-0 overflow-y-auto w-full apple-scrollbar print:h-auto print:overflow-visible flex flex-col justify-between">
         <div className="max-w-5xl mx-auto w-full p-3 sm:p-6 md:p-8 min-w-0 flex-1">
-          {children}
+          <PageTransition key={pathname}>
+            {children}
+          </PageTransition>
         </div>
 
         {/* Footer */}

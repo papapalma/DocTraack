@@ -58,9 +58,19 @@ export interface LogoConfig {
   alt?: string;
 }
 
+export interface LogoLibraryItem {
+  id: string;
+  name: string;
+  url: string;
+  uploadedAt: string;
+  originalName?: string;
+  positionPreference?: "left" | "right" | "both";
+}
+
 export interface HeaderLogosConfig {
   leftLogo?: LogoConfig;
   rightLogo?: LogoConfig;
+  library?: LogoLibraryItem[];
 }
 
 export interface Annex1StudentData {

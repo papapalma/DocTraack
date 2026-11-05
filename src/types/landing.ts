@@ -2,6 +2,8 @@ export type SectionType =
   | "HERO"
   | "ANNOUNCEMENT"
   | "WORKFLOW"
+  | "ELIGIBILITY_CHECKER"
+  | "LEADERSHIP_TRUST"
   | "STATS"
   | "FAQ"
   | "CONTACT";
@@ -75,6 +77,32 @@ export interface ContactSectionConfig {
   hotline: string;
 }
 
+export interface EligibilitySectionConfig {
+  sectionTitle: string;
+  sectionSubtitle: string;
+  badgeText: string;
+  grantAmount: string;
+  guidelinesUrl?: string;
+}
+
+export interface LeadershipTrustSectionConfig {
+  sectionTitle: string;
+  sectionSubtitle: string;
+  directorName: string;
+  directorTitle: string;
+  directorMessage: string;
+  directorImage?: string;
+  chedLogoImage?: string;
+  minsuSealImage?: string;
+  chedAccreditationTitle: string;
+  chedAccreditationDetails: string;
+  coreValues: {
+    title: string;
+    description: string;
+    tag: string;
+  }[];
+}
+
 export type BaseSection<T extends SectionType, C> = {
   id: string;
   type: T;
@@ -87,9 +115,25 @@ export type LandingSection =
   | BaseSection<"HERO", HeroSectionConfig>
   | BaseSection<"ANNOUNCEMENT", AnnouncementSectionConfig>
   | BaseSection<"WORKFLOW", WorkflowSectionConfig>
+  | BaseSection<"ELIGIBILITY_CHECKER", EligibilitySectionConfig>
+  | BaseSection<"LEADERSHIP_TRUST", LeadershipTrustSectionConfig>
   | BaseSection<"STATS", StatsSectionConfig>
   | BaseSection<"FAQ", FaqSectionConfig>
   | BaseSection<"CONTACT", ContactSectionConfig>;
+
+export interface LandingStyleSettings {
+  motionLevel: "fluid" | "subtle" | "off";
+  bgOverlayOpacity: "light" | "balanced" | "deep";
+  customBgImage?: string;
+  enable3DOrbit: boolean;
+}
+
+export const DEFAULT_STYLE_SETTINGS: LandingStyleSettings = {
+  motionLevel: "fluid",
+  bgOverlayOpacity: "balanced",
+  customBgImage: "/campus-bg.jpg",
+  enable3DOrbit: true,
+};
 
 export interface LandingPageData {
   publishedSections: LandingSection[];
@@ -97,6 +141,7 @@ export interface LandingPageData {
   hasUnpublishedChanges: boolean;
   publishedAt?: string | null;
   updatedAt?: string;
+  styleSettings?: LandingStyleSettings;
 }
 
 export const DEFAULT_LANDING_SECTIONS: LandingSection[] = [
@@ -164,6 +209,58 @@ export const DEFAULT_LANDING_SECTIONS: LandingSection[] = [
           description:
             "Online applicant submission with tracking code generation and self-service application status monitoring.",
           badge: "Applicant Onboarding",
+        },
+      ],
+    },
+  },
+  {
+    id: "sec-eligibility-1",
+    type: "ELIGIBILITY_CHECKER",
+    title: "TDP Scholarship Eligibility Checker",
+    enabled: true,
+    content: {
+      sectionTitle: "Check Your TDP Grant Eligibility",
+      sectionSubtitle:
+        "Fast 3-step self-assessment for Mindoro State University students under CHED TDP-TES guidelines.",
+      badgeText: "CHED-UniFAST Guidelines",
+      grantAmount: "₱7,500.00 / Semester",
+      guidelinesUrl: "#",
+    },
+  },
+  {
+    id: "sec-leadership-1",
+    type: "LEADERSHIP_TRUST",
+    title: "Campus Leadership & Compliance",
+    enabled: true,
+    content: {
+      sectionTitle: "Institutional Leadership & Trust",
+      sectionSubtitle:
+        "Mindoro State University's commitment to transparent, timely financial assistance through digitized Annex workflows.",
+      directorName: "Campus Director",
+      directorTitle: "Mindoro State University - Bongabong Campus",
+      directorMessage:
+        "MinSU DocTrack upholds our commitment to good governance, accountability, and student welfare. By modernizing our Annex 1 to 10 transmittal pipeline with CHED and UniFAST, we ensure every deserving student receives their financial assistance without delays.",
+      directorImage: "/director.png",
+      chedLogoImage: "/ched-unifast.png",
+      minsuSealImage: "/minsu-seal.png",
+      chedAccreditationTitle: "CHED-UniFAST Compliant Workflow",
+      chedAccreditationDetails:
+        "Fully aligned with UniFAST Memorandum Orders for Tulong Dunong Program fund disbursement, electronic billing (Annex 1), and certified master lists (Annex 3).",
+      coreValues: [
+        {
+          title: "Institutional Excellence",
+          description: "Precision auditing and verifiable agency transmittal archives.",
+          tag: "EXCELLENCE",
+        },
+        {
+          title: "Transparency & Integrity",
+          description: "Immutable digital audit trails for every document decision and approval.",
+          tag: "INTEGRITY",
+        },
+        {
+          title: "Dedicated Public Service",
+          description: "Empowering MinSU scholars through streamlined financial assistance access.",
+          tag: "SERVICE",
         },
       ],
     },

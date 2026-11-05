@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { Megaphone, Calendar, ArrowRight, CheckCircle2, Clock, AlertTriangle, UserCheck, ShieldCheck } from "lucide-react";
+import { StaggerContainer, StaggerItem } from "@/components/ui/page-transition";
 
 export default function StudentPortalHomePage() {
   const [calls, setCalls] = useState<any[]>([]);
@@ -53,8 +54,11 @@ export default function StudentPortalHomePage() {
                   <h3 className="text-sm font-bold text-[#1F2A24]">
                     Annex 1 Registration Status: Under Review by Staff
                   </h3>
-                  <p className="text-xs text-[#55645B]">
-                    Tracking Reference: <span className="font-mono font-bold text-[#1B5E20]">{myRegistration.trackingCode}</span>
+                  <p className="text-xs text-[#55645B] flex items-center gap-2 mt-0.5">
+                    <span>Tracking Reference: <strong className="font-mono text-[#1B5E20]">{myRegistration.trackingCode}</strong></span>
+                    <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-[#DCEFDD] text-[#123F17]">
+                      Batch {myRegistration.batchNumber || 1}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -74,8 +78,11 @@ export default function StudentPortalHomePage() {
                   <h3 className="text-sm font-bold text-[#1B5E20]">
                     Annex 1 Registration Validated!
                   </h3>
-                  <p className="text-xs text-[#55645B]">
-                    Tracking Reference: <span className="font-mono font-bold text-[#1B5E20]">{myRegistration.trackingCode}</span>
+                  <p className="text-xs text-[#55645B] flex items-center gap-2 mt-0.5">
+                    <span>Tracking Reference: <strong className="font-mono text-[#1B5E20]">{myRegistration.trackingCode}</strong></span>
+                    <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-[#DCEFDD] text-[#123F17]">
+                      Batch {myRegistration.batchNumber || 1}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -149,60 +156,125 @@ export default function StudentPortalHomePage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {calls.map((call) => {
-            const isDeadlinePassed = new Date(call.deadline) < new Date();
+            const now = new Date();
+            const start = call.startDate ? new Date(call.startDate) : null;
+            const end = new Date(call.deadline);
+            const isUpcoming = start ? now < start : false;
+            const isClosed = now > end;
+            const isOpen = !isUpcoming && !isClosed;
+            const isAlreadyAccepted = myRegistration?.status === "ACCEPTED";
+
             return (
-              <Card
-                key={call.id}
-                className="hover:border-[#1B5E20]/40 transition-colors flex flex-col justify-between"
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#DCEFDD] text-[#123F17]">
-                      Annex 2 Call
-                    </span>
-                    <span
-                      className={`text-xs font-medium flex items-center gap-1 ${
-                        isDeadlinePassed ? "text-[#B3261E]" : "text-[#B88A00]"
-                      }`}
-                    >
-                      <Calendar className="w-3.5 h-3.5" />
-                      Deadline: {new Date(call.deadline).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <CardTitle className="text-lg text-[#1F2A24]">
-                    {call.title}
-                  </CardTitle>
-                  <CardDescription className="line-clamp-2 text-xs">
-                    {call.description || "Official Call for Tulong Dunong Program Student Grantees."}
-                  </CardDescription>
-                </CardHeader>
+              <StaggerItem key={call.id}>
+                <Card
+                  className="hover:border-[#1B5E20]/40 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 flex flex-col justify-between h-full bg-white"
+                >
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#1B5E20] text-white">
+                          Batch {call.batchNumber || 1}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#DCEFDD] text-[#123F17]">
+                          Annex 2 Call
+                        </span>
+                      </div>
 
-                <CardContent className="pt-0">
-                  <div className="pt-4 border-t border-[#D6DDD8] flex items-center justify-between">
-                    <span className="text-xs text-[#55645B]">
-                      {call._count?.applications || 0} Applications Submitted
-                    </span>
+                      {isOpen && (
+                        <span className="text-xs font-semibold text-[#1B5E20] flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-[#2E7D32] animate-pulse" />
+                          Open Window
+                        </span>
+                      )}
+                      {isUpcoming && (
+                        <span className="text-xs font-semibold text-[#B88A00] flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          Upcoming
+                        </span>
+                      )}
+                      {isClosed && (
+                        <span className="text-xs font-semibold text-[#B3261E] flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5" />
+                          Closed
+                        </span>
+                      )}
+                    </div>
 
-                    <Link href={`/portal/calls/${call.id}`}>
-                      <Button
-                        variant={isDeadlinePassed ? "secondary" : "primary"}
-                        size="sm"
-                        disabled={isDeadlinePassed}
-                      >
-                        {isDeadlinePassed ? "Call Closed" : "Apply Now"}
-                        {!isDeadlinePassed && (
-                          <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-                        )}
-                      </Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
+                    <CardTitle className="text-lg text-[#1F2A24]">
+                      {call.title}
+                    </CardTitle>
+                    <CardDescription className="line-clamp-2 text-xs">
+                      {call.description || "Official Call for Tulong Dunong Program Student Grantees."}
+                    </CardDescription>
+
+                    <div className="pt-2 text-[11px] text-[#55645B] space-y-0.5">
+                      {start && (
+                        <p>
+                          <span className="font-semibold text-[#1F2A24]">Window Opens:</span>{" "}
+                          {start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      )}
+                      <p>
+                        <span className="font-semibold text-[#1F2A24]">Window Deadline:</span>{" "}
+                        {end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="pt-0">
+                    <div className="pt-4 border-t border-[#D6DDD8] flex items-center justify-between">
+                      <span className="text-xs text-[#55645B]">
+                        {call._count?.applications || 0} Applications Submitted
+                      </span>
+
+                      {isAlreadyAccepted ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled
+                          className="text-xs font-semibold"
+                        >
+                          Already Accepted Grantee
+                        </Button>
+                      ) : isUpcoming ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled
+                          className="text-xs font-semibold"
+                        >
+                          Opens {start?.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </Button>
+                      ) : isClosed ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled
+                          className="text-xs font-semibold"
+                        >
+                          Window Closed
+                        </Button>
+                      ) : (
+                        <Link href={`/portal/calls/${call.id}`}>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="apple-press text-xs font-semibold"
+                          >
+                            Apply for Batch {call.batchNumber || 1}
+                            <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </StaggerItem>
             );
           })}
-        </div>
+        </StaggerContainer>
       )}
     </div>
   );
