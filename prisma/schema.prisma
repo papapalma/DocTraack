@@ -44,6 +44,16 @@ model User {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
+  // Persisted Student Profile (independent of applications)
+  studentProfile         Json?          @default("{}")
+
+  // Microsoft Authenticator & 2FA Extensions
+  twoFactorEnabled       Boolean        @default(false)
+  twoFactorSecret        String?
+  twoFactorRecoveryCodes String[]       @default([])
+  twoFactorType          String?        @default("MICROSOFT_AUTHENTICATOR")
+  authenticatorLocked    Boolean        @default(false)
+
   sessions      Session[]
   documents     Document[]
   comments      Comment[]

@@ -131,7 +131,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
-    const { id, active, role } = await req.json();
+    const { id, active, role, password } = await req.json();
 
     if (!id) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 });
@@ -148,6 +148,16 @@ export async function PATCH(req: NextRequest) {
     const updateData: any = {};
     if (active !== undefined) updateData.active = active;
     if (role !== undefined) updateData.role = role as Role;
+    if (password !== undefined) {
+      const passCheck = validatePassword(password);
+      if (!passCheck.valid) {
+        return NextResponse.json(
+          { error: passCheck.message || "Password must be at least 8 characters with letters & numbers." },
+          { status: 400 }
+        );
+      }
+      updateData.passwordHash = await hashPassword(password);
+    }
 
     const updatedUser = await prisma.user.update({
       where: { id },
@@ -161,12 +171,17 @@ export async function PATCH(req: NextRequest) {
       },
     });
 
+    const safeDetails = { ...updateData };
+    if (safeDetails.passwordHash) {
+      safeDetails.passwordHash = "[REDACTED]";
+    }
+
     await logAudit({
       actorId: currentUser.id,
-      action: "USER_UPDATED",
+      action: password ? "ADMIN_RESET_PASSWORD" : "USER_UPDATED",
       entity: "user",
       entityId: id,
-      details: updateData,
+      details: { ...safeDetails, resetBy: currentUser.email },
     });
 
     return NextResponse.json({ user: updatedUser });

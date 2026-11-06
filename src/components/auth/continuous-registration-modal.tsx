@@ -16,8 +16,10 @@ import {
   ArrowLeft,
   CheckCircle2,
   FileSpreadsheet,
+  Lock,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
+import { AuthenticatorLockStep } from "@/components/auth/authenticator-lock-step";
 import {
   isValidEmail,
   validatePassword,
@@ -57,6 +59,7 @@ const SECTIONS = [
   { id: 3, title: "Academic Profile & HEI", icon: GraduationCap },
   { id: 4, title: "Permanent Address & Contact", icon: MapPin },
   { id: 5, title: "Parental Information", icon: Users },
+  { id: 6, title: "Security Lock", icon: Lock },
 ];
 
 export function ContinuousRegistrationModal({
@@ -69,6 +72,13 @@ export function ContinuousRegistrationModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [authenticatorLockData, setAuthenticatorLockData] = useState<{
+    userId: string;
+    email: string;
+    secret: string;
+    formattedSecret: string;
+    qrSvg: string;
+  } | null>(null);
 
   // Form Fields
   const [formData, setFormData] = useState({
@@ -276,9 +286,15 @@ export function ContinuousRegistrationModal({
         return;
       }
 
-      onClose();
-      router.push("/portal");
-      router.refresh();
+      setAuthenticatorLockData({
+        userId: data.user.id,
+        email: data.user.email,
+        secret: data.secret,
+        formattedSecret: data.formattedSecret,
+        qrSvg: data.qrSvg,
+      });
+      setCurrentStep(6);
+      setIsLoading(false);
     } catch {
       setError("A network error occurred. Please try again.");
       setIsLoading(false);
@@ -354,8 +370,22 @@ export function ContinuousRegistrationModal({
         </div>
       )}
 
-      {/* Continuous Form Body */}
-      <form onSubmit={handleSubmit} className="space-y-4">
+      {currentStep === 6 && authenticatorLockData ? (
+        <AuthenticatorLockStep
+          userId={authenticatorLockData.userId}
+          email={authenticatorLockData.email}
+          secret={authenticatorLockData.secret}
+          formattedSecret={authenticatorLockData.formattedSecret}
+          qrSvg={authenticatorLockData.qrSvg}
+          onSuccess={() => {
+            onClose();
+            router.push("/portal");
+            router.refresh();
+          }}
+        />
+      ) : (
+        /* Continuous Form Body */
+        <form onSubmit={handleSubmit} className="space-y-4">
         {/* STEP 1: ACCOUNT & CREDENTIALS */}
         {currentStep === 1 && (
           <div className="space-y-3 animate-in fade-in duration-200">
@@ -880,6 +910,7 @@ export function ContinuousRegistrationModal({
           )}
         </div>
       </form>
+      )}
     </Modal>
   );
 }

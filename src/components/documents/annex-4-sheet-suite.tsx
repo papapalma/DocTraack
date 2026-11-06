@@ -7,7 +7,11 @@ import { PrintPreviewModal } from "./print-preview-modal";
 import { Annex4FormData, Annex4Grantee, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { BatchSelectorDropdown } from "./batch-selector-dropdown";
+import { StipendTierSelector } from "./stipend-tier-selector";
 import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
+import { compareValues } from "@/hooks/use-table";
 import {
   FileSpreadsheet,
   Printer,
@@ -95,6 +99,7 @@ export function Annex4SheetSuite({
 
         totalGrantees: 0,
         stipendPerGrantee: 7500,
+        stipendTier: "7500",
         totalSubsidy: 0,
         managementFeeRate: 0.005,
         managementFeeAmount: 0,
@@ -148,6 +153,29 @@ export function Annex4SheetSuite({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [customStipendInput, setCustomStipendInput] = useState<string>(
+    formData.stipendPerGrantee && formData.stipendPerGrantee !== 7500 && formData.stipendPerGrantee !== 10000
+      ? String(formData.stipendPerGrantee)
+      : "7500"
+  );
+
+  const handleStipendTierChange = (tier: "7500" | "10000" | "custom", amount: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      stipendTier: tier,
+      stipendPerGrantee: amount,
+    }));
+  };
+
+  const handleCustomStipendInputChange = (rawVal: string, numVal: number) => {
+    setCustomStipendInput(rawVal);
+    setFormData((prev) => ({
+      ...prev,
+      stipendTier: "custom",
+      stipendPerGrantee: numVal,
+    }));
+  };
+
   const handleLeftLogoChange = (newConfig: LogoConfig) => {
     setFormData((prev) => ({
       ...prev,
@@ -169,11 +197,14 @@ export function Annex4SheetSuite({
   };
 
   // Recalculate totals whenever grantees list changes
-  const updateGranteesAndTotals = (newGrantees: Annex4Grantee[]) => {
+  const updateGranteesAndTotals = (newGrantees: Annex4Grantee[], activeStipend?: number) => {
     const totalGrantees = newGrantees.length;
-    const stipendPerGrantee = 7500;
-    const totalSubsidy = totalGrantees * stipendPerGrantee;
-    const managementFeeRate = 0.005;
+    const stipendPerGrantee = activeStipend ?? (Number(formData.stipendPerGrantee) || 7500);
+    const totalSubsidy = newGrantees.reduce(
+      (sum, g) => sum + (Number(g.totalAmount) || Number(g.tdpAmount) || stipendPerGrantee),
+      0
+    );
+    const managementFeeRate = Number(formData.managementFeeRate) || 0.005;
     const managementFeeAmount = totalSubsidy * managementFeeRate;
     const grandTotalBilling = totalSubsidy + managementFeeAmount;
 
@@ -190,18 +221,20 @@ export function Annex4SheetSuite({
   };
 
   // Re-index control numbers (00001 to N)
-  const reindexList = (list: Annex4Grantee[]): Annex4Grantee[] => {
+  const reindexList = (list: Annex4Grantee[], defaultAmount?: number): Annex4Grantee[] => {
+    const amt = defaultAmount ?? (Number(formData.stipendPerGrantee) || 7500);
     return list.map((item, idx) => ({
       ...item,
       controlNumber: String(idx + 1).padStart(5, "0"),
-      tdpAmount: 7500,
-      totalAmount: 7500,
+      tdpAmount: Number(item.tdpAmount) || amt,
+      totalAmount: Number(item.totalAmount) || Number(item.tdpAmount) || amt,
     }));
   };
 
   // Add blank row
   const addBlankRow = () => {
     const nextIdx = formData.grantees.length + 1;
+    const activeStipend = Number(formData.stipendPerGrantee) || 7500;
     const newRow: Annex4Grantee = {
       controlNumber: String(nextIdx).padStart(5, "0"),
       studentNumber: `2024-${String(nextIdx).padStart(5, "0")}`,
@@ -216,11 +249,11 @@ export function Annex4SheetSuite({
       email: "student@minsu.edu.ph",
       phone: "09170000000",
       tdpBatch: formData.batchNumber,
-      tdpAmount: 7500,
-      totalAmount: 7500,
+      tdpAmount: activeStipend,
+      totalAmount: activeStipend,
       campus: formData.campus,
     };
-    updateGranteesAndTotals(reindexList([...formData.grantees, newRow]));
+    updateGranteesAndTotals(reindexList([...formData.grantees, newRow], activeStipend));
   };
 
   // Remove row
@@ -267,14 +300,20 @@ export function Annex4SheetSuite({
           const firstCandidateCampus = data.candidates[0]?.campus;
           const campusCfg = getMinsuCampusConfig(firstCandidateCampus);
 
-          const nextGrantees = [...formData.grantees, ...data.candidates];
+          const activeStipend = Number(formData.stipendPerGrantee) || 7500;
+          const candidatesWithStipend = (data.candidates || []).map((c: Annex4Grantee) => ({
+            ...c,
+            tdpAmount: Number(c.tdpAmount) || activeStipend,
+            totalAmount: Number(c.totalAmount) || Number(c.tdpAmount) || activeStipend,
+          }));
+
+          const nextGrantees = [...formData.grantees, ...candidatesWithStipend];
           const allBatches = Array.from(new Set([...alreadyInjectedBatches, ...batchesToInject.map(String)])).sort((a, b) => Number(a) - Number(b));
           const compoundBatch = allBatches.join(", ");
 
-          const reindexed = reindexList(nextGrantees);
+          const reindexed = reindexList(nextGrantees, activeStipend);
           const totalGrantees = reindexed.length;
-          const stipendPerGrantee = 7500;
-          const totalSubsidy = totalGrantees * stipendPerGrantee;
+          const totalSubsidy = reindexed.reduce((sum, g) => sum + (Number(g.tdpAmount) || activeStipend), 0);
           const managementFeeRate = 0.005;
           const managementFeeAmount = totalSubsidy * managementFeeRate;
           const grandTotalBilling = totalSubsidy + managementFeeAmount;
@@ -293,7 +332,7 @@ export function Annex4SheetSuite({
               heiAddress: updatedHeiAddress,
               grantees: reindexed,
               totalGrantees,
-              stipendPerGrantee,
+              stipendPerGrantee: activeStipend,
               totalSubsidy,
               managementFeeRate,
               managementFeeAmount,
@@ -348,6 +387,93 @@ export function Annex4SheetSuite({
         g.degreeProgram.toLowerCase().includes(q)
     );
   }, [formData.grantees, searchQuery]);
+
+  // Sort and pagination state for Annex 4 Grantees table
+  const [sortKey, setSortKey] = useState<string | null>("controlNumber");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>("asc");
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      if (sortDirection === "asc") setSortDirection("desc");
+      else if (sortDirection === "desc") {
+        setSortKey(null);
+        setSortDirection(null);
+      } else {
+        setSortDirection("asc");
+      }
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+    setPage(1);
+  };
+
+  const sortedGrantees = useMemo(() => {
+    if (!sortKey || !sortDirection) return filteredGrantees;
+    return [...filteredGrantees].sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      if (sortKey === "controlNumber") {
+        valA = a.controlNumber;
+        valB = b.controlNumber;
+      } else if (sortKey === "tdpBatch") {
+        valA = a.tdpBatch;
+        valB = b.tdpBatch;
+      } else if (sortKey === "studentNumber") {
+        valA = a.studentNumber;
+        valB = b.studentNumber;
+      } else if (sortKey === "tdpAwardNumber") {
+        valA = a.tdpAwardNumber;
+        valB = b.tdpAwardNumber;
+      } else if (sortKey === "lastName") {
+        valA = a.lastName;
+        valB = b.lastName;
+      } else if (sortKey === "givenName") {
+        valA = a.givenName;
+        valB = b.givenName;
+      } else if (sortKey === "middleInitial") {
+        valA = a.middleInitial;
+        valB = b.middleInitial;
+      } else if (sortKey === "sex") {
+        valA = a.sex;
+        valB = b.sex;
+      } else if (sortKey === "birthdate") {
+        valA = a.birthdate;
+        valB = b.birthdate;
+      } else if (sortKey === "degreeProgram") {
+        valA = a.degreeProgram;
+        valB = b.degreeProgram;
+      } else if (sortKey === "yearLevel") {
+        valA = a.yearLevel;
+        valB = b.yearLevel;
+      } else if (sortKey === "email") {
+        valA = a.email;
+        valB = b.email;
+      } else if (sortKey === "phone") {
+        valA = a.phone;
+        valB = b.phone;
+      } else if (sortKey === "tdpAmount") {
+        valA = a.tdpAmount;
+        valB = b.tdpAmount;
+      }
+      return compareValues(valA, valB, sortDirection);
+    });
+  }, [filteredGrantees, sortKey, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedGrantees.length / pageSize));
+  const validPage = Math.max(1, Math.min(page, totalPages));
+  const startIndex = sortedGrantees.length === 0 ? 0 : (validPage - 1) * pageSize + 1;
+  const endIndex = Math.min(validPage * pageSize, sortedGrantees.length);
+  const paginatedGrantees = useMemo(() => {
+    const start = (validPage - 1) * pageSize;
+    return sortedGrantees.slice(start, start + pageSize);
+  }, [sortedGrantees, validPage, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
 
   // Save to backend
   const handleSave = async (submitDirectly: boolean = false) => {
@@ -605,7 +731,7 @@ export function Annex4SheetSuite({
                 ₱{formData.totalSubsidy.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
               <div className="text-[11px] text-ink-muted mt-0.5">
-                ₱7,500.00 × {formData.totalGrantees} students
+                ₱{(formData.stipendPerGrantee || 7500).toLocaleString(undefined, { minimumFractionDigits: 2 })} × {formData.totalGrantees} students
               </div>
             </div>
 
@@ -636,41 +762,62 @@ export function Annex4SheetSuite({
             </div>
           </div>
 
-          {/* Dynamic Batch Injection Dropdown Card */}
-          <div className="bg-white rounded-2xl border border-line p-4 apple-shadow flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-minsu-green-700" />
-                <h4 className="text-xs font-bold text-minsu-green-900 uppercase tracking-wider">
-                  Inject Grantees by Batch (Select 1, 2, or 3 Batches)
-                </h4>
+          {/* Dynamic Batch Injection Dropdown Card with Stipend Tier Selection */}
+          <div className="bg-white rounded-2xl border border-line p-4 apple-shadow space-y-3">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-minsu-green-700" />
+                  <h4 className="text-xs font-bold text-minsu-green-900 uppercase tracking-wider">
+                    Inject Grantees by Batch (Select 1, 2, or 3 Batches)
+                  </h4>
+                </div>
+                <p className="text-[11px] text-ink-muted">
+                  Populate Form 2 new grantees directly from verified intake batches. Batches already injected are guarded against duplicate addition.
+                </p>
               </div>
-              <p className="text-[11px] text-ink-muted">
-                Populate Form 2 new grantees directly from verified intake batches. Batches already injected are guarded against duplicate addition.
-              </p>
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <div className="w-full md:w-80">
+                  <BatchSelectorDropdown
+                    selectedBatches={selectedBatchesToInject}
+                    onBatchesChange={setSelectedBatchesToInject}
+                    alreadyInjectedBatches={alreadyInjectedBatches}
+                    onInject={handleInjectBatches}
+                    allowDirectAction={true}
+                    maxBatches={3}
+                    placeholder="Choose batch(es) to inject..."
+                  />
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleInjectBatches(selectedBatchesToInject)}
+                  disabled={selectedBatchesToInject.length === 0 || isInjecting}
+                  className="h-[42px] px-4 font-bold bg-minsu-green-700 hover:bg-minsu-green-600 text-white shadow-xs shrink-0 apple-press"
+                >
+                  <Sparkles className={`w-4 h-4 mr-1.5 text-minsu-gold-400 ${isInjecting ? "animate-spin" : ""}`} />
+                  {isInjecting ? "Injecting..." : `Inject (${selectedBatchesToInject.length})`}
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <div className="w-full md:w-80">
-                <BatchSelectorDropdown
-                  selectedBatches={selectedBatchesToInject}
-                  onBatchesChange={setSelectedBatchesToInject}
-                  alreadyInjectedBatches={alreadyInjectedBatches}
-                  onInject={handleInjectBatches}
-                  allowDirectAction={true}
-                  maxBatches={3}
-                  placeholder="Choose batch(es) to inject..."
-                />
+
+            {/* Stipend Allocation Rate Selector (₱7,500 | ₱10,000 | Custom) */}
+            <div className="pt-3 border-t border-line/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-minsu-green-700" />
+                <span className="text-xs font-bold text-ink">Active Stipend Rate:</span>
+                <span className="text-[11px] text-ink-muted">
+                  Sets grant amount for newly injected cohorts (Current: ₱{(formData.stipendPerGrantee || 7500).toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                </span>
               </div>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => handleInjectBatches(selectedBatchesToInject)}
-                disabled={selectedBatchesToInject.length === 0 || isInjecting}
-                className="h-[42px] px-4 font-bold bg-minsu-green-700 hover:bg-minsu-green-600 text-white shadow-xs shrink-0 apple-press"
-              >
-                <Sparkles className={`w-4 h-4 mr-1.5 text-minsu-gold-400 ${isInjecting ? "animate-spin" : ""}`} />
-                {isInjecting ? "Injecting..." : `Inject (${selectedBatchesToInject.length})`}
-              </Button>
+              <StipendTierSelector
+                selectedTier={formData.stipendTier || "7500"}
+                currentAmount={formData.stipendPerGrantee || 7500}
+                customInputValue={customStipendInput}
+                onTierChange={handleStipendTierChange}
+                onCustomInputChange={handleCustomStipendInputChange}
+                label=""
+              />
             </div>
           </div>
 
@@ -705,28 +852,28 @@ export function Annex4SheetSuite({
 
               {/* Table */}
               <div className="overflow-x-auto max-h-[550px] apple-scrollbar">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full text-left text-xs border-collapse min-w-[1300px]">
                   <thead className="bg-minsu-green-50 text-minsu-green-900 font-bold sticky top-0 z-10 border-b border-line">
                     <tr>
-                      <th className="py-2.5 px-3 w-14">Ctrl #</th>
-                      <th className="py-2.5 px-2 w-16 text-center">Batch</th>
-                      <th className="py-2.5 px-3 min-w-[110px]">Student No.</th>
-                      <th className="py-2.5 px-3 min-w-[160px]">TDP Award No.</th>
-                      <th className="py-2.5 px-3 min-w-[130px]">Last Name</th>
-                      <th className="py-2.5 px-3 min-w-[130px]">Given Name</th>
-                      <th className="py-2.5 px-2 w-12 text-center">M.I.</th>
-                      <th className="py-2.5 px-2 w-12 text-center">Sex</th>
-                      <th className="py-2.5 px-3 min-w-[100px]">Birthdate</th>
-                      <th className="py-2.5 px-3 min-w-[180px]">Degree Program</th>
-                      <th className="py-2.5 px-2 w-16 text-center">Year</th>
-                      <th className="py-2.5 px-3 min-w-[150px]">Email</th>
-                      <th className="py-2.5 px-3 min-w-[110px]">Phone</th>
-                      <th className="py-2.5 px-3 text-right w-24">Amount</th>
+                      <SortableTh label="Ctrl #" sortKey="controlNumber" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="65px" />
+                      <SortableTh label="Batch" sortKey="tdpBatch" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="70px" className="text-center" />
+                      <SortableTh label="Student No." sortKey="studentNumber" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="110px" />
+                      <SortableTh label="TDP Award No." sortKey="tdpAwardNumber" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="150px" />
+                      <SortableTh label="Last Name" sortKey="lastName" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="130px" />
+                      <SortableTh label="Given Name" sortKey="givenName" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="130px" />
+                      <SortableTh label="M.I." sortKey="middleInitial" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="50px" className="text-center" />
+                      <SortableTh label="Sex" sortKey="sex" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="50px" className="text-center" />
+                      <SortableTh label="Birthdate" sortKey="birthdate" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="100px" />
+                      <SortableTh label="Degree Program" sortKey="degreeProgram" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="180px" />
+                      <SortableTh label="Year" sortKey="yearLevel" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="60px" className="text-center" />
+                      <SortableTh label="Email" sortKey="email" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="150px" />
+                      <SortableTh label="Phone" sortKey="phone" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="110px" />
+                      <SortableTh label="Amount" sortKey="tdpAmount" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="100px" align="right" />
                       <th className="py-2.5 px-2 w-12 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line text-ink">
-                    {filteredGrantees.length === 0 ? (
+                    {sortedGrantees.length === 0 ? (
                       <tr>
                         <td colSpan={15} className="py-16 text-center text-ink-muted">
                           <div className="flex flex-col items-center justify-center gap-2">
@@ -745,15 +892,18 @@ export function Annex4SheetSuite({
                         </td>
                       </tr>
                     ) : (
-                      filteredGrantees.map((g, idx) => (
-                        <tr key={idx} className="hover:bg-minsu-green-50/50 transition-colors">
+                      paginatedGrantees.map((g, pIdx) => {
+                        const realIndex = formData.grantees.findIndex((item) => item.controlNumber === g.controlNumber);
+                        const rowTarget = realIndex !== -1 ? realIndex : pIdx;
+                        return (
+                        <tr key={g.controlNumber || pIdx} className="hover:bg-minsu-green-50/50 transition-colors">
                           <td className="py-2 px-3 font-mono font-bold text-minsu-green-800">
                             {g.controlNumber}
                           </td>
                           <td className="py-2 px-1 text-center">
                             <input
                               value={g.tdpBatch}
-                              onChange={(e) => updateRowField(idx, "tdpBatch", e.target.value)}
+                              onChange={(e) => updateRowField(rowTarget, "tdpBatch", e.target.value)}
                               className="w-12 text-center font-bold font-mono text-minsu-green-900 bg-minsu-green-100/70 focus:bg-white focus:ring-1 focus:ring-minsu-green-700 rounded px-1 py-0.5 border border-minsu-green-700/20 text-xs"
                               title="Override batch for this student (e.g. change from Batch 1 to Batch 5)"
                               placeholder="Batch"
@@ -762,42 +912,42 @@ export function Annex4SheetSuite({
                           <td className="py-2 px-3">
                             <input
                               value={g.studentNumber}
-                              onChange={(e) => updateRowField(idx, "studentNumber", e.target.value)}
+                              onChange={(e) => updateRowField(rowTarget, "studentNumber", e.target.value)}
                               className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none font-mono"
                             />
                           </td>
                           <td className="py-2 px-3">
                             <input
                               value={g.tdpAwardNumber}
-                              onChange={(e) => updateRowField(idx, "tdpAwardNumber", e.target.value)}
+                              onChange={(e) => updateRowField(rowTarget, "tdpAwardNumber", e.target.value)}
                               className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none font-mono text-[11px]"
                             />
                           </td>
                           <td className="py-2 px-3">
                             <input
                               value={g.lastName}
-                              onChange={(e) => updateRowField(idx, "lastName", e.target.value.toUpperCase())}
+                              onChange={(e) => updateRowField(rowTarget, "lastName", e.target.value.toUpperCase())}
                               className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none font-semibold uppercase"
                             />
                           </td>
                           <td className="py-2 px-3">
                             <input
                               value={g.givenName}
-                              onChange={(e) => updateRowField(idx, "givenName", e.target.value.toUpperCase())}
+                              onChange={(e) => updateRowField(rowTarget, "givenName", e.target.value.toUpperCase())}
                               className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none uppercase"
                             />
                           </td>
                           <td className="py-2 px-2 text-center">
                             <input
                               value={g.middleInitial}
-                              onChange={(e) => updateRowField(idx, "middleInitial", e.target.value.toUpperCase())}
+                              onChange={(e) => updateRowField(rowTarget, "middleInitial", e.target.value.toUpperCase())}
                               className="w-full text-center bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none uppercase"
                             />
                           </td>
                           <td className="py-2 px-2 text-center">
                             <select
                               value={g.sex}
-                              onChange={(e) => updateRowField(idx, "sex", e.target.value)}
+                              onChange={(e) => updateRowField(rowTarget, "sex", e.target.value)}
                               className="bg-transparent text-center focus:outline-none font-semibold"
                             >
                               <option value="M">M</option>
@@ -807,7 +957,7 @@ export function Annex4SheetSuite({
                           <td className="py-2 px-3">
                             <input
                               value={g.birthdate}
-                              onChange={(e) => updateRowField(idx, "birthdate", e.target.value)}
+                              onChange={(e) => updateRowField(rowTarget, "birthdate", e.target.value)}
                               placeholder="mm/dd/yyyy"
                               className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none text-[11px]"
                             />
@@ -815,14 +965,14 @@ export function Annex4SheetSuite({
                           <td className="py-2 px-3">
                             <input
                               value={g.degreeProgram}
-                              onChange={(e) => updateRowField(idx, "degreeProgram", e.target.value)}
+                              onChange={(e) => updateRowField(rowTarget, "degreeProgram", e.target.value)}
                               className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none truncate"
                             />
                           </td>
                           <td className="py-2 px-2 text-center">
                             <select
                               value={g.yearLevel}
-                              onChange={(e) => updateRowField(idx, "yearLevel", e.target.value)}
+                              onChange={(e) => updateRowField(rowTarget, "yearLevel", e.target.value)}
                               className="bg-transparent text-center focus:outline-none"
                             >
                               <option value="1">1</option>
@@ -835,14 +985,14 @@ export function Annex4SheetSuite({
                           <td className="py-2 px-3">
                             <input
                               value={g.email}
-                              onChange={(e) => updateRowField(idx, "email", e.target.value)}
+                              onChange={(e) => updateRowField(rowTarget, "email", e.target.value)}
                               className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none text-[11px] truncate"
                             />
                           </td>
                           <td className="py-2 px-3">
                             <input
                               value={g.phone}
-                              onChange={(e) => updateRowField(idx, "phone", e.target.value)}
+                              onChange={(e) => updateRowField(rowTarget, "phone", e.target.value)}
                               className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none font-mono text-[11px]"
                             />
                           </td>
@@ -851,7 +1001,7 @@ export function Annex4SheetSuite({
                           </td>
                           <td className="py-2 px-2 text-center">
                             <button
-                              onClick={() => removeRow(idx)}
+                              onClick={() => removeRow(rowTarget)}
                               className="text-red-500 hover:text-red-700 p-1 rounded-sm hover:bg-red-50 transition-colors"
                               title="Delete grantee row"
                             >
@@ -859,11 +1009,24 @@ export function Annex4SheetSuite({
                             </button>
                           </td>
                         </tr>
-                      ))
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
               </div>
+
+              <PaginationBar
+                page={validPage}
+                pageSize={pageSize}
+                totalItems={sortedGrantees.length}
+                totalPages={totalPages}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="grantees"
+              />
             </div>
           )}
 

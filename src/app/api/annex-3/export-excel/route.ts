@@ -169,7 +169,8 @@ export async function GET(req: NextRequest) {
     ws1.getCell("E19").alignment = { horizontal: "right" };
 
     ws1.mergeCells("B20:D20");
-    ws1.getCell("B20").value = "Total TDP-TES subsidy (PHP 7,500.00 per grantee):";
+    const stipendRate = Number(formData.stipendPerGrantee) || 7500;
+    ws1.getCell("B20").value = `Total TDP-TES subsidy (PHP ${stipendRate.toLocaleString(undefined, { minimumFractionDigits: 2 })} per grantee):`;
     ws1.mergeCells("E20:F20");
     ws1.getCell("E20").value = formData.totalSubsidy;
     ws1.getCell("E20").numFmt = "₱#,##0.00";

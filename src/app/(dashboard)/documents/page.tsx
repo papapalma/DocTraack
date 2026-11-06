@@ -19,6 +19,9 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { DocumentStatus } from "@/types";
+import { useTable } from "@/hooks/use-table";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 
 interface DocItem {
   id: string;
@@ -86,6 +89,32 @@ export default function DocumentsPage() {
       return matchesSearch && matchesAnnex && matchesStatus;
     });
   }, [documents, searchQuery, selectedAnnex, selectedStatus]);
+
+  // Table Sort and Pagination Hook
+  const {
+    sortKey,
+    sortDirection,
+    onSort,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    totalItems,
+    startIndex,
+    endIndex,
+    paginatedItems: paginatedDocs,
+  } = useTable({
+    data: filteredDocs,
+    initialPageSize: 10,
+    initialSortKey: "updatedAt",
+    initialSortDirection: "desc",
+    getSortValue: (doc, key) => {
+      if (key === "annexNumber") return doc.annexType?.number || 0;
+      if (key === "creator") return doc.createdBy?.name || "";
+      return undefined;
+    },
+  });
 
   // Typo suggestion for zero search results
   const suggestedCorrection = useMemo(() => {
@@ -280,120 +309,128 @@ export default function DocumentsPage() {
               </div>
             ) : (
               <>
-              {/* Mobile Cards View (< md) */}
-              <div className="md:hidden divide-y divide-[#D6DDD8] p-3">
-                {filteredDocs.map((doc) => (
-                  <div key={doc.id} className="py-3.5 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded bg-[#DCEFDD] text-[#123F17] font-bold text-xs">
-                        Annex {doc.annexType?.number}
-                      </span>
-                      <StatusBadge status={doc.status} size="sm" />
-                    </div>
-
-                    <div>
-                      <Link
-                        href={`/documents/${doc.id}`}
-                        className="font-semibold text-sm text-[#1F2A24] hover:text-[#1B5E20] transition-colors block leading-snug"
-                      >
-                        {doc.title}
-                      </Link>
-                      <p className="text-xs text-[#55645B] mt-0.5">
-                        {doc.annexType?.name}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs text-[#55645B] pt-1 border-t border-[#D6DDD8]/50">
-                      <span>By: {doc.createdBy?.name} ({doc.createdBy?.role})</span>
-                      <span>{new Date(doc.updatedAt).toLocaleDateString()}</span>
-                    </div>
-
-                    <Link href={`/documents/${doc.id}`} className="block pt-1">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="w-full h-8 text-xs font-medium justify-center"
-                      >
-                        <Eye className="w-3.5 h-3.5 mr-1.5" />
-                        Open Document
-                      </Button>
-                    </Link>
-                  </div>
-                ))}
-              </div>
-
-              {/* Desktop Table View (md+) */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-[#F1F8F1] text-xs font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8]">
-                    <tr>
-                      <th className="py-3.5 px-4">Annex</th>
-                      <th className="py-3.5 px-4">Title & Description</th>
-                      <th className="py-3.5 px-4">Prepared By</th>
-                      <th className="py-3.5 px-4">Status</th>
-                      <th className="py-3.5 px-4">Last Updated</th>
-                      <th className="py-3.5 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#D6DDD8]">
-                    {filteredDocs.map((doc) => (
-                      <tr
-                        key={doc.id}
-                        className="hover:bg-[#F6F8F6] transition-colors group"
-                      >
-                        <td className="py-3.5 px-4">
-                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-[#DCEFDD] text-[#123F17] font-bold text-xs">
-                            A{doc.annexType?.number}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <Link
-                            href={`/documents/${doc.id}`}
-                            className="font-semibold text-[#1F2A24] hover:text-[#1B5E20] transition-colors block"
-                          >
-                            {doc.title}
-                          </Link>
-                          <span className="text-xs text-[#55645B]">
-                            {doc.annexType?.name}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <div className="text-xs font-medium text-[#1F2A24]">
-                            {doc.createdBy?.name}
-                          </div>
-                          <div className="text-[11px] text-[#55645B]">
-                            {doc.createdBy?.role}
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <StatusBadge status={doc.status} size="sm" />
-                        </td>
-                        <td className="py-3.5 px-4 text-xs text-[#55645B]">
-                          {new Date(doc.updatedAt).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <Link href={`/documents/${doc.id}`}>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              className="h-8 text-xs font-medium"
-                            >
-                              <Eye className="w-3.5 h-3.5 mr-1" />
-                              Open
-                            </Button>
-                          </Link>
-                        </td>
+                {/* Responsive Full Table with Anti-Compression & Touch Scroll */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm min-w-[920px]">
+                    <thead className="bg-[#F1F8F1] text-xs font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8] sticky top-0 z-10">
+                      <tr>
+                        <SortableTh
+                          label="Annex"
+                          sortKey="annexNumber"
+                          currentSortKey={sortKey}
+                          currentDirection={sortDirection}
+                          onSort={onSort}
+                          minWidth="95px"
+                        />
+                        <SortableTh
+                          label="Title & Description"
+                          sortKey="title"
+                          currentSortKey={sortKey}
+                          currentDirection={sortDirection}
+                          onSort={onSort}
+                          minWidth="280px"
+                        />
+                        <SortableTh
+                          label="Prepared By"
+                          sortKey="creator"
+                          currentSortKey={sortKey}
+                          currentDirection={sortDirection}
+                          onSort={onSort}
+                          minWidth="180px"
+                        />
+                        <SortableTh
+                          label="Status"
+                          sortKey="status"
+                          currentSortKey={sortKey}
+                          currentDirection={sortDirection}
+                          onSort={onSort}
+                          minWidth="140px"
+                        />
+                        <SortableTh
+                          label="Last Updated"
+                          sortKey="updatedAt"
+                          currentSortKey={sortKey}
+                          currentDirection={sortDirection}
+                          onSort={onSort}
+                          minWidth="140px"
+                        />
+                        <th className="py-3.5 px-4 text-right uppercase tracking-wider text-xs font-semibold text-[#1F2A24] min-w-[110px]">
+                          Actions
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
+                    </thead>
+                    <tbody className="divide-y divide-[#D6DDD8]">
+                      {paginatedDocs.map((doc) => (
+                        <tr
+                          key={doc.id}
+                          className="hover:bg-[#F6F8F6] transition-colors group"
+                        >
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-[#DCEFDD] text-[#123F17] font-bold text-xs tabular-nums shadow-2xs">
+                              A{doc.annexType?.number}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <Link
+                              href={`/documents/${doc.id}`}
+                              className="font-semibold text-[#1F2A24] hover:text-[#1B5E20] transition-colors block break-words"
+                            >
+                              {doc.title}
+                            </Link>
+                            <span className="text-xs text-[#55645B] block line-clamp-1 mt-0.5">
+                              {doc.annexType?.name}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="text-xs font-semibold text-[#1F2A24]">
+                              {doc.createdBy?.name || "System"}
+                            </div>
+                            <div className="text-[11px] text-[#55645B]">
+                              {doc.createdBy?.role || "Operational"}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <StatusBadge status={doc.status} size="sm" />
+                          </td>
+                          <td className="py-3.5 px-4 text-xs text-[#55645B] tabular-nums whitespace-nowrap">
+                            {new Date(doc.updatedAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <Link href={`/documents/${doc.id}`}>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="h-8 text-xs font-medium apple-press"
+                              >
+                                <Eye className="w-3.5 h-3.5 mr-1" />
+                                Open
+                              </Button>
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <PaginationBar
+                  page={page}
+                  pageSize={pageSize}
+                  totalItems={totalItems}
+                  totalPages={totalPages}
+                  startIndex={startIndex}
+                  endIndex={endIndex}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  itemLabel="documents"
+                />
+              </>
+            )}
           </StateContainer>
         </CardContent>
       </Card>

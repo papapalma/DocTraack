@@ -5,6 +5,12 @@ import { logAudit } from "@/lib/audit";
 import { Role, ApplicationStatus } from "@prisma/client";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import {
+  generateBase32Secret,
+  formatSecretForDisplay,
+  generateOTPAuthUrl,
+} from "@/lib/totp";
+import { generateQRCodeSVG } from "@/lib/qr";
+import {
   isValidEmail,
   validatePassword,
   sanitizeText,
@@ -47,8 +53,46 @@ export async function GET(req: NextRequest) {
         (app) => app.status === ApplicationStatus.ACCEPTED
       );
 
-      // Extract harmonized profile data
-      const d = (application?.formData as any) || {};
+      // Extract harmonized profile data from latest application or saved student profile
+      const userProfile = (user.studentProfile as any) || {};
+      const appFormData = (application?.formData as any) || {};
+      const d: Record<string, any> = { ...userProfile, ...appFormData };
+
+      // Ensure missing/empty values in application formData fall back to studentProfile
+      for (const k of [
+        "gender",
+        "birthdate",
+        "street_barangay",
+        "town_city",
+        "province",
+        "zipcode",
+        "contact_number",
+        "father_last_name",
+        "father_given_name",
+        "father_middle_name",
+        "father_contact_number",
+        "father_email",
+        "mother_last_name",
+        "mother_given_name",
+        "mother_middle_name",
+        "mother_contact_number",
+        "mother_email",
+        "parent_contact_number",
+        "parent_email",
+        "hei_uii",
+        "hei_name",
+        "hei_campus",
+        "campus",
+        "course_degree",
+        "program_course",
+        "year_level",
+        "student_id",
+        "student_id_number",
+      ]) {
+        if (!d[k] && userProfile[k]) {
+          d[k] = userProfile[k];
+        }
+      }
 
       let givenName = d.given_name || "";
       let lastName = d.last_name || "";
@@ -133,12 +177,81 @@ export async function GET(req: NextRequest) {
       where: whereClause,
       include: {
         call: true,
-        student: { select: { id: true, name: true, email: true } },
+        student: { select: { id: true, name: true, email: true, studentProfile: true } },
       },
       orderBy: { submittedAt: "desc" },
     });
 
-    return NextResponse.json({ applications });
+    // Harmonize applications data and auto-repair any existing records with missing profile fields
+    const harmonizedApplications = [];
+    const updatesToPersist: Promise<any>[] = [];
+
+    for (const app of applications) {
+      const studentProfile = ((app.student as any)?.studentProfile as Record<string, any>) || {};
+      const appFormData = ((app.formData as any) as Record<string, any>) || {};
+      let needsDbUpdate = false;
+
+      const mergedFormData: Record<string, any> = { ...studentProfile, ...appFormData };
+
+      for (const key of [
+        "gender",
+        "birthdate",
+        "street_barangay",
+        "town_city",
+        "province",
+        "zipcode",
+        "contact_number",
+        "father_last_name",
+        "father_given_name",
+        "father_middle_name",
+        "father_contact_number",
+        "father_email",
+        "mother_last_name",
+        "mother_given_name",
+        "mother_middle_name",
+        "mother_contact_number",
+        "mother_email",
+        "parent_contact_number",
+        "parent_email",
+        "hei_uii",
+        "hei_name",
+        "hei_campus",
+        "campus",
+        "course_degree",
+        "program_course",
+        "year_level",
+        "student_id",
+        "student_id_number",
+      ]) {
+        if (!appFormData[key] && studentProfile[key]) {
+          mergedFormData[key] = studentProfile[key];
+          needsDbUpdate = true;
+        }
+      }
+
+      if (needsDbUpdate) {
+        updatesToPersist.push(
+          prisma.application
+            .update({
+              where: { id: app.id },
+              data: { formData: mergedFormData },
+            })
+            .catch((err) => console.error("Auto-sync repair error for application:", app.id, err))
+        );
+      }
+
+      harmonizedApplications.push({
+        ...app,
+        formData: mergedFormData,
+      });
+    }
+
+    if (updatesToPersist.length > 0) {
+      // Fire non-blocking auto-repair persistence in the background
+      Promise.all(updatesToPersist).catch(() => {});
+    }
+
+    return NextResponse.json({ applications: harmonizedApplications });
   } catch (error) {
     console.error("Fetch registrations error:", error);
     return NextResponse.json(
@@ -326,15 +439,11 @@ export async function POST(req: NextRequest) {
     const passwordHash = await hashPassword(password);
     const fullName = `${given_name.trim()} ${middle_name ? middle_name.trim() + " " : ""}${last_name.trim()}${ext_name ? " " + ext_name.trim() : ""}`;
 
-    // 1. Create the Student User
-    const newUser = await prisma.user.create({
-      data: {
-        name: fullName,
-        email: normalizedEmail,
-        passwordHash,
-        role: Role.STUDENT,
-      },
-    });
+    // 1. Generate Microsoft Authenticator TOTP Secret & QR Code
+    const totpSecret = generateBase32Secret(20);
+    const formattedSecret = formatSecretForDisplay(totpSecret);
+    const otpauthUrl = generateOTPAuthUrl(normalizedEmail, totpSecret);
+    const qrSvg = generateQRCodeSVG(otpauthUrl);
 
     // 2. Prepare standardized Annex 1 payload with harmonized dual-keys
     const annex1FormData = {
@@ -373,72 +482,42 @@ export async function POST(req: NextRequest) {
       parent_email: parent_email ? sanitizeText(parent_email, 80) : "",
     };
 
-    // Find active call within open time window if exists
-    const now = new Date();
-    const activeCall = await prisma.applicantCall.findFirst({
-      where: {
-        isActive: true,
-        startDate: { lte: now },
-        deadline: { gte: now },
-      },
-      orderBy: { batchNumber: "asc" },
-    });
-
-    const assignedBatch = activeCall ? activeCall.batchNumber : 1;
-
-    // Generate unique batch-prefixed tracking code
-    const trackingCode = `MINSU-TDP-${now.getFullYear()}-B${assignedBatch}-${crypto
-      .randomBytes(3)
-      .toString("hex")
-      .toUpperCase()}`;
-
-    // 3. Create the Application record
-    const application = await prisma.application.create({
+    // 3. Create the Student User (Without auto-applying to a call)
+    const newUser = await prisma.user.create({
       data: {
-        studentId: newUser.id,
-        callId: activeCall ? activeCall.id : null,
-        batchNumber: assignedBatch,
-        formData: annex1FormData,
-        trackingCode,
-        status: ApplicationStatus.SUBMITTED, // Pending Validation
-      },
-      include: {
-        call: true,
-      },
-    });
-
-    // 4. Create initial notification for student
-    await prisma.notification.create({
-      data: {
-        userId: newUser.id,
-        title: "Annex 1 Registration Received",
-        message: `Your TDP Annex 1 student registration (Ref: ${trackingCode}) was successfully submitted and is currently queued for Staff verification.`,
-        link: "/portal",
+        name: fullName,
+        email: normalizedEmail,
+        passwordHash,
+        role: Role.STUDENT,
+        studentProfile: annex1FormData,
+        twoFactorSecret: totpSecret,
+        twoFactorEnabled: false,
+        authenticatorLocked: false,
       },
     });
 
-    // 5. Audit Log
+    // 4. Audit Log
     await logAudit({
       actorId: newUser.id,
-      action: "STUDENT_ANNEX1_REGISTER",
-      entity: "application",
-      entityId: application.id,
-      details: { trackingCode, studentId: newUser.id },
+      action: "STUDENT_REGISTRATION",
+      entity: "user",
+      entityId: newUser.id,
+      details: { email: newUser.email, studentId: cleanStudentId },
     });
-
-    // 6. Automatically sign the user in with a session
-    await createSession(newUser.id);
 
     return NextResponse.json(
       {
-        message: "Registration successful",
+        message: "Registration successful. Please lock your account with Microsoft Authenticator.",
         user: {
           id: newUser.id,
           name: newUser.name,
           email: newUser.email,
           role: newUser.role,
         },
-        application,
+        secret: totpSecret,
+        formattedSecret,
+        qrSvg,
+        otpauthUrl,
       },
       { status: 201 }
     );
@@ -508,13 +587,24 @@ export async function PUT(req: NextRequest) {
     });
     const isLockedStudentId = !!acceptedApp;
 
-    // Retrieve the student's latest application (if any)
+    // Retrieve the student's persistent profile and latest application (if any)
+    const userRecord = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { studentProfile: true, name: true, email: true },
+    });
+
     const latestApp = await prisma.application.findFirst({
       where: { studentId: user.id },
       orderBy: { submittedAt: "desc" },
     });
 
-    const prevFormData = (latestApp?.formData as any) || {};
+    const userProfile = ((userRecord?.studentProfile as any) as Record<string, any>) || {};
+    const appFormData = ((latestApp?.formData as any) as Record<string, any>) || {};
+
+    const prevFormData: Record<string, any> = {
+      ...userProfile,
+      ...appFormData,
+    };
     const existingStudentId = (
       prevFormData.student_id ||
       prevFormData.student_id_number ||
@@ -680,14 +770,8 @@ export async function PUT(req: NextRequest) {
         ? sanitizeText(ext_name, 20)
         : prevFormData.ext_name || "";
 
-    // Update User.name if name fields provided
+    // Compute updated full name if name fields provided
     const newFullName = `${cleanGiven} ${cleanMiddle ? cleanMiddle + " " : ""}${cleanLast}${cleanExt ? " " + cleanExt : ""}`.trim();
-    if (newFullName && newFullName.length >= 2) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { name: newFullName },
-      });
-    }
 
     const updatedFormData = {
       ...prevFormData,
@@ -768,25 +852,45 @@ export async function PUT(req: NextRequest) {
       latest_gwa: finalGwa,
     };
 
+    const userUpdateData: any = {
+      studentProfile: updatedFormData,
+    };
+    if (newFullName && newFullName.length >= 2) {
+      userUpdateData.name = newFullName;
+    }
+
     let targetApplicationId = latestApp?.id;
+
     if (latestApp) {
-      await prisma.application.update({
-        where: { id: latestApp.id },
-        data: { formData: updatedFormData },
-      });
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: user.id },
+          data: userUpdateData,
+        }),
+        prisma.application.update({
+          where: { id: latestApp.id },
+          data: { formData: updatedFormData },
+        }),
+      ]);
     } else {
       // If student never had an application, create a base registration record
       const now = new Date();
       const trackingCode = `MINSU-TDP-${now.getFullYear()}-B1-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
-      const newApp = await prisma.application.create({
-        data: {
-          studentId: user.id,
-          batchNumber: 1,
-          formData: updatedFormData,
-          trackingCode,
-          status: ApplicationStatus.SUBMITTED,
-        },
-      });
+      const [_, newApp] = await prisma.$transaction([
+        prisma.user.update({
+          where: { id: user.id },
+          data: userUpdateData,
+        }),
+        prisma.application.create({
+          data: {
+            studentId: user.id,
+            batchNumber: 1,
+            formData: updatedFormData,
+            trackingCode,
+            status: ApplicationStatus.SUBMITTED,
+          },
+        }),
+      ]);
       targetApplicationId = newApp.id;
     }
 

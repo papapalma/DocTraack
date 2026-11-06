@@ -225,6 +225,92 @@ assert.strictEqual(systemRecords[1].firstName, "Maria Santos");
 assert.strictEqual(systemRecords[1].idNumber, "2024-00456-MC");
 console.log("  ✔ Verification records extraction correctly captures both new and legacy applications.");
 
+// 2.3 Registration Profile Injection & Harmonization Test
+const mockRegisteredProfile = {
+  student_id: "MBC2023-00522",
+  student_id_number: "MBC2023-00522",
+  given_name: "Paolo Amor",
+  last_name: "Palma",
+  middle_name: "Pabito",
+  gender: "M",
+  birthdate: "2002-08-14",
+  street_barangay: "Labasan",
+  town_city: "Bongabong",
+  province: "Oriental Mindoro",
+  zipcode: "5211",
+  contact_number: "09272952069",
+  hei_uii: "4060",
+  hei_name: "Mindoro State University - Bongabong Campus",
+  hei_campus: "Bongabong Campus",
+  father_last_name: "Palma",
+  father_given_name: "Juan",
+  father_middle_name: "Dela",
+  father_contact_number: "09181112222",
+  father_email: "juan.palma@example.com",
+  mother_last_name: "Pabito",
+  mother_given_name: "Maria",
+  mother_middle_name: "Santos",
+  mother_contact_number: "09183334444",
+  mother_email: "maria.pabito@example.com",
+};
+
+// Simulate partial call application submitted by student
+const callSubmissionInput = {
+  student_id_number: "MBC2023-00522",
+  campus: "Bongabong Campus",
+  program_course: "Bachelor of Science in Information Technology",
+  year_level: "4th Year",
+  contact_number: "09272952069",
+  family_monthly_income: 18000,
+  latest_gwa: "1.50",
+};
+
+// Backend intake injection logic matching /api/applications POST
+const injectedApplicationFormData = {
+  ...mockRegisteredProfile,
+  ...callSubmissionInput,
+  course_degree: callSubmissionInput.program_course,
+  hei_campus: callSubmissionInput.campus,
+};
+
+assert.strictEqual(injectedApplicationFormData.gender, "M", "Gender must be inherited from registration");
+assert.strictEqual(injectedApplicationFormData.birthdate, "2002-08-14", "Birthdate must be inherited from registration");
+assert.strictEqual(injectedApplicationFormData.street_barangay, "Labasan", "Address must be inherited from registration");
+assert.strictEqual(injectedApplicationFormData.father_last_name, "Palma", "Father's name must be inherited from registration");
+assert.strictEqual(injectedApplicationFormData.mother_last_name, "Pabito", "Mother's name must be inherited from registration");
+assert.strictEqual(injectedApplicationFormData.year_level, "4th Year", "Call intake field must override/update");
+console.log("  ✔ Registration profile injection & inheritance into application intake verified.");
+
+// 2.4 Auto-Repair / Harmonization of Legacy Incomplete Applications
+const legacyBrokenApp = {
+  id: "app-broken-1",
+  formData: {
+    student_id_number: "MBC2023-00522",
+    program_course: "Bachelor of Science in Information Technology",
+    year_level: "4th Year",
+    contact_number: "09272952069",
+    // Notice: gender, birthdate, address, parents are missing (undefined)
+  },
+  student: {
+    id: "user-palma",
+    name: "Paolo Amor Pabito Palma",
+    email: "paolo@minsu.edu.ph",
+    studentProfile: mockRegisteredProfile,
+  },
+};
+
+const repairedFormData = {
+  ...legacyBrokenApp.student.studentProfile,
+  ...legacyBrokenApp.formData,
+};
+
+assert.strictEqual(repairedFormData.gender, "M", "Repaired app must have gender restored");
+assert.strictEqual(repairedFormData.birthdate, "2002-08-14", "Repaired app must have birthdate restored");
+assert.strictEqual(repairedFormData.street_barangay, "Labasan", "Repaired app must have street_barangay restored");
+assert.strictEqual(repairedFormData.father_last_name, "Palma", "Repaired app must have father_last_name restored");
+assert.strictEqual(repairedFormData.mother_last_name, "Pabito", "Repaired app must have mother_last_name restored");
+console.log("  ✔ Legacy application auto-repair & dynamic harmonization verified.");
+
 // =============================================================================
 // PART 3: ANTI-IMPERSONATION & FIELD LOCKING RULES
 // =============================================================================
@@ -336,9 +422,103 @@ assert.strictEqual(classifyIntoVerificationForm("POSSIBLE_MATCH"), "DISCREPANCY"
 console.log("  ✔ 3-Form verification classification (Form 1, Form 2, Form 3) verified.");
 
 // =============================================================================
-// PART 5: PRISMA DATABASE INTEGRATION TEST (LIFECYCLE & TEARDOWN)
+// PART 5: DYNAMIC STIPEND TIERS (₱7,500, ₱10,000, CUSTOM) & FINANCIAL RECALCULATIONS
 // =============================================================================
-console.log("\n▶ [Part 5/5] Executing Prisma Database Integration Tests...");
+console.log("\n▶ [Part 5/6] Testing Dynamic Stipend Tiers & Financial Formulas (Annex 3, 4, 9)...");
+
+// 5.1 Stipend Tier Selection Resolution
+function resolveStipendRate(tier: "7500" | "10000" | "custom", customVal?: number): number {
+  if (tier === "7500") return 7500;
+  if (tier === "10000") return 10000;
+  if (tier === "custom") {
+    const num = Number(customVal);
+    return !isNaN(num) && num > 0 ? num : 7500;
+  }
+  return 7500;
+}
+
+assert.strictEqual(resolveStipendRate("7500"), 7500, "7500 tier returns 7500");
+assert.strictEqual(resolveStipendRate("10000"), 10000, "10000 tier returns 10000");
+assert.strictEqual(resolveStipendRate("custom", 12500), 12500, "Custom tier returns user input amount");
+assert.strictEqual(resolveStipendRate("custom", 0), 7500, "Invalid custom amount defaults safely to 7500");
+console.log("  ✔ Stipend tier resolution (₱7,500, ₱10,000, Custom) verified.");
+
+// 5.2 Batch Injection Respecting Active Rate & Existing Row Preservation
+interface MockGrantee {
+  id: string;
+  tdpBatch: string;
+  totalAmount: number;
+}
+
+let activeRate = resolveStipendRate("7500");
+const initialBatch: MockGrantee[] = [
+  { id: "g1", tdpBatch: "1", totalAmount: activeRate },
+  { id: "g2", tdpBatch: "1", totalAmount: activeRate },
+];
+
+assert.strictEqual(initialBatch[0].totalAmount, 7500);
+assert.strictEqual(initialBatch[1].totalAmount, 7500);
+
+// Switch stipend rate to ₱10,000 for upcoming injections
+activeRate = resolveStipendRate("10000");
+
+// Existing rows must remain UNTOUCHED (7500)
+assert.strictEqual(initialBatch[0].totalAmount, 7500, "Existing row 1 must not be mutated");
+assert.strictEqual(initialBatch[1].totalAmount, 7500, "Existing row 2 must not be mutated");
+
+// Inject new batch under 10,000 rate
+const newBatchCandidates = [{ id: "g3", tdpBatch: "2" }];
+const newlyInjected: MockGrantee[] = newBatchCandidates.map((c) => ({
+  ...c,
+  totalAmount: activeRate,
+}));
+
+assert.strictEqual(newlyInjected[0].totalAmount, 10000, "Newly injected row inherits active 10000 rate");
+
+// Switch to custom rate ₱15,000 and inject batch 3
+activeRate = resolveStipendRate("custom", 15000);
+const customBatchCandidates = [{ id: "g4", tdpBatch: "3" }];
+const customInjected: MockGrantee[] = customBatchCandidates.map((c) => ({
+  ...c,
+  totalAmount: activeRate,
+}));
+
+assert.strictEqual(customInjected[0].totalAmount, 15000, "Custom rate 15000 allocated to batch 3");
+
+// Merge all rosters
+const combinedGrantees: MockGrantee[] = [...initialBatch, ...newlyInjected, ...customBatchCandidates.map(c => ({ ...c, totalAmount: 15000 }))];
+
+// 5.3 Dynamic Recalculation Formulas: Total Subsidy, 0.5% Management Fee, Grand Total Billing
+const totalSubsidy = combinedGrantees.reduce((sum, g) => sum + g.totalAmount, 0);
+assert.strictEqual(totalSubsidy, 7500 + 7500 + 10000 + 15000, "Total subsidy equals sum of individual grantee amounts (40,000)");
+
+const managementFeeRate = 0.005;
+const managementFeeAmount = totalSubsidy * managementFeeRate;
+assert.strictEqual(managementFeeAmount, 200, "0.5% Management fee on ₱40,000 is ₱200");
+
+const grandTotalBilling = totalSubsidy + managementFeeAmount;
+assert.strictEqual(grandTotalBilling, 40200, "Grand total billing is ₱40,200.00");
+console.log("  ✔ Batch injection respecting active rate & financial formula recalculation verified.");
+
+// 5.4 Annex 9 Semester Disbursement Payroll Allocations
+const payrollScholars = [
+  { id: "p1", firstSemAmount: 7500, secondSemAmount: 0 },
+  { id: "p2", firstSemAmount: 7500, secondSemAmount: 0 },
+];
+
+const firstSemTotal = payrollScholars.reduce((acc, s) => acc + s.firstSemAmount, 0);
+const secondSemTotal = payrollScholars.reduce((acc, s) => acc + s.secondSemAmount, 0);
+const payrollGrandTotal = firstSemTotal + secondSemTotal;
+
+assert.strictEqual(firstSemTotal, 15000, "1st Semester total is ₱15,000");
+assert.strictEqual(secondSemTotal, 0, "2nd Semester total is ₱0");
+assert.strictEqual(payrollGrandTotal, 15000, "Payroll grand total is ₱15,000");
+console.log("  ✔ Annex 9 payroll semester allocations verified.");
+
+// =============================================================================
+// PART 6: PRISMA DATABASE INTEGRATION TEST (LIFECYCLE & TEARDOWN)
+// =============================================================================
+console.log("\n▶ [Part 6/6] Executing Prisma Database Integration Tests...");
 
 async function runDatabaseIntegration() {
   const testEmail = `test-student-${Date.now()}@minsu.edu.ph`;

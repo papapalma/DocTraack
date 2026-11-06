@@ -6,6 +6,9 @@ import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
 import { Annex8FormData, Annex8CheckEntry, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
+import { compareValues } from "@/hooks/use-table";
 import { useDownload } from "@/components/providers/download-provider";
 import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
 import {
@@ -431,6 +434,69 @@ export function Annex8SheetSuite({
     );
   }, [formData.entries, searchTerm]);
 
+  // Sort and pagination state for Check Entries table
+  const [sortKey, setSortKey] = useState<string | null>("checkDate");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>("desc");
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      if (sortDirection === "asc") setSortDirection("desc");
+      else if (sortDirection === "desc") {
+        setSortKey(null);
+        setSortDirection(null);
+      } else {
+        setSortDirection("asc");
+      }
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+    setPage(1);
+  };
+
+  const sortedEntries = useMemo(() => {
+    if (!sortKey || !sortDirection) return filteredEntries;
+    return [...filteredEntries].sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      if (sortKey === "checkDate") {
+        valA = a.checkDate;
+        valB = b.checkDate;
+      } else if (sortKey === "checkNo") {
+        valA = a.checkNo;
+        valB = b.checkNo;
+      } else if (sortKey === "dvPayrollNo") {
+        valA = a.dvPayrollNo;
+        valB = b.dvPayrollNo;
+      } else if (sortKey === "payee") {
+        valA = a.payee;
+        valB = b.payee;
+      } else if (sortKey === "purposeOfPayment") {
+        valA = a.purposeOfPayment;
+        valB = b.purposeOfPayment;
+      } else if (sortKey === "amount") {
+        valA = a.amount;
+        valB = b.amount;
+      }
+      return compareValues(valA, valB, sortDirection);
+    });
+  }, [filteredEntries, sortKey, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedEntries.length / pageSize));
+  const validPage = Math.max(1, Math.min(page, totalPages));
+  const startIndex = sortedEntries.length === 0 ? 0 : (validPage - 1) * pageSize + 1;
+  const endIndex = Math.min(validPage * pageSize, sortedEntries.length);
+  const paginatedEntries = useMemo(() => {
+    const start = (validPage - 1) * pageSize;
+    return sortedEntries.slice(start, start + pageSize);
+  }, [sortedEntries, validPage, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
+
   return (
     <div className="space-y-6">
       {/* Top Action Bar */}
@@ -670,19 +736,19 @@ export function Annex8SheetSuite({
                     <thead className="bg-neutral-50/80 backdrop-blur-xs border-b border-line text-ink-muted text-[11px] font-semibold uppercase tracking-wider select-none">
                       <tr>
                         <th className="py-3 px-2 w-12 text-center">#</th>
-                        <th className="py-3 px-2.5 w-40 min-w-[155px]">Check Date</th>
-                        <th className="py-3 px-2.5 w-44 min-w-[160px]">Check No.</th>
-                        <th className="py-3 px-2.5 w-44 min-w-[160px]">DV / Payroll No.</th>
-                        <th className="py-3 px-2.5 w-64 min-w-[240px]">Payee</th>
-                        <th className="py-3 px-2.5 w-44 min-w-[160px]">Purpose (TES/ASC)</th>
-                        <th className="py-3 px-2.5 w-44 min-w-[165px] text-right">Amount (₱)</th>
+                        <SortableTh label="Check Date" sortKey="checkDate" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="155px" />
+                        <SortableTh label="Check No." sortKey="checkNo" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="160px" />
+                        <SortableTh label="DV / Payroll No." sortKey="dvPayrollNo" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="160px" />
+                        <SortableTh label="Payee" sortKey="payee" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="240px" />
+                        <SortableTh label="Purpose (TES/ASC)" sortKey="purposeOfPayment" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="160px" />
+                        <SortableTh label="Amount (₱)" sortKey="amount" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="165px" align="right" />
                         <th className="py-3 px-2 w-14 text-center">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line/60">
-                      {filteredEntries.map((entry, index) => (
+                      {paginatedEntries.map((entry, index) => (
                         <tr key={entry.id} className="group hover:bg-minsu-green-50/40 transition-colors duration-150">
-                          <td className="py-2 px-2 text-center text-ink-muted/80 font-mono text-[11px]">{index + 1}</td>
+                          <td className="py-2 px-2 text-center text-ink-muted/80 font-mono text-[11px]">{(validPage - 1) * pageSize + index + 1}</td>
                           <td className="py-1.5 px-2">
                             <input
                               type="date"
@@ -786,6 +852,18 @@ export function Annex8SheetSuite({
                     </tfoot>
                   </table>
                 </div>
+
+                <PaginationBar
+                  page={validPage}
+                  pageSize={pageSize}
+                  totalItems={sortedEntries.length}
+                  totalPages={totalPages}
+                  startIndex={startIndex}
+                  endIndex={endIndex}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  itemLabel="check entries"
+                />
               </div>
             </div>
           )}

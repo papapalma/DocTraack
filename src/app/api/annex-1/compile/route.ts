@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     const applications = await prisma.application.findMany({
       where: whereClause,
       include: {
-        student: { select: { id: true, name: true, email: true } },
+        student: { select: { id: true, name: true, email: true, studentProfile: true } },
       },
       orderBy: [{ batchNumber: "asc" }, { submittedAt: "asc" }],
     });
@@ -78,7 +78,44 @@ export async function POST(req: NextRequest) {
 
     // Format students with 1-indexed SEQ
     const formattedStudents = applications.map((app, index) => {
-      const data = (app.formData as any) || {};
+      const studentProfile = ((app.student as any)?.studentProfile as Record<string, any>) || {};
+      const appFormData = ((app.formData as any) as Record<string, any>) || {};
+      const data: Record<string, any> = { ...studentProfile, ...appFormData };
+
+      for (const key of [
+        "gender",
+        "birthdate",
+        "street_barangay",
+        "town_city",
+        "province",
+        "zipcode",
+        "contact_number",
+        "father_last_name",
+        "father_given_name",
+        "father_middle_name",
+        "father_contact_number",
+        "father_email",
+        "mother_last_name",
+        "mother_given_name",
+        "mother_middle_name",
+        "mother_contact_number",
+        "mother_email",
+        "parent_contact_number",
+        "parent_email",
+        "hei_uii",
+        "hei_name",
+        "hei_campus",
+        "campus",
+        "course_degree",
+        "program_course",
+        "year_level",
+        "student_id",
+        "student_id_number",
+      ]) {
+        if (!data[key] && studentProfile[key]) {
+          data[key] = studentProfile[key];
+        }
+      }
 
       let lastName = data.last_name || "";
       let givenName = data.given_name || "";

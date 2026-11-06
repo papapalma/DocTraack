@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/hooks/use-session";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -35,6 +35,9 @@ import {
   FileText,
 } from "lucide-react";
 import { CertificateModal, CertificateStudentData } from "@/components/certificate/certificate-modal";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
+import { SortDirection } from "@/hooks/use-table";
 
 interface VerificationRunSummary {
   totalChed: number;
@@ -142,6 +145,52 @@ export default function VerificationPage() {
   const [schoolFilter, setSchoolFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [schoolsList, setSchoolsList] = useState<string[]>([]);
+
+  // Table Sorting
+  const [sortKey, setSortKey] = useState<string | null>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  const handleSort = useCallback((key: string) => {
+    setSortKey((prevKey) => {
+      if (prevKey !== key) {
+        setSortDirection("asc");
+        return key;
+      }
+      setSortDirection((prevDir) => {
+        if (prevDir === "asc") return "desc";
+        if (prevDir === "desc") return null;
+        return "asc";
+      });
+      return prevKey;
+    });
+  }, []);
+
+  const sortedResults = useMemo(() => {
+    if (!sortKey || !sortDirection) return results;
+    return [...results].sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      if (sortKey === "name") {
+        valA = `${a.lastName || ""}, ${a.firstName || ""}`;
+        valB = `${b.lastName || ""}, ${b.firstName || ""}`;
+      } else if (sortKey === "studentIdNo") {
+        valA = a.studentIdNo || "";
+        valB = b.studentIdNo || "";
+      } else if (sortKey === "school") {
+        valA = a.school || "";
+        valB = b.school || "";
+      } else if (sortKey === "status") {
+        valA = a.status || "";
+        valB = b.status || "";
+      }
+
+      if (valA === valB) return 0;
+      if (!valA) return 1;
+      if (!valB) return -1;
+      const res = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: "base" });
+      return sortDirection === "asc" ? res : -res;
+    });
+  }, [results, sortKey, sortDirection]);
 
   // Previous Runs Modal State
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
@@ -1306,15 +1355,48 @@ export default function VerificationPage() {
           {/* Results Table */}
           <Card className="apple-shadow border-[#D6DDD8] rounded-2xl overflow-hidden bg-white">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full text-left border-collapse text-xs min-w-[980px]">
                 <thead>
-                  <tr className="bg-[#F6F8F6] border-b border-[#D6DDD8] text-[#55645B] font-semibold uppercase tracking-wider">
-                    <th className="py-3 px-4">Student Name</th>
-                    <th className="py-3 px-4">Registrar ID</th>
-                    <th className="py-3 px-4">Campus / School</th>
-                    <th className="py-3 px-4 text-center">Status</th>
-                    <th className="py-3 px-4 text-center">Sources</th>
-                    <th className="py-3 px-4 text-right">Action / Certification</th>
+                  <tr className="bg-[#F6F8F6] border-b border-[#D6DDD8] text-[#55645B] font-semibold uppercase tracking-wider sticky top-0 z-10">
+                    <SortableTh
+                      label="Student Name"
+                      sortKey="name"
+                      currentSortKey={sortKey}
+                      currentDirection={sortDirection}
+                      onSort={handleSort}
+                      minWidth="220px"
+                    />
+                    <SortableTh
+                      label="Registrar ID"
+                      sortKey="studentIdNo"
+                      currentSortKey={sortKey}
+                      currentDirection={sortDirection}
+                      onSort={handleSort}
+                      minWidth="140px"
+                    />
+                    <SortableTh
+                      label="Campus / School"
+                      sortKey="school"
+                      currentSortKey={sortKey}
+                      currentDirection={sortDirection}
+                      onSort={handleSort}
+                      minWidth="200px"
+                    />
+                    <SortableTh
+                      label="Status"
+                      sortKey="status"
+                      currentSortKey={sortKey}
+                      currentDirection={sortDirection}
+                      onSort={handleSort}
+                      minWidth="160px"
+                      align="center"
+                    />
+                    <th className="py-3 px-4 text-center uppercase tracking-wider text-[11px] font-semibold text-[#55645B] min-w-[140px]">
+                      Sources
+                    </th>
+                    <th className="py-3 px-4 text-right uppercase tracking-wider text-[11px] font-semibold text-[#55645B] min-w-[160px]">
+                      Action / Certification
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#D6DDD8]">
@@ -1332,28 +1414,28 @@ export default function VerificationPage() {
                       </td>
                     </tr>
                   ) : (
-                    results.map((item) => (
+                    sortedResults.map((item) => (
                       <tr
                         key={item.id}
                         className={`hover:bg-[#F1F8F1]/40 transition-colors ${
                           item.status === "POSSIBLE_MATCH" ? "bg-amber-50/30" : ""
                         }`}
                       >
-                        <td className="py-3 px-4 font-bold text-[#1F2A24]">
+                        <td className="py-3.5 px-4 font-bold text-[#1F2A24] break-words">
                           {item.lastName}, {item.firstName} {item.middleName || ""}
                         </td>
-                        <td className="py-3 px-4 font-mono font-medium text-[#123F17]">
+                        <td className="py-3.5 px-4 font-mono font-medium text-[#123F17] tabular-nums whitespace-nowrap">
                           {item.studentIdNo || (
                             <span className="text-[#55645B] italic font-sans">Not assigned</span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-[#55645B] max-w-xs truncate" title={item.school}>
+                        <td className="py-3.5 px-4 text-[#55645B] break-words" title={item.school}>
                           {item.school}
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
                           {renderStatusBadge(item.status, item.confidenceScore)}
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
                           <div className="inline-flex items-center gap-1">
                             <span
                               className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
@@ -1381,7 +1463,7 @@ export default function VerificationPage() {
                             </span>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           {item.status === "ENROLLED_NON_SCHOLAR" && (
                             <Button
                               type="button"
@@ -1422,38 +1504,21 @@ export default function VerificationPage() {
             </div>
 
             {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="p-4 bg-[#F6F8F6] border-t border-[#D6DDD8] flex items-center justify-between text-xs text-[#55645B]">
-                <div>
-                  Showing {(page - 1) * pageSize + 1} to{" "}
-                  {Math.min(page * pageSize, totalCount)} of {totalCount} records
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                    className="apple-press text-xs h-8 px-3 rounded-lg border-[#D6DDD8]"
-                  >
-                    Previous
-                  </Button>
-                  <span className="font-semibold text-[#1F2A24]">
-                    Page {page} of {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                    className="apple-press text-xs h-8 px-3 rounded-lg border-[#D6DDD8]"
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
+            <PaginationBar
+              page={page}
+              pageSize={pageSize}
+              totalItems={totalCount}
+              totalPages={totalPages}
+              startIndex={totalCount === 0 ? 0 : (page - 1) * pageSize + 1}
+              endIndex={totalCount === 0 ? 0 : Math.min(page * pageSize, totalCount)}
+              onPageChange={setPage}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                setPage(1);
+              }}
+              pageSizeOptions={[10, 25, 50, 100]}
+              itemLabel="records"
+            />
           </Card>
         </div>
       )}

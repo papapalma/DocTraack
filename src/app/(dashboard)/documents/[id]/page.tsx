@@ -31,7 +31,13 @@ import {
   Download,
   Printer,
   FileText,
+  Search,
+  SearchX,
+  RotateCcw,
 } from "lucide-react";
+import { useTable } from "@/hooks/use-table";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 import { PrintPreviewModal } from "@/components/documents/print-preview-modal";
 import { Logo } from "@/components/ui/logo";
 import { PaperSize } from "@/types";
@@ -43,6 +49,159 @@ import { Annex7Viewer } from "@/components/documents/annex-7-viewer";
 import { Annex8Viewer } from "@/components/documents/annex-8-viewer";
 import { Annex9Viewer } from "@/components/documents/annex-9-viewer";
 import { Annex10Viewer } from "@/components/documents/annex-10-viewer";
+
+function Annex1GranteesTable({ students, documentId }: { students: any[]; documentId: string }) {
+  const {
+    searchQuery,
+    setSearchQuery,
+    sortKey,
+    sortDirection,
+    onSort,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    totalItems,
+    startIndex,
+    endIndex,
+    paginatedItems: paginatedStudents,
+  } = useTable({
+    data: students,
+    initialPageSize: 10,
+    initialSortKey: "seq",
+    initialSortDirection: "asc",
+    searchFields: [
+      (st) => st.student_id,
+      (st) => `${st.last_name || ""} ${st.given_name || ""}`,
+      (st) => st.course_degree,
+      (st) => st.hei_campus || st.hei_name,
+      (st) => `${st.street_barangay || ""} ${st.town_city || ""}`,
+    ],
+    getSortValue: (st, key) => {
+      if (key === "seq") return Number(st.seq || 0);
+      if (key === "batch_number") return Number(st.batch_number || 1);
+      if (key === "student_id") return st.student_id || "";
+      if (key === "name") return `${st.last_name || ""}, ${st.given_name || ""}`;
+      if (key === "course_degree") return st.course_degree || "";
+      if (key === "year_level") return Number(st.year_level || 1);
+      if (key === "campus") return st.hei_campus || st.hei_name || "";
+      return undefined;
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 border-b border-[#D6DDD8] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4 text-[#1B5E20]" />
+            Annex 1 Validated Grantees List ({students.length} Students)
+          </CardTitle>
+          <CardDescription>
+            Official TDP grantee candidates compiled for Director confirmation & agency submission.
+          </CardDescription>
+        </div>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <a href={`/api/annex-1/export-excel?documentId=${documentId}`} download>
+            <Button variant="outline" size="sm" className="h-8 text-xs font-semibold text-[#1B5E20] border-[#1B5E20] apple-press">
+              <Download className="w-3.5 h-3.5 mr-1 text-[#1B5E20]" />
+              Download Excel
+            </Button>
+          </a>
+        </div>
+      </CardHeader>
+
+      {/* Search Input Toolbar */}
+      <div className="p-3.5 bg-[#F6F8F6] border-b border-[#D6DDD8] flex items-center justify-between gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#55645B]" />
+          <input
+            type="text"
+            placeholder="Search grantees by name, student ID, course, or campus..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-9 pl-9 pr-4 w-full rounded-lg border border-[#D6DDD8] bg-white text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#1B5E20] focus-visible:border-[#1B5E20]"
+          />
+        </div>
+        {searchQuery && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSearchQuery("")}
+            className="text-xs h-8 text-[#B3261E]"
+          >
+            <RotateCcw className="w-3 h-3 mr-1" />
+            Clear
+          </Button>
+        )}
+      </div>
+
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs min-w-[1050px]">
+            <thead className="bg-[#F1F8F1] font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8] sticky top-0 z-10">
+              <tr>
+                <SortableTh label="Seq" sortKey="seq" currentSortKey={sortKey} currentDirection={sortDirection} onSort={onSort} minWidth="70px" />
+                <SortableTh label="Batch" sortKey="batch_number" currentSortKey={sortKey} currentDirection={sortDirection} onSort={onSort} minWidth="90px" />
+                <SortableTh label="Student ID" sortKey="student_id" currentSortKey={sortKey} currentDirection={sortDirection} onSort={onSort} minWidth="130px" />
+                <SortableTh label="Student Name" sortKey="name" currentSortKey={sortKey} currentDirection={sortDirection} onSort={onSort} minWidth="220px" />
+                <SortableTh label="Course / Degree" sortKey="course_degree" currentSortKey={sortKey} currentDirection={sortDirection} onSort={onSort} minWidth="200px" />
+                <SortableTh label="Year" sortKey="year_level" currentSortKey={sortKey} currentDirection={sortDirection} onSort={onSort} minWidth="80px" />
+                <SortableTh label="HEI UII & Campus" sortKey="campus" currentSortKey={sortKey} currentDirection={sortDirection} onSort={onSort} minWidth="180px" />
+                <th className="py-2.5 px-3 uppercase tracking-wider text-[11px] font-semibold text-[#1F2A24] min-w-[180px]">Address</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#D6DDD8]">
+              {paginatedStudents.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-[#55645B]">
+                    No students match &ldquo;{searchQuery}&rdquo;
+                  </td>
+                </tr>
+              ) : (
+                paginatedStudents.map((st: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-[#F6F8F6] transition-colors">
+                    <td className="py-3 px-3 font-bold text-[#55645B] tabular-nums">{st.seq || (page - 1) * pageSize + idx + 1}</td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCEFDD] text-[#123F17] border border-[#1B5E20]/20 tabular-nums">
+                        B{st.batch_number || 1}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 font-mono font-bold text-[#1B5E20] tabular-nums whitespace-nowrap">{st.student_id}</td>
+                    <td className="py-3 px-3 font-semibold text-[#1F2A24] break-words">
+                      {st.last_name}, {st.given_name} {st.ext_name || ""} {st.middle_name || ""}
+                    </td>
+                    <td className="py-3 px-3 break-words">{st.course_degree}</td>
+                    <td className="py-3 px-3 whitespace-nowrap tabular-nums">Year {st.year_level}</td>
+                    <td className="py-3 px-3 text-[#55645B] break-words">
+                      <span className="font-mono font-bold text-[#1B5E20] tabular-nums">{st.hei_uii || "4060"}</span> — {st.hei_campus || st.hei_name}
+                    </td>
+                    <td className="py-3 px-3 text-[#55645B] break-words">
+                      {st.street_barangay}, {st.town_city}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <PaginationBar
+          page={page}
+          pageSize={pageSize}
+          totalItems={totalItems}
+          totalPages={totalPages}
+          startIndex={startIndex}
+          endIndex={endIndex}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          itemLabel="students"
+        />
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function DocumentDetailPage({
   params,
@@ -617,67 +776,7 @@ export default function DocumentDetailPage({
 
           {/* Annex 1 Validated Grantees Table */}
           {document.annexType?.number === 1 && formData.students && Array.isArray(formData.students) && (
-            <Card>
-              <CardHeader className="pb-3 border-b border-[#D6DDD8] flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <FileSpreadsheet className="w-4 h-4 text-[#1B5E20]" />
-                    Annex 1 Validated Grantees List ({formData.students.length} Students)
-                  </CardTitle>
-                  <CardDescription>
-                    Official TDP grantee candidates compiled for Director confirmation & agency submission.
-                  </CardDescription>
-                </div>
-                <a href={`/api/annex-1/export-excel?documentId=${document.id}`} download>
-                  <Button variant="outline" size="sm" className="h-8 text-xs font-semibold text-[#1B5E20] border-[#1B5E20]">
-                    <Download className="w-3.5 h-3.5 mr-1 text-[#1B5E20]" />
-                    Download Excel
-                  </Button>
-                </a>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto max-h-96">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-[#F1F8F1] font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8] sticky top-0">
-                      <tr>
-                        <th className="py-2.5 px-3">Seq</th>
-                        <th className="py-2.5 px-3">Batch</th>
-                        <th className="py-2.5 px-3">Student ID</th>
-                        <th className="py-2.5 px-3">Student Name</th>
-                        <th className="py-2.5 px-3">Course / Degree</th>
-                        <th className="py-2.5 px-3">Year</th>
-                        <th className="py-2.5 px-3">HEI UII & Campus</th>
-                        <th className="py-2.5 px-3">Address</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#D6DDD8]">
-                      {formData.students.map((st: any, idx: number) => (
-                        <tr key={idx} className="hover:bg-[#F6F8F6]">
-                          <td className="py-2.5 px-3 font-bold text-[#55645B]">{st.seq || idx + 1}</td>
-                          <td className="py-2.5 px-3">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCEFDD] text-[#123F17] border border-[#1B5E20]/20">
-                              B{st.batch_number || 1}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-[#1B5E20]">{st.student_id}</td>
-                          <td className="py-2.5 px-3 font-semibold text-[#1F2A24]">
-                            {st.last_name}, {st.given_name} {st.ext_name || ""} {st.middle_name || ""}
-                          </td>
-                          <td className="py-2.5 px-3">{st.course_degree}</td>
-                          <td className="py-2.5 px-3">Year {st.year_level}</td>
-                          <td className="py-2.5 px-3 text-[#55645B]">
-                            <span className="font-mono font-bold text-[#1B5E20]">{st.hei_uii || "4060"}</span> — {st.hei_campus || st.hei_name}
-                          </td>
-                          <td className="py-2.5 px-3 text-[#55645B] truncate max-w-[150px]">
-                            {st.street_barangay}, {st.town_city}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+            <Annex1GranteesTable students={formData.students} documentId={document.id} />
           )}
 
           {/* Transmittal Summary (if transmitted) */}

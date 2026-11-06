@@ -147,19 +147,32 @@ export async function POST(req: NextRequest) {
     }
 
     // Ensure student cannot use another student's registered Student ID
+    const studentUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { studentProfile: true, name: true, email: true },
+    });
+
     const studentReg = await prisma.application.findFirst({
       where: { studentId: user.id },
       orderBy: { submittedAt: "desc" },
     });
 
-    const regData = (studentReg?.formData as any) || {};
+    const userProfile = (studentUser?.studentProfile as Record<string, any>) || {};
+    const previousAppData = (studentReg?.formData as Record<string, any>) || {};
 
-    if (studentReg) {
-      const regId = (regData.student_id || regData.student_id_number || "").trim().toUpperCase();
-      if (regId && studentIdNumber !== regId) {
+    // Harmonize persistent registration profile with any previous application
+    const regData: Record<string, any> = {
+      ...userProfile,
+      ...previousAppData,
+    };
+
+    const registeredStudentId = (regData.student_id || regData.student_id_number || "").trim().toUpperCase();
+
+    if (registeredStudentId) {
+      if (studentIdNumber !== registeredStudentId) {
         return NextResponse.json(
           {
-            error: `Identity mismatch: The submitted Student ID (${studentIdNumber}) does not match your registered Student ID (${regId}). You cannot submit under another student's profile.`,
+            error: `Identity mismatch: The submitted Student ID (${studentIdNumber}) does not match your registered Student ID (${registeredStudentId}). You cannot submit under another student's profile.`,
           },
           { status: 403 }
         );
@@ -238,8 +251,16 @@ export async function POST(req: NextRequest) {
       last_name: lastName,
       middle_name: middleName,
       ext_name: extName,
+      gender: formData?.gender || regData.gender || "M",
+      birthdate: formData?.birthdate || regData.birthdate || "",
+      street_barangay: formData?.street_barangay || regData.street_barangay || "",
+      town_city: formData?.town_city || regData.town_city || "",
+      province: formData?.province || regData.province || "Oriental Mindoro",
+      zipcode: formData?.zipcode || regData.zipcode || "5200",
       campus: campusVal,
       hei_campus: campusVal,
+      hei_uii: formData?.hei_uii || regData.hei_uii || "4060",
+      hei_name: formData?.hei_name || regData.hei_name || "Mindoro State University",
       program_course: courseVal,
       course_degree: courseVal,
       year_level: yearLevelVal,
@@ -249,6 +270,18 @@ export async function POST(req: NextRequest) {
       latest_gwa: gwaCheck.normalized,
       family_monthly_income: incomeCheck.value,
       email: user.email,
+      father_last_name: formData?.father_last_name || regData.father_last_name || "",
+      father_given_name: formData?.father_given_name || regData.father_given_name || "",
+      father_middle_name: formData?.father_middle_name || regData.father_middle_name || "",
+      father_contact_number: formData?.father_contact_number || regData.father_contact_number || regData.parent_contact_number || "",
+      father_email: formData?.father_email || regData.father_email || regData.parent_email || "",
+      mother_last_name: formData?.mother_last_name || regData.mother_last_name || "",
+      mother_given_name: formData?.mother_given_name || regData.mother_given_name || "",
+      mother_middle_name: formData?.mother_middle_name || regData.mother_middle_name || "",
+      mother_contact_number: formData?.mother_contact_number || regData.mother_contact_number || "",
+      mother_email: formData?.mother_email || regData.mother_email || "",
+      parent_contact_number: formData?.parent_contact_number || regData.parent_contact_number || formData?.father_contact_number || regData.father_contact_number || "",
+      parent_email: formData?.parent_email || regData.parent_email || formData?.father_email || regData.father_email || "",
     };
 
     // Generate unique batch-coded tracking code e.g. MINSU-TDP-2026-B1-A1B2C
@@ -257,16 +290,24 @@ export async function POST(req: NextRequest) {
       .toString("hex")
       .toUpperCase()}`;
 
-    const application = await prisma.application.create({
-      data: {
-        callId,
-        studentId: user.id,
-        batchNumber: targetCall.batchNumber,
-        formData: sanitizedFormData,
-        trackingCode,
-      },
-      include: { call: true },
-    });
+    const [application] = await prisma.$transaction([
+      prisma.application.create({
+        data: {
+          callId,
+          studentId: user.id,
+          batchNumber: targetCall.batchNumber,
+          formData: sanitizedFormData,
+          trackingCode,
+        },
+        include: { call: true },
+      }),
+      prisma.user.update({
+        where: { id: user.id },
+        data: {
+          studentProfile: sanitizedFormData,
+        },
+      }),
+    ]);
 
     await logAudit({
       actorId: user.id,

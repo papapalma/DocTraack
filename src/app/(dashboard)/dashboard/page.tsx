@@ -335,7 +335,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
+                <table className="w-full text-left text-sm min-w-[700px]">
                   <thead className="bg-[#F1F8F1]/60 text-xs font-semibold text-[#1F2A24] uppercase border-y border-[#D6DDD8]/60">
                     <tr>
                       <th className="py-3 px-4">Action</th>
@@ -653,7 +653,7 @@ export default function DashboardPage() {
 
               {/* Desktop Table (visible md+) */}
               <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-left text-sm">
+                <table className="w-full text-left text-sm min-w-[700px]">
                   <thead className="bg-[#F1F8F1]/60 text-xs font-semibold text-[#1F2A24] uppercase border-y border-[#D6DDD8]/60">
                     <tr>
                       <th className="py-3 px-4">Annex #</th>

@@ -13,7 +13,11 @@ import {
 } from "@/types";
 import { Button } from "@/components/ui/button";
 import { BatchSelectorDropdown } from "./batch-selector-dropdown";
+import { StipendTierSelector } from "./stipend-tier-selector";
 import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
+import { compareValues } from "@/hooks/use-table";
 import {
   FileSpreadsheet,
   Printer,
@@ -103,6 +107,7 @@ export function Annex3SheetSuite({
         isLastBatch: false,
         totalGrantees: 0,
         stipendPerGrantee: 7500,
+        stipendTier: "7500",
         totalSubsidy: 0,
         managementFeeRate: 0.005,
         managementFeeAmount: 0,
@@ -132,6 +137,29 @@ export function Annex3SheetSuite({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [customStipendInput, setCustomStipendInput] = useState<string>(
+    formData.stipendPerGrantee && formData.stipendPerGrantee !== 7500 && formData.stipendPerGrantee !== 10000
+      ? String(formData.stipendPerGrantee)
+      : "7500"
+  );
+
+  const handleStipendTierChange = (tier: "7500" | "10000" | "custom", amount: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      stipendTier: tier,
+      stipendPerGrantee: amount,
+    }));
+  };
+
+  const handleCustomStipendInputChange = (rawVal: string, numVal: number) => {
+    setCustomStipendInput(rawVal);
+    setFormData((prev) => ({
+      ...prev,
+      stipendTier: "custom",
+      stipendPerGrantee: numVal,
+    }));
+  };
+
   const handleLeftLogoChange = (newConfig: LogoConfig) => {
     setFormData((prev) => ({
       ...prev,
@@ -155,8 +183,12 @@ export function Annex3SheetSuite({
   // Synchronize financial calculations when billed grantees change
   useEffect(() => {
     const totalCount = formData.billedGrantees.length;
-    const totalSubs = totalCount * 7500;
-    const mgmtFee = totalSubs * 0.005;
+    const totalSubs = formData.billedGrantees.reduce(
+      (sum, g) => sum + (Number(g.totalAmount) || Number(g.semesterAmount) || Number(formData.stipendPerGrantee) || 7500),
+      0
+    );
+    const mgmtFeeRate = Number(formData.managementFeeRate) || 0.005;
+    const mgmtFee = totalSubs * mgmtFeeRate;
     const grand = totalSubs + mgmtFee;
 
     setFormData((prev) => ({
@@ -166,7 +198,7 @@ export function Annex3SheetSuite({
       managementFeeAmount: mgmtFee,
       grandTotalBilling: grand,
     }));
-  }, [formData.billedGrantees.length]);
+  }, [formData.billedGrantees, formData.managementFeeRate, formData.stipendPerGrantee]);
 
   // Re-index control numbers sequentially
   const reindexList = (list: Annex3Grantee[]) => {
@@ -240,8 +272,8 @@ export function Annex3SheetSuite({
       email: `${target.givenName.toLowerCase()}.${target.lastName.toLowerCase()}@minsu.edu.ph`,
       phone: "09170000000",
       tdpBatch: formData.batchNumber,
-      semesterAmount: 7500,
-      totalAmount: 7500,
+      semesterAmount: Number(formData.stipendPerGrantee) || 7500,
+      totalAmount: Number(formData.stipendPerGrantee) || 7500,
       campus: target.campus,
     };
 
@@ -255,6 +287,7 @@ export function Annex3SheetSuite({
   // Add blank row to Form 2
   const addBlankBilledRow = () => {
     const nextIdx = formData.billedGrantees.length + 1;
+    const activeStipend = Number(formData.stipendPerGrantee) || 7500;
     const newRow: Annex3Grantee = {
       controlNumber: String(nextIdx).padStart(5, "0"),
       studentNumber: `2024-${String(nextIdx).padStart(5, "0")}`,
@@ -269,8 +302,8 @@ export function Annex3SheetSuite({
       email: "student@minsu.edu.ph",
       phone: "09170000000",
       tdpBatch: formData.batchNumber,
-      semesterAmount: 7500,
-      totalAmount: 7500,
+      semesterAmount: activeStipend,
+      totalAmount: activeStipend,
       campus: selectedCampus === "ALL" ? "Bongabong Campus" : selectedCampus,
     };
     setFormData((prev) => ({
@@ -349,6 +382,7 @@ export function Annex3SheetSuite({
       if (res.ok) {
         const data = await res.json();
         if (data.candidates && data.candidates.length > 0) {
+          const activeStipend = Number(formData.stipendPerGrantee) || 7500;
           const startNum = formData.billedGrantees.length;
           const mapped: Annex3Grantee[] = data.candidates.map((c: any, idx: number) => ({
             controlNumber: String(startNum + idx + 1).padStart(5, "0"),
@@ -364,8 +398,8 @@ export function Annex3SheetSuite({
             email: c.email,
             phone: c.phone,
             tdpBatch: String(c.tdpBatch || batchesToInject[0] || "1"),
-            semesterAmount: 7500,
-            totalAmount: 7500,
+            semesterAmount: activeStipend,
+            totalAmount: activeStipend,
             campus: getMinsuCampusConfig(c.campus).label,
           }));
 
@@ -374,9 +408,11 @@ export function Annex3SheetSuite({
           const compoundBatch = allBatches.join(", ");
 
           const totalGrantees = updatedBilled.length;
-          const stipendPerGrantee = 7500;
-          const totalSubsidy = totalGrantees * stipendPerGrantee;
-          const managementFeeRate = 0.005;
+          const totalSubsidy = updatedBilled.reduce(
+            (sum, g) => sum + (Number(g.totalAmount) || Number(g.semesterAmount) || activeStipend),
+            0
+          );
+          const managementFeeRate = Number(formData.managementFeeRate) || 0.005;
           const managementFeeAmount = totalSubsidy * managementFeeRate;
           const grandTotalBilling = totalSubsidy + managementFeeAmount;
 
@@ -384,7 +420,7 @@ export function Annex3SheetSuite({
             ...prev,
             billedGrantees: updatedBilled,
             totalGrantees,
-            stipendPerGrantee,
+            stipendPerGrantee: activeStipend,
             totalSubsidy,
             managementFeeRate,
             managementFeeAmount,
@@ -474,6 +510,151 @@ export function Annex3SheetSuite({
       );
     });
   }, [formData.otherGrantees, selectedCampus, searchQuery]);
+
+  // Sort and pagination state for Billed Scholars table
+  const [billedSortKey, setBilledSortKey] = useState<string | null>("controlNumber");
+  const [billedSortDirection, setBilledSortDirection] = useState<"asc" | "desc" | null>("asc");
+  const [billedPage, setBilledPage] = useState<number>(1);
+  const [billedPageSize, setBilledPageSize] = useState<number>(25);
+
+  const handleBilledSort = (key: string) => {
+    if (billedSortKey === key) {
+      if (billedSortDirection === "asc") setBilledSortDirection("desc");
+      else if (billedSortDirection === "desc") {
+        setBilledSortKey(null);
+        setBilledSortDirection(null);
+      } else {
+        setBilledSortDirection("asc");
+      }
+    } else {
+      setBilledSortKey(key);
+      setBilledSortDirection("asc");
+    }
+    setBilledPage(1);
+  };
+
+  const sortedBilled = useMemo(() => {
+    if (!billedSortKey || !billedSortDirection) return filteredBilled;
+    return [...filteredBilled].sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      if (billedSortKey === "controlNumber") {
+        valA = a.controlNumber;
+        valB = b.controlNumber;
+      } else if (billedSortKey === "tdpBatch") {
+        valA = a.tdpBatch;
+        valB = b.tdpBatch;
+      } else if (billedSortKey === "studentNumber") {
+        valA = a.studentNumber;
+        valB = b.studentNumber;
+      } else if (billedSortKey === "tdpAwardNumber") {
+        valA = a.tdpAwardNumber;
+        valB = b.tdpAwardNumber;
+      } else if (billedSortKey === "name") {
+        valA = `${a.lastName || ""}, ${a.givenName || ""}`;
+        valB = `${b.lastName || ""}, ${b.givenName || ""}`;
+      } else if (billedSortKey === "sex") {
+        valA = a.sex;
+        valB = b.sex;
+      } else if (billedSortKey === "degreeProgram") {
+        valA = a.degreeProgram;
+        valB = b.degreeProgram;
+      } else if (billedSortKey === "yearLevel") {
+        valA = a.yearLevel;
+        valB = b.yearLevel;
+      } else if (billedSortKey === "campus") {
+        valA = a.campus;
+        valB = b.campus;
+      } else if (billedSortKey === "stipend") {
+        valA = a.totalAmount;
+        valB = b.totalAmount;
+      }
+      return compareValues(valA, valB, billedSortDirection);
+    });
+  }, [filteredBilled, billedSortKey, billedSortDirection]);
+
+  const billedTotalPages = Math.max(1, Math.ceil(sortedBilled.length / billedPageSize));
+  const validBilledPage = Math.max(1, Math.min(billedPage, billedTotalPages));
+  const billedStartIndex = sortedBilled.length === 0 ? 0 : (validBilledPage - 1) * billedPageSize + 1;
+  const billedEndIndex = Math.min(validBilledPage * billedPageSize, sortedBilled.length);
+  const paginatedBilled = useMemo(() => {
+    const start = (validBilledPage - 1) * billedPageSize;
+    return sortedBilled.slice(start, start + billedPageSize);
+  }, [sortedBilled, validBilledPage, billedPageSize]);
+
+  // Sort and pagination state for Unbilled / Form 3 Scholars table
+  const [otherSortKey, setOtherSortKey] = useState<string | null>("controlNumber");
+  const [otherSortDirection, setOtherSortDirection] = useState<"asc" | "desc" | null>("asc");
+  const [otherPage, setOtherPage] = useState<number>(1);
+  const [otherPageSize, setOtherPageSize] = useState<number>(25);
+
+  const handleOtherSort = (key: string) => {
+    if (otherSortKey === key) {
+      if (otherSortDirection === "asc") setOtherSortDirection("desc");
+      else if (otherSortDirection === "desc") {
+        setOtherSortKey(null);
+        setOtherSortDirection(null);
+      } else {
+        setOtherSortDirection("asc");
+      }
+    } else {
+      setOtherSortKey(key);
+      setOtherSortDirection("asc");
+    }
+    setOtherPage(1);
+  };
+
+  const sortedOther = useMemo(() => {
+    if (!otherSortKey || !otherSortDirection) return filteredOther;
+    return [...filteredOther].sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      if (otherSortKey === "controlNumber") {
+        valA = a.controlNumber;
+        valB = b.controlNumber;
+      } else if (otherSortKey === "studentNumber") {
+        valA = a.studentNumber;
+        valB = b.studentNumber;
+      } else if (otherSortKey === "tdpAwardNumber") {
+        valA = a.tdpAwardNumber;
+        valB = b.tdpAwardNumber;
+      } else if (otherSortKey === "name") {
+        valA = `${a.lastName || ""}, ${a.givenName || ""}`;
+        valB = `${b.lastName || ""}, ${b.givenName || ""}`;
+      } else if (otherSortKey === "sex") {
+        valA = a.sex;
+        valB = b.sex;
+      } else if (otherSortKey === "degreeProgram") {
+        valA = a.degreeProgram;
+        valB = b.degreeProgram;
+      } else if (otherSortKey === "yearLevel") {
+        valA = a.yearLevel;
+        valB = b.yearLevel;
+      } else if (otherSortKey === "status") {
+        valA = a.status;
+        valB = b.status;
+      } else if (otherSortKey === "remarks") {
+        valA = a.remarks;
+        valB = b.remarks;
+      }
+      return compareValues(valA, valB, otherSortDirection);
+    });
+  }, [filteredOther, otherSortKey, otherSortDirection]);
+
+  const otherTotalPages = Math.max(1, Math.ceil(sortedOther.length / otherPageSize));
+  const validOtherPage = Math.max(1, Math.min(otherPage, otherTotalPages));
+  const otherStartIndex = sortedOther.length === 0 ? 0 : (validOtherPage - 1) * otherPageSize + 1;
+  const otherEndIndex = Math.min(validOtherPage * otherPageSize, sortedOther.length);
+  const paginatedOther = useMemo(() => {
+    const start = (validOtherPage - 1) * otherPageSize;
+    return sortedOther.slice(start, start + otherPageSize);
+  }, [sortedOther, validOtherPage, otherPageSize]);
+
+  // Reset pagination on search query or campus filter changes
+  useEffect(() => {
+    setBilledPage(1);
+    setOtherPage(1);
+  }, [searchQuery, selectedCampus]);
 
   // Save changes to database
   const handleSave = async (submitDirectly: boolean = false) => {
@@ -675,7 +856,7 @@ export function Annex3SheetSuite({
                 </div>
                 <div className="text-xs text-ink-muted mt-1 flex items-center gap-1.5">
                   <span className="inline-block px-1.5 py-0.5 rounded bg-minsu-green-100 text-minsu-green-700 font-bold text-[10px]">
-                    ₱7,500.00
+                    ₱{(formData.stipendPerGrantee || 7500).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </span>
                   <span>per scholar / semester</span>
                 </div>
@@ -820,41 +1001,62 @@ export function Annex3SheetSuite({
             </div>
           </div>
 
-          {/* Dynamic Batch Injection Dropdown Card */}
-          <div className="bg-white rounded-2xl border border-line p-4 apple-shadow flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-minsu-green-700" />
-                <h4 className="text-xs font-bold text-minsu-green-900 uppercase tracking-wider">
-                  Inject Grantees by Batch (Select 1, 2, or 3 Batches)
-                </h4>
+          {/* Dynamic Batch Injection Dropdown Card with Stipend Tier Selection */}
+          <div className="bg-white rounded-2xl border border-line p-4 apple-shadow space-y-3">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-minsu-green-700" />
+                  <h4 className="text-xs font-bold text-minsu-green-900 uppercase tracking-wider">
+                    Inject Grantees by Batch (Select 1, 2, or 3 Batches)
+                  </h4>
+                </div>
+                <p className="text-[11px] text-ink-muted">
+                  Add verified scholar cohorts to this Annex 3 statement. Batches already injected are guarded against duplication.
+                </p>
               </div>
-              <p className="text-[11px] text-ink-muted">
-                Add verified scholar cohorts to this Annex 3 statement. Batches already injected are guarded against duplication.
-              </p>
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <div className="w-full md:w-80">
+                  <BatchSelectorDropdown
+                    selectedBatches={selectedBatchesToInject}
+                    onBatchesChange={setSelectedBatchesToInject}
+                    alreadyInjectedBatches={alreadyInjectedBatches}
+                    onInject={handleInjectBatches}
+                    allowDirectAction={true}
+                    maxBatches={3}
+                    placeholder="Choose batch(es) to inject..."
+                  />
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleInjectBatches(selectedBatchesToInject)}
+                  disabled={selectedBatchesToInject.length === 0 || isInjecting}
+                  className="h-[42px] px-4 font-bold bg-minsu-green-700 hover:bg-minsu-green-600 text-white shadow-xs shrink-0 apple-press"
+                >
+                  <Sparkles className={`w-4 h-4 mr-1.5 text-minsu-gold-400 ${isInjecting ? "animate-spin" : ""}`} />
+                  {isInjecting ? "Injecting..." : `Inject (${selectedBatchesToInject.length})`}
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <div className="w-full md:w-80">
-                <BatchSelectorDropdown
-                  selectedBatches={selectedBatchesToInject}
-                  onBatchesChange={setSelectedBatchesToInject}
-                  alreadyInjectedBatches={alreadyInjectedBatches}
-                  onInject={handleInjectBatches}
-                  allowDirectAction={true}
-                  maxBatches={3}
-                  placeholder="Choose batch(es) to inject..."
-                />
+
+            {/* Stipend Allocation Rate Selector (₱7,500 | ₱10,000 | Custom) */}
+            <div className="pt-3 border-t border-line/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-minsu-green-700" />
+                <span className="text-xs font-bold text-ink">Active Stipend Rate:</span>
+                <span className="text-[11px] text-ink-muted">
+                  Sets grant amount for newly injected cohorts (Current: ₱{(formData.stipendPerGrantee || 7500).toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                </span>
               </div>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => handleInjectBatches(selectedBatchesToInject)}
-                disabled={selectedBatchesToInject.length === 0 || isInjecting}
-                className="h-[42px] px-4 font-bold bg-minsu-green-700 hover:bg-minsu-green-600 text-white shadow-xs shrink-0 apple-press"
-              >
-                <Sparkles className={`w-4 h-4 mr-1.5 text-minsu-gold-400 ${isInjecting ? "animate-spin" : ""}`} />
-                {isInjecting ? "Injecting..." : `Inject (${selectedBatchesToInject.length})`}
-              </Button>
+              <StipendTierSelector
+                selectedTier={formData.stipendTier || "7500"}
+                currentAmount={formData.stipendPerGrantee || 7500}
+                customInputValue={customStipendInput}
+                onTierChange={handleStipendTierChange}
+                onCustomInputChange={handleCustomStipendInputChange}
+                label=""
+              />
             </div>
           </div>
 
@@ -981,44 +1183,45 @@ export function Annex3SheetSuite({
 
             {/* Content Area 1: Billed Scholars Table */}
             {workspaceTab === "billed" && (
-              <div className="overflow-x-auto apple-scrollbar">
-                <table className="w-full text-xs text-left border-collapse">
-                  <thead>
-                    <tr className="bg-minsu-green-50 text-minsu-green-900 border-b border-line text-[11px] font-bold">
-                      <th className="py-2.5 px-3 w-12 text-center">Ctrl #</th>
-                      <th className="py-2.5 px-2 w-16 text-center">Batch</th>
-                      <th className="py-2.5 px-3 w-28">Student No.</th>
-                      <th className="py-2.5 px-3 w-36">TDP Award No.</th>
-                      <th className="py-2.5 px-3">Student Name</th>
-                      <th className="py-2.5 px-2 w-10 text-center">Sex</th>
-                      <th className="py-2.5 px-3">Degree Program</th>
-                      <th className="py-2.5 px-2 w-10 text-center">Yr</th>
-                      <th className="py-2.5 px-3">Campus</th>
-                      <th className="py-2.5 px-3 text-right w-24">Stipend</th>
-                      <th className="py-2.5 px-3 w-24 text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {filteredBilled.length === 0 ? (
-                      <tr>
-                        <td colSpan={11} className="py-16 text-center text-ink-muted">
-                          <div className="flex flex-col items-center justify-center gap-2">
-                            <Users className="w-8 h-8 text-minsu-green-700/40" />
-                            <p className="font-semibold text-ink text-xs">
-                              {formData.billedGrantees.length === 0
-                                ? "No continuing grantees loaded yet"
-                                : "No scholars match your search criteria"}
-                            </p>
-                            <p className="text-[11px] text-ink-muted max-w-sm">
-                              {formData.billedGrantees.length === 0
-                                ? "Select verified intake batch(es) in the card above and click 'Inject Selected' to populate this Annex 3 roster, or click '+ Add Scholar' to insert manually."
-                                : "Try adjusting your search terms or clearing the search query."}
-                            </p>
-                          </div>
-                        </td>
+              <div className="flex flex-col">
+                <div className="overflow-x-auto apple-scrollbar">
+                  <table className="w-full text-xs text-left border-collapse min-w-[1100px]">
+                    <thead>
+                      <tr className="bg-minsu-green-50 text-minsu-green-900 border-b border-line text-[11px] font-bold">
+                        <SortableTh label="Ctrl #" sortKey="controlNumber" currentSortKey={billedSortKey} currentDirection={billedSortDirection} onSort={handleBilledSort} minWidth="65px" className="text-center" />
+                        <SortableTh label="Batch" sortKey="tdpBatch" currentSortKey={billedSortKey} currentDirection={billedSortDirection} onSort={handleBilledSort} minWidth="70px" className="text-center" />
+                        <SortableTh label="Student No." sortKey="studentNumber" currentSortKey={billedSortKey} currentDirection={billedSortDirection} onSort={handleBilledSort} minWidth="120px" />
+                        <SortableTh label="TDP Award No." sortKey="tdpAwardNumber" currentSortKey={billedSortKey} currentDirection={billedSortDirection} onSort={handleBilledSort} minWidth="150px" />
+                        <SortableTh label="Student Name" sortKey="name" currentSortKey={billedSortKey} currentDirection={billedSortDirection} onSort={handleBilledSort} minWidth="220px" />
+                        <SortableTh label="Sex" sortKey="sex" currentSortKey={billedSortKey} currentDirection={billedSortDirection} onSort={handleBilledSort} minWidth="55px" className="text-center" />
+                        <SortableTh label="Degree Program" sortKey="degreeProgram" currentSortKey={billedSortKey} currentDirection={billedSortDirection} onSort={handleBilledSort} minWidth="180px" />
+                        <SortableTh label="Yr" sortKey="yearLevel" currentSortKey={billedSortKey} currentDirection={billedSortDirection} onSort={handleBilledSort} minWidth="55px" className="text-center" />
+                        <SortableTh label="Campus" sortKey="campus" currentSortKey={billedSortKey} currentDirection={billedSortDirection} onSort={handleBilledSort} minWidth="130px" />
+                        <SortableTh label="Stipend" sortKey="stipend" currentSortKey={billedSortKey} currentDirection={billedSortDirection} onSort={handleBilledSort} minWidth="100px" align="right" />
+                        <th className="py-2.5 px-3 w-24 text-center">Actions</th>
                       </tr>
-                    ) : (
-                      filteredBilled.map((g, idx) => {
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {sortedBilled.length === 0 ? (
+                        <tr>
+                          <td colSpan={11} className="py-16 text-center text-ink-muted">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <Users className="w-8 h-8 text-minsu-green-700/40" />
+                              <p className="font-semibold text-ink text-xs">
+                                {formData.billedGrantees.length === 0
+                                  ? "No continuing grantees loaded yet"
+                                  : "No scholars match your search criteria"}
+                              </p>
+                              <p className="text-[11px] text-ink-muted max-w-sm">
+                                {formData.billedGrantees.length === 0
+                                  ? "Select verified intake batch(es) in the card above and click 'Inject Selected' to populate this Annex 3 roster, or click '+ Add Scholar' to insert manually."
+                                  : "Try adjusting your search terms or clearing the search query."}
+                              </p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedBilled.map((g, idx) => {
                       const realIndex = formData.billedGrantees.findIndex(
                         (item) => item.controlNumber === g.controlNumber
                       );
@@ -1134,108 +1337,135 @@ export function Annex3SheetSuite({
                   </tbody>
                 </table>
               </div>
-            )}
+
+              <PaginationBar
+                page={validBilledPage}
+                pageSize={billedPageSize}
+                totalItems={sortedBilled.length}
+                totalPages={billedTotalPages}
+                startIndex={billedStartIndex}
+                endIndex={billedEndIndex}
+                onPageChange={setBilledPage}
+                onPageSizeChange={setBilledPageSize}
+                itemLabel="billed scholars"
+              />
+            </div>
+          )}
 
             {/* Content Area 2: Unbilled Scholars Table (Form 3) */}
             {workspaceTab === "other" && (
-              <div className="overflow-x-auto apple-scrollbar">
-                <table className="w-full text-xs text-left border-collapse">
-                  <thead>
-                    <tr className="bg-minsu-gold-100/60 text-minsu-gold-600 border-b border-line text-[11px] font-bold">
-                      <th className="py-2.5 px-3 w-12 text-center">Ctrl #</th>
-                      <th className="py-2.5 px-3 w-28">Student No.</th>
-                      <th className="py-2.5 px-3 w-36">TDP Award No.</th>
-                      <th className="py-2.5 px-3">Student Name</th>
-                      <th className="py-2.5 px-2 w-10 text-center">Sex</th>
-                      <th className="py-2.5 px-3">Degree Program</th>
-                      <th className="py-2.5 px-2 w-10 text-center">Yr</th>
-                      <th className="py-2.5 px-3 w-28">Status</th>
-                      <th className="py-2.5 px-3">Remarks / Reason</th>
-                      <th className="py-2.5 px-3 w-24 text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {filteredOther.map((g, idx) => {
-                      const realIndex = formData.otherGrantees.findIndex(
-                        (item) => item.controlNumber === g.controlNumber
-                      );
-                      return (
-                        <tr key={g.controlNumber || idx} className="hover:bg-minsu-gold-50/40 transition-colors">
-                          <td className="py-2 px-3 text-center font-mono font-bold text-minsu-gold-600">
-                            {g.controlNumber}
-                          </td>
-                          <td className="py-2 px-3 font-mono">
-                            <input
-                              value={g.studentNumber}
-                              onChange={(e) => updateOtherField(realIndex, "studentNumber", e.target.value)}
-                              className="w-full bg-transparent focus:bg-white focus:ring-1 focus:ring-minsu-gold-500 rounded px-1.5 py-0.5"
-                            />
-                          </td>
-                          <td className="py-2 px-3 font-mono">
-                            <input
-                              value={g.tdpAwardNumber}
-                              onChange={(e) => updateOtherField(realIndex, "tdpAwardNumber", e.target.value)}
-                              className="w-full bg-transparent focus:bg-white focus:ring-1 focus:ring-minsu-gold-500 rounded px-1.5 py-0.5"
-                            />
-                          </td>
-                          <td className="py-2 px-3 font-bold text-ink">
-                            {g.lastName}, {g.givenName} {g.middleInitial}
-                          </td>
-                          <td className="py-2 px-2 text-center">{g.sex}</td>
-                          <td className="py-2 px-3">{g.degreeProgram}</td>
-                          <td className="py-2 px-2 text-center">{g.yearLevel}</td>
-                          <td className="py-2 px-3">
-                            <select
-                              value={g.status}
-                              onChange={(e) => updateOtherField(realIndex, "status", e.target.value as OtherGranteeStatus)}
-                              className="bg-minsu-gold-100 text-minsu-gold-600 font-bold text-[11px] rounded px-2 py-1 outline-none border border-minsu-gold-400/40"
-                            >
-                              <option value="not enrolled">Not Enrolled</option>
-                              <option value="dropped">Dropped</option>
-                              <option value="waived">Waived</option>
-                              <option value="on LOA">On LOA</option>
-                              <option value="transferee">Transferee</option>
-                              <option value="graduated">Graduated</option>
-                            </select>
-                          </td>
-                          <td className="py-2 px-3">
-                            <input
-                              value={g.remarks}
-                              onChange={(e) => updateOtherField(realIndex, "remarks", e.target.value)}
-                              placeholder="Reason not billed..."
-                              className="w-full bg-transparent focus:bg-white focus:ring-1 focus:ring-minsu-gold-500 rounded px-1.5 py-0.5 text-xs"
-                            />
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => moveOtherToBilled(realIndex)}
-                                title="Move back to Billed (Form 2)"
-                                className="px-2 py-0.5 rounded bg-minsu-green-100 text-minsu-green-700 hover:bg-minsu-green-200 text-[10px] font-bold apple-press"
-                              >
-                                Bill Now
-                              </button>
-                              <button
-                                onClick={() => removeOtherRow(realIndex)}
-                                title="Delete row"
-                                className="p-1 rounded hover:bg-red-50 text-red-600 transition apple-press"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+              <div className="flex flex-col">
+                <div className="overflow-x-auto apple-scrollbar">
+                  <table className="w-full text-xs text-left border-collapse min-w-[1050px]">
+                    <thead>
+                      <tr className="bg-minsu-gold-100/60 text-minsu-gold-600 border-b border-line text-[11px] font-bold">
+                        <SortableTh label="Ctrl #" sortKey="controlNumber" currentSortKey={otherSortKey} currentDirection={otherSortDirection} onSort={handleOtherSort} minWidth="65px" className="text-center" />
+                        <SortableTh label="Student No." sortKey="studentNumber" currentSortKey={otherSortKey} currentDirection={otherSortDirection} onSort={handleOtherSort} minWidth="120px" />
+                        <SortableTh label="TDP Award No." sortKey="tdpAwardNumber" currentSortKey={otherSortKey} currentDirection={otherSortDirection} onSort={handleOtherSort} minWidth="150px" />
+                        <SortableTh label="Student Name" sortKey="name" currentSortKey={otherSortKey} currentDirection={otherSortDirection} onSort={handleOtherSort} minWidth="220px" />
+                        <SortableTh label="Sex" sortKey="sex" currentSortKey={otherSortKey} currentDirection={otherSortDirection} onSort={handleOtherSort} minWidth="55px" className="text-center" />
+                        <SortableTh label="Degree Program" sortKey="degreeProgram" currentSortKey={otherSortKey} currentDirection={otherSortDirection} onSort={handleOtherSort} minWidth="180px" />
+                        <SortableTh label="Yr" sortKey="yearLevel" currentSortKey={otherSortKey} currentDirection={otherSortDirection} onSort={handleOtherSort} minWidth="55px" className="text-center" />
+                        <SortableTh label="Status" sortKey="status" currentSortKey={otherSortKey} currentDirection={otherSortDirection} onSort={handleOtherSort} minWidth="130px" />
+                        <SortableTh label="Remarks / Reason" sortKey="remarks" currentSortKey={otherSortKey} currentDirection={otherSortDirection} onSort={handleOtherSort} minWidth="200px" />
+                        <th className="py-2.5 px-3 w-24 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {sortedOther.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} className="py-12 text-center text-ink-muted italic">
+                            No unbilled scholars in Form 3. All continuing grantees are actively billed in Form 2.
                           </td>
                         </tr>
-                      );
-                    })}
-                    {filteredOther.length === 0 && (
-                      <tr>
-                        <td colSpan={10} className="py-12 text-center text-ink-muted italic">
-                          No unbilled scholars in Form 3. All continuing grantees are actively billed in Form 2.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        paginatedOther.map((g, idx) => {
+                        const realIndex = formData.otherGrantees.findIndex(
+                          (item) => item.controlNumber === g.controlNumber
+                        );
+                        return (
+                          <tr key={g.controlNumber || idx} className="hover:bg-minsu-gold-50/40 transition-colors">
+                            <td className="py-2 px-3 text-center font-mono font-bold text-minsu-gold-600">
+                              {g.controlNumber}
+                            </td>
+                            <td className="py-2 px-3 font-mono">
+                              <input
+                                value={g.studentNumber}
+                                onChange={(e) => updateOtherField(realIndex, "studentNumber", e.target.value)}
+                                className="w-full bg-transparent focus:bg-white focus:ring-1 focus:ring-minsu-gold-500 rounded px-1.5 py-0.5"
+                              />
+                            </td>
+                            <td className="py-2 px-3 font-mono">
+                              <input
+                                value={g.tdpAwardNumber}
+                                onChange={(e) => updateOtherField(realIndex, "tdpAwardNumber", e.target.value)}
+                                className="w-full bg-transparent focus:bg-white focus:ring-1 focus:ring-minsu-gold-500 rounded px-1.5 py-0.5"
+                              />
+                            </td>
+                            <td className="py-2 px-3 font-bold text-ink">
+                              {g.lastName}, {g.givenName} {g.middleInitial}
+                            </td>
+                            <td className="py-2 px-2 text-center">{g.sex}</td>
+                            <td className="py-2 px-3">{g.degreeProgram}</td>
+                            <td className="py-2 px-2 text-center">{g.yearLevel}</td>
+                            <td className="py-2 px-3">
+                              <select
+                                value={g.status}
+                                onChange={(e) => updateOtherField(realIndex, "status", e.target.value as OtherGranteeStatus)}
+                                className="bg-minsu-gold-100 text-minsu-gold-600 font-bold text-[11px] rounded px-2 py-1 outline-none border border-minsu-gold-400/40"
+                              >
+                                <option value="not enrolled">Not Enrolled</option>
+                                <option value="dropped">Dropped</option>
+                                <option value="waived">Waived</option>
+                                <option value="on LOA">On LOA</option>
+                                <option value="transferee">Transferee</option>
+                                <option value="graduated">Graduated</option>
+                              </select>
+                            </td>
+                            <td className="py-2 px-3">
+                              <input
+                                value={g.remarks}
+                                onChange={(e) => updateOtherField(realIndex, "remarks", e.target.value)}
+                                placeholder="Reason not billed..."
+                                className="w-full bg-transparent focus:bg-white focus:ring-1 focus:ring-minsu-gold-500 rounded px-1.5 py-0.5 text-xs"
+                              />
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => moveOtherToBilled(realIndex)}
+                                  title="Move back to Billed (Form 2)"
+                                  className="px-2 py-0.5 rounded bg-minsu-green-100 text-minsu-green-700 hover:bg-minsu-green-200 text-[10px] font-bold apple-press"
+                                >
+                                  Bill Now
+                                </button>
+                                <button
+                                  onClick={() => removeOtherRow(realIndex)}
+                                  title="Delete row"
+                                  className="p-1 rounded hover:bg-red-50 text-red-600 transition apple-press"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <PaginationBar
+                  page={validOtherPage}
+                  pageSize={otherPageSize}
+                  totalItems={sortedOther.length}
+                  totalPages={otherTotalPages}
+                  startIndex={otherStartIndex}
+                  endIndex={otherEndIndex}
+                  onPageChange={setOtherPage}
+                  onPageSizeChange={setOtherPageSize}
+                  itemLabel="unbilled scholars"
+                />
               </div>
             )}
 

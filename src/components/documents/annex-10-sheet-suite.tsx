@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { BatchSelectorDropdown } from "./batch-selector-dropdown";
 import { useDownload } from "@/components/providers/download-provider";
 import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
+import { compareValues } from "@/hooks/use-table";
 import {
   FileText,
   Printer,
@@ -386,6 +389,75 @@ export function Annex10SheetSuite({
         g.address.toLowerCase().includes(q)
     );
   }, [formData.grantees, searchTerm]);
+
+  // Sort and pagination state for NOA Grantees table
+  const [sortKey, setSortKey] = useState<string | null>("seqNo");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>("asc");
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      if (sortDirection === "asc") setSortDirection("desc");
+      else if (sortDirection === "desc") {
+        setSortKey(null);
+        setSortDirection(null);
+      } else {
+        setSortDirection("asc");
+      }
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+    setPage(1);
+  };
+
+  const sortedGrantees = useMemo(() => {
+    if (!sortKey || !sortDirection) return filteredGrantees;
+    return [...filteredGrantees].sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      if (sortKey === "seqNo") {
+        valA = a.seqNo;
+        valB = b.seqNo;
+      } else if (sortKey === "batchNumber") {
+        valA = a.batchNumber;
+        valB = b.batchNumber;
+      } else if (sortKey === "awardNo") {
+        valA = a.awardNo;
+        valB = b.awardNo;
+      } else if (sortKey === "granteeName") {
+        valA = a.granteeName;
+        valB = b.granteeName;
+      } else if (sortKey === "salutation") {
+        valA = a.salutation;
+        valB = b.salutation;
+      } else if (sortKey === "address") {
+        valA = a.address;
+        valB = b.address;
+      } else if (sortKey === "term") {
+        valA = `${a.academicYear} ${a.startingSemester || ""}`;
+        valB = `${b.academicYear} ${b.startingSemester || ""}`;
+      } else if (sortKey === "stipendAmount") {
+        valA = a.stipendAmount;
+        valB = b.stipendAmount;
+      }
+      return compareValues(valA, valB, sortDirection);
+    });
+  }, [filteredGrantees, sortKey, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedGrantees.length / pageSize));
+  const validPage = Math.max(1, Math.min(page, totalPages));
+  const startIndex = sortedGrantees.length === 0 ? 0 : (validPage - 1) * pageSize + 1;
+  const endIndex = Math.min(validPage * pageSize, sortedGrantees.length);
+  const paginatedGrantees = useMemo(() => {
+    const start = (validPage - 1) * pageSize;
+    return sortedGrantees.slice(start, start + pageSize);
+  }, [sortedGrantees, validPage, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
 
   // Save Document to Backend
   const handleSaveDocument = async () => {
@@ -902,22 +974,22 @@ export function Annex10SheetSuite({
               </div>
 
               <div className="overflow-x-auto max-h-[500px]">
-                <table className="w-full text-xs text-left">
+                <table className="w-full text-xs text-left min-w-[950px]">
                   <thead className="bg-[#F6F8F6] text-[#1F2A24] font-semibold uppercase tracking-wider sticky top-0 border-b border-[#D6DDD8]">
                     <tr>
-                      <th className="py-2.5 px-3 w-12 text-center">#</th>
-                      <th className="py-2.5 px-2 w-16 text-center">Batch</th>
-                      <th className="py-2.5 px-3">Award No.</th>
-                      <th className="py-2.5 px-3">Grantee Full Name</th>
-                      <th className="py-2.5 px-3">Salutation</th>
-                      <th className="py-2.5 px-3">Address & City</th>
-                      <th className="py-2.5 px-3">Term & AY</th>
-                      <th className="py-2.5 px-3 text-right">Stipend</th>
+                      <SortableTh label="#" sortKey="seqNo" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="50px" className="text-center" />
+                      <SortableTh label="Batch" sortKey="batchNumber" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="65px" className="text-center" />
+                      <SortableTh label="Award No." sortKey="awardNo" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="130px" />
+                      <SortableTh label="Grantee Full Name" sortKey="granteeName" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="180px" />
+                      <SortableTh label="Salutation" sortKey="salutation" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="90px" />
+                      <SortableTh label="Address & City" sortKey="address" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="180px" />
+                      <SortableTh label="Term & AY" sortKey="term" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="130px" />
+                      <SortableTh label="Stipend" sortKey="stipendAmount" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="90px" align="right" />
                       <th className="py-2.5 px-3 text-center w-28">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#D6DDD8]">
-                    {filteredGrantees.length === 0 ? (
+                    {sortedGrantees.length === 0 ? (
                       <tr>
                         <td colSpan={9} className="py-16 text-center text-ink-muted">
                           <div className="flex flex-col items-center justify-center gap-2">
@@ -936,7 +1008,7 @@ export function Annex10SheetSuite({
                         </td>
                       </tr>
                     ) : (
-                      filteredGrantees.map((grantee) => {
+                      paginatedGrantees.map((grantee) => {
                       const isSelected = grantee.id === formData.selectedGranteeId;
                       return (
                         <tr
@@ -1053,6 +1125,18 @@ export function Annex10SheetSuite({
                   </tbody>
                 </table>
               </div>
+
+              <PaginationBar
+                page={validPage}
+                pageSize={pageSize}
+                totalItems={sortedGrantees.length}
+                totalPages={totalPages}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="scholars"
+              />
             </div>
           )}
 

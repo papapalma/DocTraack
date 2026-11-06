@@ -6,14 +6,16 @@ import { useSession } from "@/hooks/use-session";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/documents/status-badge";
-import { Send, Search, ExternalLink, Eye, FileText, CheckCircle2 } from "lucide-react";
+import { Send, Search, ExternalLink, Eye, FileText, CheckCircle2, SearchX, RotateCcw } from "lucide-react";
 import { SkeletonTableRows } from "@/components/ui/skeleton";
+import { useTable } from "@/hooks/use-table";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 
 export default function OutgoingDocumentsPage() {
   const { user } = useSession();
   const [documents, setDocuments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     async function fetchOutgoing() {
@@ -35,14 +37,41 @@ export default function OutgoingDocumentsPage() {
     fetchOutgoing();
   }, []);
 
-  const filtered = useMemo(() => {
-    return documents.filter((doc) => {
-      const q = searchQuery.toLowerCase();
-      const titleMatch = doc.title.toLowerCase().includes(q);
-      const recipientMatch = doc.transmittal?.recipient?.toLowerCase().includes(q);
-      return titleMatch || recipientMatch;
-    });
-  }, [documents, searchQuery]);
+  // Table Search, Sort, and Pagination Hook
+  const {
+    searchQuery,
+    setSearchQuery,
+    sortKey,
+    sortDirection,
+    onSort,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    totalItems,
+    startIndex,
+    endIndex,
+    paginatedItems: paginatedOutgoing,
+  } = useTable({
+    data: documents,
+    initialPageSize: 10,
+    initialSortKey: "sentAt",
+    initialSortDirection: "desc",
+    searchFields: [
+      (d) => d.title,
+      (d) => `Annex ${d.annexType?.number}`,
+      (d) => d.transmittal?.recipient,
+      (d) => d.transmittal?.method,
+    ],
+    getSortValue: (doc, key) => {
+      if (key === "annexNumber") return doc.annexType?.number || 0;
+      if (key === "recipient") return doc.transmittal?.recipient || "";
+      if (key === "method") return doc.transmittal?.method || "";
+      if (key === "sentAt") return doc.transmittal?.sentAt || "";
+      return undefined;
+    },
+  });
 
   if (!user) return null;
 
@@ -84,15 +113,28 @@ export default function OutgoingDocumentsPage() {
       {/* Search Toolbar */}
       <Card>
         <CardContent className="p-4">
-          <div className="relative w-full md:w-96">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-[#55645B]" />
-            <input
-              type="text"
-              placeholder="Search by recipient agency or document title..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 pl-9 pr-4 w-full rounded-lg border border-[#D6DDD8] bg-white text-sm focus-visible:outline-none focus-visible:border-[#1B5E20]"
-            />
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-[#55645B]" />
+              <input
+                type="text"
+                placeholder="Search by recipient agency, title, or method..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-10 pl-9 pr-4 w-full rounded-xl border border-[#D6DDD8] bg-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B5E20] focus-visible:border-[#1B5E20] transition"
+              />
+            </div>
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSearchQuery("")}
+                className="text-xs h-9 text-[#B3261E] self-start sm:self-auto"
+              >
+                <RotateCcw className="w-3 h-3 mr-1.5" />
+                Reset Search
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -102,7 +144,7 @@ export default function OutgoingDocumentsPage() {
         <CardContent className="p-0">
           {isLoading ? (
             <SkeletonTableRows count={5} />
-          ) : filtered.length === 0 ? (
+          ) : documents.length === 0 ? (
             <div className="py-16 text-center">
               <div className="w-12 h-12 rounded-full bg-[#F1F8F1] text-[#1B5E20] flex items-center justify-center mx-auto mb-3">
                 <Send className="w-6 h-6" />
@@ -114,83 +156,158 @@ export default function OutgoingDocumentsPage() {
                 Approved documents will appear here once Staff marks them as transmitted.
               </p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-[#F1F8F1] text-xs font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8]">
-                  <tr>
-                    <th className="py-3.5 px-4">Annex</th>
-                    <th className="py-3.5 px-4">Document Title</th>
-                    <th className="py-3.5 px-4">Recipient Agency</th>
-                    <th className="py-3.5 px-4">Method</th>
-                    <th className="py-3.5 px-4">Dispatched Date</th>
-                    <th className="py-3.5 px-4">Online Storage</th>
-                    <th className="py-3.5 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#D6DDD8]">
-                  {filtered.map((doc) => (
-                    <tr
-                      key={doc.id}
-                      className="hover:bg-[#F6F8F6] transition-colors"
-                    >
-                      <td className="py-3.5 px-4 font-bold text-[#1B5E20]">
-                        Annex {doc.annexType?.number}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <Link
-                          href={`/documents/${doc.id}`}
-                          className="font-semibold text-[#1F2A24] hover:text-[#1B5E20]"
-                        >
-                          {doc.title}
-                        </Link>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <StatusBadge status={doc.status} size="sm" />
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 font-medium text-[#1F2A24]">
-                        {doc.transmittal?.recipient || "N/A"}
-                      </td>
-                      <td className="py-3.5 px-4 text-xs uppercase font-semibold text-[#55645B]">
-                        {doc.transmittal?.method || "manual"}
-                      </td>
-                      <td className="py-3.5 px-4 text-xs text-[#55645B]">
-                        {doc.transmittal?.sentAt
-                          ? new Date(doc.transmittal.sentAt).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })
-                          : "N/A"}
-                      </td>
-                      <td className="py-3.5 px-4 text-xs">
-                        {doc.transmittal?.driveLink ? (
-                          <a
-                            href={doc.transmittal.driveLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center text-[#1B5E20] hover:underline gap-1 font-medium"
-                          >
-                            Drive Link
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        ) : (
-                          <span className="text-[#55645B] italic">None</span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <Link href={`/documents/${doc.id}`}>
-                          <Button variant="outline" size="sm" className="h-8 text-xs">
-                            <Eye className="w-3.5 h-3.5 mr-1" />
-                            Details
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          ) : paginatedOutgoing.length === 0 ? (
+            <div className="py-14 text-center px-4">
+              <div className="w-12 h-12 rounded-full bg-neutral-100 flex items-center justify-center text-[#55645B] mx-auto mb-3">
+                <SearchX className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-semibold text-[#1F2A24]">
+                No transmittals found matching &ldquo;{searchQuery}&rdquo;
+              </h3>
+              <p className="text-xs text-[#55645B] max-w-sm mx-auto mt-1 mb-4">
+                Check for typos or reset your search term to see all dispatched documents.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSearchQuery("")}
+                className="text-xs"
+              >
+                <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                Clear Search
+              </Button>
             </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm min-w-[950px]">
+                  <thead className="bg-[#F1F8F1] text-xs font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8] sticky top-0 z-10">
+                    <tr>
+                      <SortableTh
+                        label="Annex"
+                        sortKey="annexNumber"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="100px"
+                      />
+                      <SortableTh
+                        label="Document Title"
+                        sortKey="title"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="260px"
+                      />
+                      <SortableTh
+                        label="Recipient Agency"
+                        sortKey="recipient"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="220px"
+                      />
+                      <SortableTh
+                        label="Method"
+                        sortKey="method"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="120px"
+                      />
+                      <SortableTh
+                        label="Dispatched Date"
+                        sortKey="sentAt"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="150px"
+                      />
+                      <th className="py-3.5 px-4 uppercase tracking-wider text-xs font-semibold text-[#1F2A24] min-w-[140px]">
+                        Online Storage
+                      </th>
+                      <th className="py-3.5 px-4 text-right uppercase tracking-wider text-xs font-semibold text-[#1F2A24] min-w-[110px]">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#D6DDD8]">
+                    {paginatedOutgoing.map((doc) => (
+                      <tr
+                        key={doc.id}
+                        className="hover:bg-[#F6F8F6] transition-colors"
+                      >
+                        <td className="py-3.5 px-4 font-bold text-[#1B5E20] whitespace-nowrap">
+                          Annex {doc.annexType?.number}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Link
+                            href={`/documents/${doc.id}`}
+                            className="font-semibold text-[#1F2A24] hover:text-[#1B5E20] block break-words"
+                          >
+                            {doc.title}
+                          </Link>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <StatusBadge status={doc.status} size="sm" />
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-medium text-[#1F2A24] break-words">
+                          {doc.transmittal?.recipient || "N/A"}
+                        </td>
+                        <td className="py-3.5 px-4 text-xs uppercase font-semibold text-[#55645B] whitespace-nowrap">
+                          {doc.transmittal?.method || "manual"}
+                        </td>
+                        <td className="py-3.5 px-4 text-xs text-[#55645B] tabular-nums whitespace-nowrap">
+                          {doc.transmittal?.sentAt
+                            ? new Date(doc.transmittal.sentAt).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })
+                            : "N/A"}
+                        </td>
+                        <td className="py-3.5 px-4 text-xs whitespace-nowrap">
+                          {doc.transmittal?.driveLink ? (
+                            <a
+                              href={doc.transmittal.driveLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center text-[#1B5E20] hover:underline gap-1 font-medium"
+                            >
+                              Drive Link
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ) : (
+                            <span className="text-[#55645B] italic">None</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <Link href={`/documents/${doc.id}`}>
+                            <Button variant="outline" size="sm" className="h-8 text-xs apple-press">
+                              <Eye className="w-3.5 h-3.5 mr-1" />
+                              Details
+                            </Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              <PaginationBar
+                page={page}
+                pageSize={pageSize}
+                totalItems={totalItems}
+                totalPages={totalPages}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="transmittals"
+              />
+            </>
           )}
         </CardContent>
       </Card>

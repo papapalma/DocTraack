@@ -7,8 +7,12 @@ import { PrintPreviewModal } from "./print-preview-modal";
 import { Annex9FormData, Annex9GranteePayroll, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { BatchSelectorDropdown } from "./batch-selector-dropdown";
+import { StipendTierSelector } from "./stipend-tier-selector";
 import { useDownload } from "@/components/providers/download-provider";
 import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
+import { compareValues } from "@/hooks/use-table";
 import {
   FileSpreadsheet,
   Printer,
@@ -202,6 +206,23 @@ export function Annex9SheetSuite({
       `Updated active semester to ${newSemester === "1" ? "1st" : "2nd"} Semester with ₱${newAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} stipend for ${indexed.length} scholars.`
     );
     setTimeout(() => setImportMessage(null), 3500);
+  };
+
+  const handleStipendTierChange = (
+    tier: "7500" | "10000" | "custom",
+    amount: number
+  ) => {
+    if (tier === "7500" || tier === "10000") {
+      setCustomStipendInput(String(amount));
+    }
+    applyStipendAndSemester(formData.activeSemester, amount, tier);
+  };
+
+  const handleCustomStipendInputChange = (rawVal: string, numVal: number) => {
+    setCustomStipendInput(rawVal);
+    if (formData.stipendTier === "custom" && numVal > 0) {
+      applyStipendAndSemester(formData.activeSemester, numVal, "custom");
+    }
   };
 
   const handleLeftLogoChange = (newConfig: LogoConfig) => {
@@ -582,6 +603,87 @@ export function Annex9SheetSuite({
     );
   }, [formData.grantees, searchTerm]);
 
+  // Sort and pagination state for Payroll Master table
+  const [sortKey, setSortKey] = useState<string | null>("seqNo");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>("asc");
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      if (sortDirection === "asc") setSortDirection("desc");
+      else if (sortDirection === "desc") {
+        setSortKey(null);
+        setSortDirection(null);
+      } else {
+        setSortDirection("asc");
+      }
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+    setPage(1);
+  };
+
+  const sortedGrantees = useMemo(() => {
+    if (!sortKey || !sortDirection) return filteredGrantees;
+    return [...filteredGrantees].sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      if (sortKey === "seqNo") {
+        valA = a.seqNo;
+        valB = b.seqNo;
+      } else if (sortKey === "batchNumber") {
+        valA = a.batchNumber;
+        valB = b.batchNumber;
+      } else if (sortKey === "campus") {
+        valA = a.campus;
+        valB = b.campus;
+      } else if (sortKey === "tdpAwardNo") {
+        valA = a.tdpAwardNo;
+        valB = b.tdpAwardNo;
+      } else if (sortKey === "studentIdNo") {
+        valA = a.studentIdNo;
+        valB = b.studentIdNo;
+      } else if (sortKey === "lastName") {
+        valA = a.lastName;
+        valB = b.lastName;
+      } else if (sortKey === "givenName") {
+        valA = a.givenName;
+        valB = b.givenName;
+      } else if (sortKey === "middleInitial") {
+        valA = a.middleInitial;
+        valB = b.middleInitial;
+      } else if (sortKey === "degreeProgram") {
+        valA = a.degreeProgram;
+        valB = b.degreeProgram;
+      } else if (sortKey === "yearLevel") {
+        valA = a.yearLevel;
+        valB = b.yearLevel;
+      } else if (sortKey === "firstSemAmount") {
+        valA = a.firstSemAmount;
+        valB = b.firstSemAmount;
+      } else if (sortKey === "secondSemAmount") {
+        valA = a.secondSemAmount;
+        valB = b.secondSemAmount;
+      }
+      return compareValues(valA, valB, sortDirection);
+    });
+  }, [filteredGrantees, sortKey, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedGrantees.length / pageSize));
+  const validPage = Math.max(1, Math.min(page, totalPages));
+  const startIndex = sortedGrantees.length === 0 ? 0 : (validPage - 1) * pageSize + 1;
+  const endIndex = Math.min(validPage * pageSize, sortedGrantees.length);
+  const paginatedGrantees = useMemo(() => {
+    const start = (validPage - 1) * pageSize;
+    return sortedGrantees.slice(start, start + pageSize);
+  }, [sortedGrantees, validPage, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
+
   return (
     <div className="space-y-6">
       {/* Top Action Bar */}
@@ -856,45 +958,14 @@ export function Annex9SheetSuite({
                 </div>
 
                 <div className="flex items-center gap-2 self-stretch md:self-auto justify-end">
-                  <span className="text-[11px] font-semibold text-ink-muted">Quick Rate:</span>
-                  <div className="inline-flex rounded-lg border border-line bg-white p-0.5 shadow-2xs">
-                    <button
-                      type="button"
-                      onClick={() => applyStipendAndSemester(formData.activeSemester, 7500, "7500")}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${
-                        formData.stipendTier === "7500"
-                          ? "bg-minsu-green-700 text-white shadow-2xs"
-                          : "text-ink hover:bg-neutral-100"
-                      }`}
-                    >
-                      ₱7,500
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyStipendAndSemester(formData.activeSemester, 10000, "10000")}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${
-                        formData.stipendTier === "10000"
-                          ? "bg-minsu-green-700 text-white shadow-2xs"
-                          : "text-ink hover:bg-neutral-100"
-                      }`}
-                    >
-                      ₱10,000
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const amt = Number(customStipendInput) || 7500;
-                        applyStipendAndSemester(formData.activeSemester, amt, "custom");
-                      }}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${
-                        formData.stipendTier === "custom"
-                          ? "bg-minsu-green-700 text-white shadow-2xs"
-                          : "text-ink hover:bg-neutral-100"
-                      }`}
-                    >
-                      Custom
-                    </button>
-                  </div>
+                  <StipendTierSelector
+                    selectedTier={formData.stipendTier || "7500"}
+                    currentAmount={formData.stipendAmountPerScholar || 7500}
+                    customInputValue={customStipendInput}
+                    onTierChange={handleStipendTierChange}
+                    onCustomInputChange={handleCustomStipendInputChange}
+                    label="Quick Rate"
+                  />
                 </div>
               </div>
 
@@ -942,16 +1013,16 @@ export function Annex9SheetSuite({
                   <table className="w-full min-w-[1780px] text-xs text-left border-collapse">
                     <thead className="bg-neutral-50/80 backdrop-blur-xs border-b border-line text-ink-muted text-[11px] font-semibold uppercase tracking-wider select-none">
                       <tr>
-                        <th className="py-3 px-2 w-12 text-center">#</th>
-                        <th className="py-3 px-1.5 w-16 text-center">Batch</th>
-                        <th className="py-3 px-2 w-28 text-center">Campus</th>
-                        <th className="py-3 px-2.5 w-40 min-w-[155px]">TDP Award No.</th>
-                        <th className="py-3 px-2.5 w-32 min-w-[125px]">Student ID</th>
-                        <th className="py-3 px-2.5 w-36 min-w-[140px]">Last Name</th>
-                        <th className="py-3 px-2.5 w-36 min-w-[140px]">Given Name</th>
-                        <th className="py-3 px-1 w-14 text-center">M.I.</th>
-                        <th className="py-3 px-2.5 min-w-[180px]">Degree Program</th>
-                        <th className="py-3 px-1 w-14 text-center">Yr</th>
+                        <SortableTh label="#" sortKey="seqNo" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="50px" className="text-center" />
+                        <SortableTh label="Batch" sortKey="batchNumber" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="65px" className="text-center" />
+                        <SortableTh label="Campus" sortKey="campus" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="120px" className="text-center" />
+                        <SortableTh label="TDP Award No." sortKey="tdpAwardNo" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="155px" />
+                        <SortableTh label="Student ID" sortKey="studentIdNo" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="125px" />
+                        <SortableTh label="Last Name" sortKey="lastName" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="140px" />
+                        <SortableTh label="Given Name" sortKey="givenName" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="140px" />
+                        <SortableTh label="M.I." sortKey="middleInitial" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="55px" className="text-center" />
+                        <SortableTh label="Degree Program" sortKey="degreeProgram" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="180px" />
+                        <SortableTh label="Yr" sortKey="yearLevel" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="55px" className="text-center" />
                         {/* Semester 1 */}
                         <th
                           className={`py-3 px-2.5 w-36 min-w-[140px] text-right border-l ${
@@ -1002,9 +1073,9 @@ export function Annex9SheetSuite({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line/60">
-                      {filteredGrantees.map((g, idx) => (
+                      {paginatedGrantees.map((g, idx) => (
                         <tr key={g.id} className="group hover:bg-neutral-50/60 transition-colors duration-150">
-                          <td className="py-2 px-2 text-center text-ink-muted/80 font-mono text-[11px]">{idx + 1}</td>
+                          <td className="py-2 px-2 text-center text-ink-muted/80 font-mono text-[11px]">{(validPage - 1) * pageSize + idx + 1}</td>
                           <td className="py-1.5 px-1 text-center">
                             <input
                               type="text"
@@ -1193,6 +1264,18 @@ export function Annex9SheetSuite({
                     </tfoot>
                   </table>
                 </div>
+
+                <PaginationBar
+                  page={validPage}
+                  pageSize={pageSize}
+                  totalItems={sortedGrantees.length}
+                  totalPages={totalPages}
+                  startIndex={startIndex}
+                  endIndex={endIndex}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  itemLabel="beneficiaries"
+                />
               </div>
             </div>
           )}
@@ -1218,75 +1301,15 @@ export function Annex9SheetSuite({
                       Select standard TDP tier or specify custom allocation. Switching reallocates stipends for all scholars on active semester.
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-line shadow-2xs">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomStipendInput("7500");
-                        applyStipendAndSemester(formData.activeSemester, 7500, "7500");
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                        formData.stipendTier === "7500"
-                          ? "bg-minsu-green-700 text-white shadow-2xs"
-                          : "text-ink hover:bg-neutral-100"
-                      }`}
-                    >
-                      {formData.stipendTier === "7500" && <Check className="w-3.5 h-3.5" />}
-                      ₱7,500
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomStipendInput("10000");
-                        applyStipendAndSemester(formData.activeSemester, 10000, "10000");
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                        formData.stipendTier === "10000"
-                          ? "bg-minsu-green-700 text-white shadow-2xs"
-                          : "text-ink hover:bg-neutral-100"
-                      }`}
-                    >
-                      {formData.stipendTier === "10000" && <Check className="w-3.5 h-3.5" />}
-                      ₱10,000
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const amt = Number(customStipendInput) || 7500;
-                        applyStipendAndSemester(formData.activeSemester, amt, "custom");
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                        formData.stipendTier === "custom"
-                          ? "bg-minsu-green-700 text-white shadow-2xs"
-                          : "text-ink hover:bg-neutral-100"
-                      }`}
-                    >
-                      {formData.stipendTier === "custom" && <Check className="w-3.5 h-3.5" />}
-                      Custom
-                    </button>
-                  </div>
+                  <StipendTierSelector
+                    selectedTier={formData.stipendTier || "7500"}
+                    currentAmount={formData.stipendAmountPerScholar || 7500}
+                    customInputValue={customStipendInput}
+                    onTierChange={handleStipendTierChange}
+                    onCustomInputChange={handleCustomStipendInputChange}
+                    label=""
+                  />
                 </div>
-
-                {formData.stipendTier === "custom" && (
-                  <div className="flex items-center gap-3 pt-3 border-t border-line/60">
-                    <label className="text-xs font-bold text-ink">Enter Custom Stipend Amount:</label>
-                    <div className="relative w-48">
-                      <span className="absolute left-3 top-2 text-xs font-mono font-bold text-ink-muted">₱</span>
-                      <input
-                        type="number"
-                        step="100"
-                        value={customStipendInput}
-                        onChange={(e) => {
-                          setCustomStipendInput(e.target.value);
-                          const val = Number(e.target.value) || 0;
-                          applyStipendAndSemester(formData.activeSemester, val, "custom");
-                        }}
-                        className="w-full pl-7 pr-3 py-1.5 text-xs font-mono font-bold rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700 bg-white"
-                        placeholder="e.g. 15000"
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">

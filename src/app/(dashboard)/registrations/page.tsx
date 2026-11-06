@@ -28,6 +28,9 @@ import {
   Award,
 } from "lucide-react";
 import { BatchSelectorDropdown } from "@/components/documents/batch-selector-dropdown";
+import { useTable } from "@/hooks/use-table";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 
 export default function RegistrationsValidationPage() {
   const { user } = useSession();
@@ -108,6 +111,40 @@ export default function RegistrationsValidationPage() {
       return name.includes(q) || studentId.includes(q) || course.includes(q) || code.includes(q);
     });
   }, [applications, activeTab, batchFilter, searchQuery]);
+
+  // Table Sort and Pagination Hook
+  const {
+    sortKey,
+    sortDirection,
+    onSort,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    totalItems,
+    startIndex,
+    endIndex,
+    paginatedItems: paginatedRegistrations,
+  } = useTable({
+    data: filteredApps,
+    initialPageSize: 25,
+    initialSortKey: "submittedAt",
+    initialSortDirection: "desc",
+    getSortValue: (app, key) => {
+      const d = app.formData || {};
+      if (key === "batchNumber") return Number(app.batchNumber || 1);
+      if (key === "studentId") return d.student_id || "";
+      if (key === "studentName") {
+        return `${d.last_name || ""} ${d.given_name || app.student?.name || ""}`;
+      }
+      if (key === "program") return d.course_degree || "";
+      if (key === "campus") return d.hei_campus || "";
+      if (key === "submittedAt") return app.submittedAt;
+      if (key === "status") return app.status;
+      return undefined;
+    },
+  });
 
   // Counts
   const counts = useMemo(() => {
@@ -434,92 +471,163 @@ export default function RegistrationsValidationPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#F1F8F1] font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8]">
-                  <tr>
-                    <th className="py-3 px-4">Batch</th>
-                    <th className="py-3 px-4">Student ID</th>
-                    <th className="py-3 px-4">Student Full Name</th>
-                    <th className="py-3 px-4">Degree Program & Year</th>
-                    <th className="py-3 px-4">HEI UII & Campus</th>
-                    <th className="py-3 px-4">Date Registered</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#D6DDD8]">
-                  {filteredApps.map((app) => {
-                    const d = app.formData || {};
-                    const fullName = `${d.last_name ? d.last_name + ", " : ""}${d.given_name || app.student?.name || ""} ${d.ext_name || ""} ${d.middle_name || ""}`;
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs min-w-[1150px]">
+                  <thead className="bg-[#F1F8F1] font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8] sticky top-0 z-10">
+                    <tr>
+                      <SortableTh
+                        label="Batch"
+                        sortKey="batchNumber"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="100px"
+                      />
+                      <SortableTh
+                        label="Student ID"
+                        sortKey="studentId"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="140px"
+                      />
+                      <SortableTh
+                        label="Student Full Name"
+                        sortKey="studentName"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="230px"
+                      />
+                      <SortableTh
+                        label="Degree Program & Year"
+                        sortKey="program"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="220px"
+                      />
+                      <SortableTh
+                        label="HEI UII & Campus"
+                        sortKey="campus"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="180px"
+                      />
+                      <SortableTh
+                        label="Date Registered"
+                        sortKey="submittedAt"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="140px"
+                      />
+                      <SortableTh
+                        label="Status"
+                        sortKey="status"
+                        currentSortKey={sortKey}
+                        currentDirection={sortDirection}
+                        onSort={onSort}
+                        minWidth="120px"
+                      />
+                      <th className="py-3 px-4 text-right uppercase tracking-wider text-[11px] font-semibold text-[#1F2A24] min-w-[120px]">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#D6DDD8]">
+                    {paginatedRegistrations.map((app) => {
+                      const d = app.formData || {};
+                      const fullName = `${d.last_name ? d.last_name + ", " : ""}${d.given_name || app.student?.name || ""} ${d.ext_name || ""} ${d.middle_name || ""}`;
 
-                    return (
-                      <tr key={app.id} className="hover:bg-[#F6F8F6] transition-colors">
-                        <td className="py-3 px-4">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCEFDD] text-[#123F17] border border-[#2E7D32]/30">
-                            Batch {app.batchNumber || 1}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 font-mono font-bold text-[#1B5E20]">
-                          {d.student_id || "N/A"}
-                        </td>
-                        <td className="py-3 px-4">
-                          <p className="font-bold text-[#1F2A24] text-xs">
-                            {fullName}
-                          </p>
-                          <p className="text-[11px] text-[#55645B]">
-                            {d.email || app.student?.email}
-                          </p>
-                        </td>
-                        <td className="py-3 px-4">
-                          <p className="font-medium text-[#1F2A24] line-clamp-1">
-                            {d.course_degree || "N/A"}
-                          </p>
-                          <span className="text-[11px] text-[#55645B]">
-                            Year Level {d.year_level || "1"}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-[#55645B]">
-                          <span className="font-mono font-bold text-[#1B5E20]">{d.hei_uii || "4060"}</span>
-                          <span className="block text-[11px]">{d.hei_campus || "Main Campus (Alcate)"}</span>
-                        </td>
-                        <td className="py-3 px-4 text-[#55645B]">
-                          {new Date(app.submittedAt).toLocaleDateString()}
-                        </td>
-                        <td className="py-3 px-4">
-                          {app.status === "SUBMITTED" && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FFF1C2] text-[#B88A00] border border-[#F2B705]/40">
-                              Pending Review
+                      return (
+                        <tr key={app.id} className="hover:bg-[#F6F8F6] transition-colors">
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCEFDD] text-[#123F17] border border-[#2E7D32]/30 tabular-nums">
+                              Batch {app.batchNumber || 1}
                             </span>
-                          )}
-                          {app.status === "ACCEPTED" && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#DCEFDD] text-[#123F17] border border-[#2E7D32]/30">
-                              Validated
+                          </td>
+                          <td className="py-3 px-4 font-mono font-bold text-[#1B5E20] tabular-nums whitespace-nowrap">
+                            {d.student_id || "N/A"}
+                          </td>
+                          <td className="py-3 px-4">
+                            <p className="font-bold text-[#1F2A24] text-xs break-words">
+                              {fullName}
+                            </p>
+                            <p className="text-[11px] text-[#55645B] break-words">
+                              {d.email || app.student?.email}
+                            </p>
+                          </td>
+                          <td className="py-3 px-4">
+                            <p className="font-medium text-[#1F2A24] break-words">
+                              {d.course_degree || "N/A"}
+                            </p>
+                            <span className="text-[11px] text-[#55645B] block mt-0.5">
+                              Year Level {d.year_level || "1"}
                             </span>
-                          )}
-                          {app.status === "REJECTED" && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FDE8E7] text-[#B3261E] border border-[#B3261E]/30">
-                              Rejected
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedApp(app)}
-                            className="h-7 text-xs font-medium"
-                          >
-                            <Eye className="w-3.5 h-3.5 mr-1 text-[#1B5E20]" />
-                            Review
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          </td>
+                          <td className="py-3 px-4 text-[#55645B]">
+                            <span className="font-mono font-bold text-[#1B5E20] tabular-nums">{d.hei_uii || "4060"}</span>
+                            <span className="block text-[11px] break-words">{d.hei_campus || "Main Campus (Alcate)"}</span>
+                          </td>
+                          <td className="py-3 px-4 text-[#55645B] tabular-nums whitespace-nowrap">
+                            {new Date(app.submittedAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            {app.status === "SUBMITTED" && (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#FFF1C2] text-[#B88A00] border border-[#F2B705]/40">
+                                Pending Review
+                              </span>
+                            )}
+                            {app.status === "ACCEPTED" && (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#DCEFDD] text-[#123F17] border border-[#2E7D32]/30">
+                                Validated
+                              </span>
+                            )}
+                            {app.status === "REJECTED" && (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#FDE8E7] text-[#B3261E] border border-[#B3261E]/30">
+                                Rejected
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedApp(app)}
+                              className="h-7 text-xs font-medium apple-press"
+                            >
+                              <Eye className="w-3.5 h-3.5 mr-1 text-[#1B5E20]" />
+                              Review
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              <PaginationBar
+                page={page}
+                pageSize={pageSize}
+                totalItems={totalItems}
+                totalPages={totalPages}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={[10, 25, 50, 100]}
+                itemLabel="registrations"
+              />
+            </>
           )}
         </CardContent>
       </Card>

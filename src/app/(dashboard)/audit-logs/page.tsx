@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSession } from "@/hooks/use-session";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDownload } from "@/components/providers/download-provider";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
+import { SortDirection } from "@/hooks/use-table";
 
 interface AuditLogActor {
   id: string;
@@ -99,6 +102,61 @@ export default function AuditLogsPage() {
   const [viewMode, setViewMode] = useState<"table" | "timeline">("table");
   const [selectedLog, setSelectedLog] = useState<AuditLogItem | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Table Sorting
+  const [sortKey, setSortKey] = useState<string | null>("createdAt");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const handleSort = useCallback((key: string) => {
+    setSortKey((prevKey) => {
+      if (prevKey !== key) {
+        setSortDirection("asc");
+        return key;
+      }
+      setSortDirection((prevDir) => {
+        if (prevDir === "asc") return "desc";
+        if (prevDir === "desc") return null;
+        return "asc";
+      });
+      return prevKey;
+    });
+  }, []);
+
+  const sortedLogs = useMemo(() => {
+    if (!sortKey || !sortDirection) return logs;
+    return [...logs].sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      if (sortKey === "createdAt") {
+        valA = a.createdAt;
+        valB = b.createdAt;
+      } else if (sortKey === "action") {
+        valA = a.action;
+        valB = b.action;
+      } else if (sortKey === "actor") {
+        valA = a.actor?.name || a.actor?.email || "";
+        valB = b.actor?.name || b.actor?.email || "";
+      } else if (sortKey === "entity") {
+        valA = a.entity;
+        valB = b.entity;
+      } else if (sortKey === "entityId") {
+        valA = a.entityId;
+        valB = b.entityId;
+      }
+
+      if (valA === valB) return 0;
+      if (valA === null || valA === undefined || valA === "") return 1;
+      if (valB === null || valB === undefined || valB === "") return -1;
+
+      let res = 0;
+      if (sortKey === "createdAt") {
+        res = new Date(valA).getTime() - new Date(valB).getTime();
+      } else {
+        res = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: "base" });
+      }
+      return sortDirection === "asc" ? res : -res;
+    });
+  }, [logs, sortKey, sortDirection]);
 
   // Debounce search input (350ms)
   useEffect(() => {
@@ -606,16 +664,55 @@ export default function AuditLogsPage() {
       {viewMode === "table" ? (
         <Card className="border border-[#D6DDD8] bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="w-full text-left border-collapse text-xs min-w-[1050px]">
               <thead>
-                <tr className="bg-[#F6F8F6] border-b border-[#D6DDD8] text-[#55645B] font-semibold tracking-wider uppercase text-[11px]">
-                  <th className="py-3 px-4">Timestamp</th>
-                  <th className="py-3 px-4">Action</th>
-                  <th className="py-3 px-4">Actor</th>
-                  <th className="py-3 px-4">Entity</th>
-                  <th className="py-3 px-4">Entity ID</th>
-                  <th className="py-3 px-4">Details Preview</th>
-                  <th className="py-3 px-4 text-right">Inspect</th>
+                <tr className="bg-[#F6F8F6] border-b border-[#D6DDD8] text-[#55645B] font-semibold tracking-wider uppercase text-[11px] sticky top-0 z-10">
+                  <SortableTh
+                    label="Timestamp"
+                    sortKey="createdAt"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    minWidth="160px"
+                  />
+                  <SortableTh
+                    label="Action"
+                    sortKey="action"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    minWidth="150px"
+                  />
+                  <SortableTh
+                    label="Actor"
+                    sortKey="actor"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    minWidth="180px"
+                  />
+                  <SortableTh
+                    label="Entity"
+                    sortKey="entity"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    minWidth="110px"
+                  />
+                  <SortableTh
+                    label="Entity ID"
+                    sortKey="entityId"
+                    currentSortKey={sortKey}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                    minWidth="140px"
+                  />
+                  <th className="py-3 px-4 font-semibold tracking-wider uppercase text-[11px] text-[#55645B] min-w-[240px]">
+                    Details Preview
+                  </th>
+                  <th className="py-3 px-4 text-right font-semibold tracking-wider uppercase text-[11px] text-[#55645B] min-w-[90px]">
+                    Inspect
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#D6DDD8]/60">
@@ -631,7 +728,7 @@ export default function AuditLogsPage() {
                       <td className="py-3.5 px-4 text-right"><div className="h-6 w-14 bg-slate-200 rounded ml-auto" /></td>
                     </tr>
                   ))
-                ) : logs.length === 0 ? (
+                ) : sortedLogs.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="text-center py-12 text-[#55645B]">
                       <div className="flex flex-col items-center justify-center gap-2">
@@ -654,7 +751,7 @@ export default function AuditLogsPage() {
                     </td>
                   </tr>
                 ) : (
-                  logs.map((log) => {
+                  sortedLogs.map((log: AuditLogItem) => {
                     const badge = getActionBadge(log.action);
                     return (
                       <tr
@@ -664,14 +761,14 @@ export default function AuditLogsPage() {
                       >
                         {/* Timestamp */}
                         <td className="py-3 px-4 text-[#55645B] whitespace-nowrap">
-                          <div className="font-medium text-[#1F2923]">
+                          <div className="font-medium text-[#1F2923] tabular-nums">
                             {new Date(log.createdAt).toLocaleDateString("en-US", {
                               month: "short",
                               day: "numeric",
                               year: "numeric",
                             })}
                           </div>
-                          <div className="text-[10px] text-slate-400">
+                          <div className="text-[10px] text-slate-400 tabular-nums">
                             {new Date(log.createdAt).toLocaleTimeString("en-US", {
                               hour: "2-digit",
                               minute: "2-digit",
@@ -700,9 +797,9 @@ export default function AuditLogsPage() {
                             <span className="w-6 h-6 rounded-full bg-[#E8EDE9] text-[#1B5E20] font-bold text-[10px] flex items-center justify-center border border-[#D6DDD8]">
                               {log.actor?.name ? log.actor.name.charAt(0).toUpperCase() : "S"}
                             </span>
-                            <span>{log.actor?.name || "System Actor"}</span>
+                            <span className="break-words">{log.actor?.name || "System Actor"}</span>
                           </div>
-                          <div className="text-[10px] text-[#55645B] ml-8">
+                          <div className="text-[10px] text-[#55645B] ml-8 break-words">
                             {log.actor?.email || log.actorId}
                           </div>
                         </td>
@@ -716,14 +813,14 @@ export default function AuditLogsPage() {
 
                         {/* Entity ID */}
                         <td className="py-3 px-4 font-mono text-[11px] text-[#55645B] whitespace-nowrap">
-                          <span className="truncate max-w-[120px] inline-block align-middle" title={log.entityId}>
+                          <span className="truncate max-w-[140px] inline-block align-middle" title={log.entityId}>
                             {log.entityId}
                           </span>
                         </td>
 
                         {/* Details Preview */}
-                        <td className="py-3 px-4 text-[#55645B] max-w-[220px]">
-                          <span className="truncate block font-mono text-[11px]">
+                        <td className="py-3 px-4 text-[#55645B] max-w-[260px]">
+                          <span className="truncate block font-mono text-[11px]" title={log.details ? JSON.stringify(log.details) : "—"}>
                             {log.details ? JSON.stringify(log.details) : "—"}
                           </span>
                         </td>
@@ -836,67 +933,19 @@ export default function AuditLogsPage() {
       )}
 
       {/* Pagination Controls */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[#D6DDD8]/60 text-xs text-[#55645B]">
-        <div className="flex items-center gap-2">
-          <span>Show rows per page:</span>
-          <select
-            value={pagination.limit}
-            onChange={(e) => {
-              setPagination((prev) => ({
-                ...prev,
-                limit: parseInt(e.target.value, 10),
-                page: 1,
-              }));
-            }}
-            className="bg-white border border-[#D6DDD8] rounded px-2 py-1 text-xs text-[#1F2923] focus:outline-none focus:border-[#1B5E20]"
-          >
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-          <span className="ml-2">
-            Showing{" "}
-            <strong className="text-[#1F2923]">
-              {pagination.totalCount === 0
-                ? 0
-                : (pagination.page - 1) * pagination.limit + 1}
-            </strong>{" "}
-            to{" "}
-            <strong className="text-[#1F2923]">
-              {Math.min(pagination.page * pagination.limit, pagination.totalCount)}
-            </strong>{" "}
-            of <strong className="text-[#1F2923]">{pagination.totalCount}</strong> entries
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
-            disabled={pagination.page <= 1 || isLoading}
-            className="h-8 text-xs border-[#D6DDD8] active:scale-95 transition-all shadow-none"
-          >
-            <ChevronLeft className="w-3.5 h-3.5 mr-1" />
-            Previous
-          </Button>
-
-          <span className="px-3 py-1 font-semibold text-xs text-[#1F2923] bg-white border border-[#D6DDD8] rounded">
-            {pagination.page} / {pagination.totalPages || 1}
-          </span>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
-            disabled={pagination.page >= pagination.totalPages || isLoading}
-            className="h-8 text-xs border-[#D6DDD8] active:scale-95 transition-all shadow-none"
-          >
-            Next
-            <ChevronRight className="w-3.5 h-3.5 ml-1" />
-          </Button>
-        </div>
-      </div>
+      <PaginationBar
+        page={pagination.page}
+        pageSize={pagination.limit}
+        totalItems={pagination.totalCount}
+        totalPages={pagination.totalPages || 1}
+        startIndex={pagination.totalCount === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1}
+        endIndex={pagination.totalCount === 0 ? 0 : Math.min(pagination.page * pagination.limit, pagination.totalCount)}
+        onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
+        onPageSizeChange={(limit) => setPagination((prev) => ({ ...prev, limit, page: 1 }))}
+        pageSizeOptions={[25, 50, 100]}
+        itemLabel="entries"
+        className="rounded-2xl border border-[#D6DDD8]"
+      />
 
       {/* Apple Slide-Over Inspector Sheet */}
       {selectedLog && (

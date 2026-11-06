@@ -48,6 +48,25 @@ export default function StudentPortalHomePage() {
 
   return (
     <div className="space-y-6">
+      {/* Welcome Card for Newly Registered Students Without Active Applications */}
+      {!myRegistration && !isLoading && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-[#F1F8F1] to-white border border-[#1B5E20]/20 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#1B5E20] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <ShieldCheck className="w-6 h-6 text-[#F2B705]" />
+            </div>
+            <div>
+              <h3 className="text-base font-heading font-bold text-[#1B5E20]">
+                Welcome to your MinSU Student Portal!
+              </h3>
+              <p className="text-xs text-[#55645B] mt-0.5 leading-relaxed max-w-xl">
+                Your student profile is saved and locked with Microsoft Authenticator. Please browse the available scholarship calls below to manually submit your grant application.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Registration Status Banner for Student */}
       {myRegistration && (
         <div>

@@ -5,9 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
-import { LogIn, Sparkles } from "lucide-react";
+import { LogIn, Sparkles, KeyRound, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { ContinuousRegistrationModal } from "@/components/auth/continuous-registration-modal";
+import { OtpInput } from "@/components/auth/otp-input";
 import { motion } from "motion/react";
 
 export interface AuthModalProps {
@@ -37,6 +38,8 @@ export function AuthModal({
   // Form states
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"password" | "totp">("password");
+  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -48,6 +51,7 @@ export function AuthModal({
 
   const handleClose = () => {
     setError(null);
+    setCode("");
     onClose();
   };
 
@@ -55,6 +59,7 @@ export function AuthModal({
   const fillRole = (roleEmail: string) => {
     setEmail(roleEmail);
     setPassword("Password@123");
+    setAuthMode("password");
     setError(null);
   };
 
@@ -69,7 +74,6 @@ export function AuthModal({
     );
   }
 
-
   // Login Submit
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,7 +84,7 @@ export function AuthModal({
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, code, authMode }),
       });
 
       const data = await res.json();
@@ -177,29 +181,108 @@ export function AuthModal({
           )}
         </FormField>
 
-        <FormField
-          id="m-password"
-          label="Password"
-          required
-          error={error && !error.toLowerCase().includes("email") ? error : undefined}
-        >
-          {({ id, className, hasError, ...fieldProps }) => (
-            <input
-              id={id}
-              type="password"
-              placeholder="••••••••••••"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
+        {/* Dual Mode Switcher: Password vs Authenticator Code */}
+        <div className="relative flex p-1 my-2 bg-[#F1F8F1] rounded-xl border border-[#D6DDD8]/80 text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => {
+              setAuthMode("password");
+              if (error) setError(null);
+            }}
+            className={`relative z-10 flex-1 py-1.5 px-2 rounded-lg text-center transition-all flex items-center justify-center gap-1.5 ${
+              authMode === "password" ? "text-[#1B5E20] font-bold" : "text-[#55645B] hover:text-[#1F2A24]"
+            }`}
+          >
+            {authMode === "password" && (
+              <motion.div
+                layoutId="auth-login-mode-pill"
+                className="absolute inset-0 bg-white rounded-lg shadow-xs -z-10"
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              />
+            )}
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Password</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setAuthMode("totp");
+              if (error) setError(null);
+            }}
+            className={`relative z-10 flex-1 py-1.5 px-2 rounded-lg text-center transition-all flex items-center justify-center gap-1.5 ${
+              authMode === "totp" ? "text-[#1B5E20] font-bold" : "text-[#55645B] hover:text-[#1F2A24]"
+            }`}
+          >
+            {authMode === "totp" && (
+              <motion.div
+                layoutId="auth-login-mode-pill"
+                className="absolute inset-0 bg-white rounded-lg shadow-xs -z-10"
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              />
+            )}
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Authenticator Code</span>
+          </button>
+        </div>
+
+        {authMode === "password" ? (
+          <div>
+            <FormField
+              id="m-password"
+              label="Password"
+              required
+              error={error && !error.toLowerCase().includes("email") ? error : undefined}
+            >
+              {({ id, className, hasError, ...fieldProps }) => (
+                <input
+                  id={id}
+                  type="password"
+                  placeholder="••••••••••••"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError(null);
+                  }}
+                  required
+                  autoComplete="current-password"
+                  className={className}
+                  {...fieldProps}
+                />
+              )}
+            </FormField>
+            <p className="text-[10px] text-[#55645B] mt-1 text-right">
+              Forgot password? Ask your Admin to reset it, or switch to <strong>Authenticator Code</strong>.
+            </p>
+          </div>
+        ) : (
+          <div className="p-3 bg-[#F6F8F6] rounded-xl border border-[#D6DDD8]/80 text-center space-y-2 my-1">
+            <span className="text-[11px] font-bold text-[#1F2A24] block">
+              Enter 6-digit code from Microsoft Authenticator:
+            </span>
+            <OtpInput
+              value={code}
+              onChange={(val) => {
+                setCode(val);
                 if (error) setError(null);
               }}
-              required
-              autoComplete="current-password"
-              className={className}
-              {...fieldProps}
+              error={error}
+              disabled={isLoading}
             />
-          )}
-        </FormField>
+            <div className="pt-1">
+              <input
+                type="text"
+                placeholder="Or enter 8-character recovery code"
+                value={code.length > 6 ? code : ""}
+                onChange={(e) => {
+                  setCode(e.target.value.trim());
+                  if (error) setError(null);
+                }}
+                className="w-full text-center text-xs py-1.5 px-2 rounded-lg border border-[#D6DDD8] bg-white text-[#1F2A24] font-mono focus:border-[#1B5E20] outline-none placeholder:text-[11px] placeholder:font-sans"
+              />
+            </div>
+          </div>
+        )}
 
         <Button
           type="submit"
@@ -208,7 +291,7 @@ export function AuthModal({
           isLoading={isLoading}
         >
           <LogIn className="w-3.5 h-3.5 mr-1.5" />
-          Sign In
+          {authMode === "password" ? "Sign In with Password" : "Sign In with Authenticator"}
         </Button>
 
         {/* Quick Demo Presets */}

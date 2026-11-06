@@ -173,7 +173,8 @@ export async function GET(req: NextRequest) {
 
     // Row 18: Total TDP-TES subsidy
     ws1.mergeCells("B18:C18");
-    ws1.getCell("B18").value = "Total TDP-TES subsidy";
+    const stipendRate = Number(formData.stipendPerGrantee) || 7500;
+    ws1.getCell("B18").value = `Total TDP-TES subsidy (PHP ${stipendRate.toLocaleString(undefined, { minimumFractionDigits: 2 })} per grantee):`;
     ws1.getCell("B18").font = { name: "Arial", size: 9, bold: true };
     ws1.getCell("D18").value = "";
     ws1.mergeCells("E18:F18");

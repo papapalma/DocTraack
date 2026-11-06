@@ -6,6 +6,9 @@ import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
 import { Annex5FormData, Annex5HeiEntry, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
+import { SortableTh } from "@/components/ui/sortable-header";
+import { PaginationBar } from "@/components/ui/pagination-bar";
+import { compareValues } from "@/hooks/use-table";
 import {
   FileSpreadsheet,
   Printer,
@@ -21,6 +24,7 @@ import {
   ShieldCheck,
   Building,
   GraduationCap,
+  Search,
 } from "lucide-react";
 
 interface Annex5SheetSuiteProps {
@@ -237,6 +241,74 @@ export function Annex5SheetSuite({
       setIsSyncing(false);
     }
   };
+
+  // Search, sorting & pagination state for HEIs table
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortKey, setSortKey] = useState<string | null>("seq");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>("asc");
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      if (sortDirection === "asc") setSortDirection("desc");
+      else if (sortDirection === "desc") {
+        setSortKey(null);
+        setSortDirection(null);
+      } else {
+        setSortDirection("asc");
+      }
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+    setPage(1);
+  };
+
+  const filteredHeis = useMemo(() => {
+    if (!searchQuery.trim()) return formData.heis;
+    const q = searchQuery.toLowerCase();
+    return formData.heis.filter(
+      (h) =>
+        h.nameOfHei.toLowerCase().includes(q) ||
+        h.heiType.toLowerCase().includes(q)
+    );
+  }, [formData.heis, searchQuery]);
+
+  const sortedHeis = useMemo(() => {
+    if (!sortKey || !sortDirection) return filteredHeis;
+    return [...filteredHeis].sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      if (sortKey === "seq") {
+        valA = a.seq;
+        valB = b.seq;
+      } else if (sortKey === "nameOfHei") {
+        valA = a.nameOfHei;
+        valB = b.nameOfHei;
+      } else if (sortKey === "heiType") {
+        valA = a.heiType;
+        valB = b.heiType;
+      } else if (sortKey === "numberTdpGrantees") {
+        valA = a.numberTdpGrantees;
+        valB = b.numberTdpGrantees;
+      }
+      return compareValues(valA, valB, sortDirection);
+    });
+  }, [filteredHeis, sortKey, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedHeis.length / pageSize));
+  const validPage = Math.max(1, Math.min(page, totalPages));
+  const startIndex = sortedHeis.length === 0 ? 0 : (validPage - 1) * pageSize + 1;
+  const endIndex = Math.min(validPage * pageSize, sortedHeis.length);
+  const paginatedHeis = useMemo(() => {
+    const start = (validPage - 1) * pageSize;
+    return sortedHeis.slice(start, start + pageSize);
+  }, [sortedHeis, validPage, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
 
   // Save changes
   const handleSave = async (submitDirectly: boolean = false) => {
@@ -478,25 +550,31 @@ export function Annex5SheetSuite({
           {workspaceTab === "heis" && (
             <div className="bg-white rounded-2xl border border-line shadow-xs overflow-hidden">
               <div className="p-4 border-b border-line flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="text-xs text-ink-muted">
-                  List of Higher Education Institutions registered with CHED Regional Office endorsing TDP grantees.
+                <div className="relative w-full sm:w-72">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+                  <input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search HEI name or type..."
+                    className="w-full text-xs pl-8 pr-3 py-1.5 rounded-xl border border-line bg-page focus:bg-white focus:ring-2 focus:ring-minsu-green-700 outline-none transition"
+                  />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={syncFromExistingBillings}
                     disabled={isSyncing}
-                    className="text-xs h-8 border-minsu-green-700/40 text-minsu-green-700 hover:bg-minsu-green-50 font-semibold gap-1.5"
+                    className="text-xs h-8 border-minsu-green-700/40 text-minsu-green-700 hover:bg-minsu-green-50 font-semibold gap-1.5 apple-press"
                     title="Calculate grantee totals from active Annex 3 and Annex 4 documents"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-                    <span>Auto-Sync from MinSU Billings</span>
+                    <span>Auto-Sync</span>
                   </Button>
                   <Button
                     size="sm"
                     onClick={addHeiRow}
-                    className="bg-minsu-green-700 hover:bg-minsu-green-600 text-white text-xs h-8 gap-1.5 font-semibold"
+                    className="bg-minsu-green-700 hover:bg-minsu-green-600 text-white text-xs h-8 gap-1.5 font-semibold apple-press"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add HEI Row</span>
@@ -506,60 +584,72 @@ export function Annex5SheetSuite({
 
               {/* Table */}
               <div className="overflow-x-auto apple-scrollbar">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full text-left text-xs border-collapse min-w-[850px]">
                   <thead className="bg-minsu-green-50 text-minsu-green-900 font-bold border-b border-line">
                     <tr>
-                      <th className="py-2.5 px-4 w-16 text-center">SEQ</th>
-                      <th className="py-2.5 px-4 min-w-[280px]">Name of HEI</th>
-                      <th className="py-2.5 px-4 w-40">HEI Type</th>
-                      <th className="py-2.5 px-4 w-48 text-right">Number of TDP Grantees</th>
+                      <SortableTh label="SEQ" sortKey="seq" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="65px" className="text-center" />
+                      <SortableTh label="Name of HEI" sortKey="nameOfHei" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="280px" />
+                      <SortableTh label="HEI Type" sortKey="heiType" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="150px" />
+                      <SortableTh label="Number of TDP Grantees" sortKey="numberTdpGrantees" currentSortKey={sortKey} currentDirection={sortDirection} onSort={handleSort} minWidth="180px" align="right" />
                       <th className="py-2.5 px-4 w-16 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line text-ink">
-                    {formData.heis.map((hei, idx) => (
-                      <tr key={idx} className="hover:bg-minsu-green-50/50 transition-colors">
-                        <td className="py-2.5 px-4 text-center font-mono font-bold text-minsu-green-800">
-                          {hei.seq}
-                        </td>
-                        <td className="py-2.5 px-4">
-                          <input
-                            value={hei.nameOfHei}
-                            onChange={(e) => updateHeiField(idx, "nameOfHei", e.target.value.toUpperCase())}
-                            className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none font-bold uppercase"
-                          />
-                        </td>
-                        <td className="py-2.5 px-4">
-                          <select
-                            value={hei.heiType}
-                            onChange={(e) => updateHeiField(idx, "heiType", e.target.value)}
-                            className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none font-semibold"
-                          >
-                            <option value="SUC">State University / College (SUC)</option>
-                            <option value="LUC">Local University / College (LUC)</option>
-                            <option value="Private HEI">Private Higher Education Institution</option>
-                          </select>
-                        </td>
-                        <td className="py-2.5 px-4 text-right">
-                          <input
-                            type="number"
-                            min="0"
-                            value={hei.numberTdpGrantees}
-                            onChange={(e) => updateHeiField(idx, "numberTdpGrantees", parseInt(e.target.value, 10) || 0)}
-                            className="w-24 text-right bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none font-mono font-bold text-sm text-minsu-green-900"
-                          />
-                        </td>
-                        <td className="py-2.5 px-4 text-center">
-                          <button
-                            onClick={() => removeHeiRow(idx)}
-                            className="text-red-500 hover:text-red-700 p-1 rounded-sm hover:bg-red-50 transition-colors"
-                            title="Delete row"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                    {sortedHeis.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center text-ink-muted">
+                          No HEI records match &ldquo;{searchQuery}&rdquo;
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      paginatedHeis.map((hei, idx) => {
+                        const realIndex = formData.heis.findIndex((h) => h.seq === hei.seq);
+                        const rowTarget = realIndex !== -1 ? realIndex : idx;
+                        return (
+                        <tr key={hei.seq || idx} className="hover:bg-minsu-green-50/50 transition-colors">
+                          <td className="py-2.5 px-4 text-center font-mono font-bold text-minsu-green-800">
+                            {hei.seq}
+                          </td>
+                          <td className="py-2.5 px-4">
+                            <input
+                              value={hei.nameOfHei}
+                              onChange={(e) => updateHeiField(rowTarget, "nameOfHei", e.target.value.toUpperCase())}
+                              className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none font-bold uppercase"
+                            />
+                          </td>
+                          <td className="py-2.5 px-4">
+                            <select
+                              value={hei.heiType}
+                              onChange={(e) => updateHeiField(rowTarget, "heiType", e.target.value)}
+                              className="w-full bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none font-semibold"
+                            >
+                              <option value="SUC">State University / College (SUC)</option>
+                              <option value="LUC">Local University / College (LUC)</option>
+                              <option value="Private HEI">Private Higher Education Institution</option>
+                            </select>
+                          </td>
+                          <td className="py-2.5 px-4 text-right">
+                            <input
+                              type="number"
+                              min="0"
+                              value={hei.numberTdpGrantees}
+                              onChange={(e) => updateHeiField(rowTarget, "numberTdpGrantees", parseInt(e.target.value, 10) || 0)}
+                              className="w-24 text-right bg-transparent border-b border-transparent hover:border-line focus:border-minsu-green-700 focus:outline-none font-mono font-bold text-sm text-minsu-green-900"
+                            />
+                          </td>
+                          <td className="py-2.5 px-4 text-center">
+                            <button
+                              onClick={() => removeHeiRow(rowTarget)}
+                              className="text-red-500 hover:text-red-700 p-1 rounded-sm hover:bg-red-50 transition-colors apple-press"
+                              title="Delete row"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                        );
+                      })
+                    )}
 
                     {/* Total Row */}
                     <tr className="bg-neutral-50 font-bold border-t-2 border-line">
@@ -574,6 +664,18 @@ export function Annex5SheetSuite({
                   </tbody>
                 </table>
               </div>
+
+              <PaginationBar
+                page={validPage}
+                pageSize={pageSize}
+                totalItems={sortedHeis.length}
+                totalPages={totalPages}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="HEIs"
+              />
             </div>
           )}
 

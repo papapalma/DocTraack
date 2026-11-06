@@ -23,8 +23,23 @@ export interface SessionUser {
   role: Role;
   active: boolean;
   departmentId?: string | null;
+  studentProfile?: Record<string, unknown> | null;
+  twoFactorEnabled?: boolean;
+  twoFactorType?: string | null;
+  authenticatorLocked?: boolean;
   notifyAnnouncements?: boolean;
   notifyPush?: boolean;
+}
+
+export type LoginAuthMode = "password" | "totp";
+
+export interface TwoFactorSetupData {
+  secret: string;
+  formattedSecret: string;
+  otpauthUrl: string;
+  qrSvg: string;
+  issuer: string;
+  accountName: string;
 }
 
 export interface AnnexFormField {
@@ -199,6 +214,7 @@ export interface Annex3FormData {
 
   totalGrantees: number;
   stipendPerGrantee: number; // 7500.00
+  stipendTier?: "7500" | "10000" | "custom";
   totalSubsidy: number; // totalGrantees * 7500
   managementFeeRate: number; // 0.005 (0.5%)
   managementFeeAmount: number; // totalSubsidy * 0.005
@@ -259,6 +275,7 @@ export interface Annex4FormData {
 
   totalGrantees: number;
   stipendPerGrantee: number; // 7500.00
+  stipendTier?: "7500" | "10000" | "custom";
   totalSubsidy: number; // totalGrantees * 7500
   managementFeeRate: number; // 0.005 (0.5%)
   managementFeeAmount: number; // totalSubsidy * 0.005
