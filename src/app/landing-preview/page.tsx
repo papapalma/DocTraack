@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useEffect, useState, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import { ModularLanding } from "@/components/landing/modular-landing";
 import { AuthModal } from "@/components/auth/auth-modal";
+import { SessionProvider, useSession } from "@/components/providers/session-provider";
 import {
   LandingSection,
   LandingStyleSettings,
@@ -11,12 +13,27 @@ import {
 } from "@/types/landing";
 
 function LandingPreviewContent() {
+  const { user, isLoading } = useSession();
+  const router = useRouter();
+
   const [sections, setSections] = useState<LandingSection[]>(DEFAULT_LANDING_SECTIONS);
   const [styleSettings, setStyleSettings] = useState<LandingStyleSettings>(DEFAULT_STYLE_SETTINGS);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
 
   useEffect(() => {
+    if (!isLoading) {
+      if (!user) {
+        router.replace("/?auth=login");
+      } else if (user.role !== "SYSTEM_ADMIN") {
+        router.replace("/dashboard");
+      }
+    }
+  }, [user, isLoading, router]);
+
+  useEffect(() => {
+    if (user?.role !== "SYSTEM_ADMIN") return;
+
     // 1. Initial state hydration from sessionStorage
     try {
       const storedDraft = sessionStorage.getItem("minsu_landing_preview_draft");
@@ -50,12 +67,16 @@ function LandingPreviewContent() {
     // 3. Notify parent editor that preview iframe is mounted & ready
     try {
       window.parent?.postMessage({ type: "MINSU_PREVIEW_READY" }, "*");
-    } catch {}
+    } catch { }
 
     return () => {
       window.removeEventListener("message", handleMessage);
     };
   }, []);
+
+  if (isLoading || !user || user.role !== "SYSTEM_ADMIN") {
+    return <div className="min-h-screen bg-[#F6F8F6]" />;
+  }
 
   return (
     <>
@@ -82,9 +103,11 @@ function LandingPreviewContent() {
 
 export default function LandingPreviewPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#F6F8F6]" />}>
-      <LandingPreviewContent />
-    </Suspense>
+    <SessionProvider>
+      <Suspense fallback={<div className="min-h-screen bg-[#F6F8F6]" />}>
+        <LandingPreviewContent />
+      </Suspense>
+    </SessionProvider>
   );
 }
 

@@ -75,8 +75,12 @@ function StudentPortalContent({
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/?auth=login");
+    if (!isLoading) {
+      if (!user) {
+        router.push("/?auth=login");
+      } else if (user.role !== "STUDENT") {
+        router.replace("/dashboard");
+      }
     }
   }, [user, isLoading, router]);
 
@@ -84,7 +88,7 @@ function StudentPortalContent({
     return <PortalSkeleton />;
   }
 
-  if (!user) return null;
+  if (!user || user.role !== "STUDENT") return null;
 
   return (
     <div className="h-screen overflow-hidden bg-[#F6F8F6] flex flex-col print:h-auto print:overflow-visible">

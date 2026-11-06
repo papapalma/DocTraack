@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "@/hooks/use-session";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -92,7 +93,16 @@ interface VerificationResultItem {
 }
 
 export default function VerificationPage() {
-  const { user } = useSession();
+  const router = useRouter();
+  const { user, isLoading: isSessionLoading } = useSession();
+
+  useEffect(() => {
+    if (!isSessionLoading && user) {
+      if (user.role !== "STAFF" && user.role !== "DIRECTOR") {
+        router.replace("/dashboard?denied=verification");
+      }
+    }
+  }, [user, isSessionLoading, router]);
 
   // Wizard Step: 1 = Upload, 2 = Pre-flight Preview, 3 = Results Table
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
@@ -459,6 +469,9 @@ export default function VerificationPage() {
         );
     }
   };
+
+  if (isSessionLoading || !user) return null;
+  if (user.role !== "STAFF" && user.role !== "DIRECTOR") return null;
 
   return (
     <div className="space-y-6 pb-12 max-w-7xl mx-auto px-4 sm:px-6">

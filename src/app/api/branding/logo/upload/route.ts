@@ -32,9 +32,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (user.role === "STUDENT") {
+    if (user.role !== "STAFF" && user.role !== "DIRECTOR" && user.role !== "SYSTEM_ADMIN") {
       return NextResponse.json(
-        { error: "Access denied. Only operational staff can upload document logos." },
+        { error: "Access denied. Only Staff Coordinators, Campus Directors, and System Administrators can upload document logos." },
         { status: 403 }
       );
     }

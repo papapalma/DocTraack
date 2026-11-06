@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, createSession, getCurrentUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { Role, ApplicationStatus } from "@prisma/client";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import {
   isValidEmail,
   validatePassword,
@@ -149,6 +150,21 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate Limiting: max 10 public application submissions per hour per IP
+    const clientIp = getClientIp(req);
+    const rateCheck = checkRateLimit(`registration:${clientIp}`, { limit: 10, windowMs: 3600000 });
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { error: "Too many application submissions from this network. Please try again later." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": Math.ceil(rateCheck.resetMs / 1000).toString(),
+          },
+        }
+      );
+    }
+
     const body = await req.json();
     const {
       email,
@@ -507,6 +523,26 @@ export async function PUT(req: NextRequest) {
       .trim()
       .toUpperCase();
 
+    const existingLastName = (prevFormData.last_name || "").trim().toUpperCase();
+    const existingGivenName = (prevFormData.given_name || "").trim().toUpperCase();
+    const existingMiddleName = (prevFormData.middle_name || "").trim().toUpperCase();
+
+    if (isLockedStudentId) {
+      if (
+        (last_name && existingLastName && last_name.trim().toUpperCase() !== existingLastName) ||
+        (given_name && existingGivenName && given_name.trim().toUpperCase() !== existingGivenName) ||
+        (middle_name && existingMiddleName && middle_name.trim().toUpperCase() !== existingMiddleName)
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Your official Student ID number and legal name are locked following scholarship grant acceptance. Please contact the TDP Office for official corrections.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     // Determine target Student ID
     let finalStudentId = existingStudentId;
     const incomingRawId = student_id || student_id_number;
@@ -516,7 +552,7 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Your Student ID number is locked because your Annex 1 grant registration has already been validated and accepted by Staff. Contact the TDP Office if a correction is needed.",
+              "Your official Student ID number and legal name are locked following scholarship grant acceptance. Please contact the TDP Office for official corrections.",
           },
           { status: 403 }
         );

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "@/hooks/use-session";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,10 @@ import { StaggerContainer, StaggerItem, ApplePress } from "@/components/ui/page-
 import { AnimatedNumber } from "@/components/ui/animated-number";
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useSession();
+  const deniedParam = searchParams.get("denied");
 
   // State for Operational roles (STAFF, ACCOUNTING, DIRECTOR)
   const [documents, setDocuments] = useState<any[]>([]);
@@ -45,6 +49,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return;
+
+    if (user.role === "STUDENT") {
+      router.replace("/portal");
+      return;
+    }
 
     if (user.role === "SYSTEM_ADMIN") {
       async function loadAdminData() {
@@ -99,6 +108,14 @@ export default function DashboardPage() {
 
     return (
       <div className="space-y-6">
+        {deniedParam && (
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center gap-3 animate-in fade-in">
+            <Lock className="w-5 h-5 text-rose-600 shrink-0" />
+            <span>
+              <strong>Access Denied:</strong> Your account role ({user.role}) is not authorized to access the requested module.
+            </span>
+          </div>
+        )}
         {/* Welcome Glass Banner */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/95 backdrop-blur-md p-5 sm:p-7 rounded-3xl border border-[#D6DDD8]/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
           <div>
@@ -384,6 +401,14 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {deniedParam && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center gap-3 animate-in fade-in">
+          <Lock className="w-5 h-5 text-rose-600 shrink-0" />
+          <span>
+            <strong>Access Denied:</strong> Your account role ({user.role}) is not authorized to access the requested module.
+          </span>
+        </div>
+      )}
       {/* Apple-style Welcome Glass Banner */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/95 backdrop-blur-md p-5 sm:p-7 rounded-3xl border border-[#D6DDD8]/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
         <div>

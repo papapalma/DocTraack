@@ -16,8 +16,11 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (user.role === Role.STUDENT) {
-      return NextResponse.json({ error: "Forbidden: Access restricted to staff" }, { status: 403 });
+    if (user.role !== Role.STAFF && user.role !== Role.DIRECTOR) {
+      return NextResponse.json(
+        { error: "Forbidden: Discrepancy resolution is restricted to operational staff" },
+        { status: 403 }
+      );
     }
 
     const { id } = await params;

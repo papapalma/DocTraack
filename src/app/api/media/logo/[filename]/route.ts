@@ -43,13 +43,20 @@ export async function GET(
 
     const fileBuffer = await fs.readFile(filePath);
 
+    const headers: Record<string, string> = {
+      "Content-Type": mimeType,
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "Content-Disposition": `inline; filename="${sanitized}"`,
+      "X-Content-Type-Options": "nosniff",
+    };
+
+    if (mimeType === "image/svg+xml") {
+      headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'";
+    }
+
     return new Response(fileBuffer, {
       status: 200,
-      headers: {
-        "Content-Type": mimeType,
-        "Cache-Control": "public, max-age=31536000, immutable",
-        "Content-Disposition": `inline; filename="${sanitized}"`,
-      },
+      headers,
     });
   } catch (error) {
     console.error("Stream logo error:", error);

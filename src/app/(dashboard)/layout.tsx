@@ -16,8 +16,12 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/?auth=login");
+    if (!isLoading) {
+      if (!user) {
+        router.push("/?auth=login");
+      } else if (user.role === "STUDENT") {
+        router.replace("/portal");
+      }
     }
   }, [user, isLoading, router]);
 
@@ -25,7 +29,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     return <DashboardSkeleton />;
   }
 
-  if (!user) return null;
+  if (!user || user.role === "STUDENT") return null;
 
   return (
     <NavProvider>

@@ -105,19 +105,89 @@ Always represent TDP document states using these consistent badge token combinat
 
 ## 3. 🔒 Security & Access Control Rules
 
-### Role-Based Access Control (RBAC)
-Every server endpoint, action, and page must verify roles using `src/lib/rbac.ts`. Client-side conditional rendering is for UI convenience only and must **never** be treated as a security boundary.
+### 3.1 Comprehensive Role-Based Access Control (RBAC)
+Every server endpoint, action, route handler, and page must verify roles using `src/lib/rbac.ts` and `src/lib/auth.ts`. Client-side conditional rendering is for UI convenience only and must **never** be treated as a security boundary.
 
-| Role | Permitted Actions |
-|---|---|
-| `CAMPUS_DIRECTOR` | Access Executive Review Queue, approve documents, return with revision comments, view executive KPI analytics. |
-| `STAFF_COORDINATOR` | Create and edit Annexes 1–5 and 10, dispatch and track agency transmittals, publish Annex 2 TDP applicant calls, review student submissions. |
-| `ACCOUNTING_OFFICER` | Prepare and submit financial Annexes (6: Fund Utilization, 7: Advance to Debit, 8: Checks Issued, 9: Beneficiary Payroll). |
-| `SYSTEM_ADMIN` | Manage users and assign roles, inspect system audit logs, configure public landing page CMS. |
-| `STUDENT` | View active Annex 2 TDP calls, submit online scholarship applications, track status with application code. |
+| Role | Permitted Functional Areas & Actions | Strictly Prohibited Areas |
+|---|---|---|
+| `CAMPUS_DIRECTOR` | • **Executive Review Queue** (`/review`): approve or return submitted Annex documents with required comments.<br>• **Executive KPI Analytics** (`/analytics`): access executive performance, disbursement, and timeline analytics.<br>• **Student Masterlist** (`/registrations`): inspect student validation masterlist and export grantee rosters.<br>• **3-Way Verification** (`/verification`): execute verification runs, review discrepancy analytics, and inspect matched records.<br>• **Certificate Designer** (`/certificate-editor`): customize, preview, and reset official award certificate templates and signees.<br>• **Announcements** (`/announcements`): publish, edit, delete, and pin campus-wide announcements.<br>• **Institutional Branding** (`/api/branding`): approve and configure global institutional logos and header styles. | • User account provisioning & role assignment.<br>• Landing page CMS modifications.<br>• Direct modification or deletion of system audit logs. |
+| `STAFF_COORDINATOR` | • **Document Management** (`/documents`, `/documents/new`): create, edit, submit, and manage Annexes 1–5 and 10; upload signed scanned copies.<br>• **Transmittals** (`/outgoing`): record, dispatch, and track external agency transmittals (CHED/UniFAST).<br>• **Applicant Calls** (`/calls`, `/calls/new`): publish, edit, and close Annex 2 scholarship calls.<br>• **Student Validation Queue** (`/registrations`): validate student registrations, review profiles, and execute official ACCEPT / REJECT decisions.<br>• **3-Way Verification** (`/verification`): upload CHED/Registrar CSV datasets, execute cross-match runs, and manually resolve candidate discrepancies (CONFIRM / DISMISS).<br>• **Certificate Designer** (`/certificate-editor`): design certificate layout, typography, paper dimensions, and signatories.<br>• **Announcements** (`/announcements`): create, update, delete, and pin announcements across all audience tiers.<br>• **Logo Management** (`/api/branding/logo/upload`): upload partner, institutional, and agency logos for Annex documents. | • Financial Annexes 6–9 preparation.<br>• System user administration.<br>• Landing page CMS configuration.<br>• Executive document approval. |
+| `ACCOUNTING_OFFICER` | • **Financial Annexes** (`/documents`, `/documents/new`): prepare, edit, submit, and export financial Annexes (6: Fund Utilization, 7: Advance to Debit, 8: Checks Issued, 9: Beneficiary Payroll).<br>• **Document Uploads**: upload signed scanned copies of approved financial documents.<br>• **Dashboard**: view financial document statuses and disbursement metrics. | • Academic Annexes 1–5 and 10.<br>• Student registration validation or rejection.<br>• 3-Way cross-matching verification runs or resolution.<br>• Certificate Designer access.<br>• User administration, CMS editing, and audit log access.<br>• Announcements creation or modification. |
+| `SYSTEM_ADMIN` | • **User & Role Management** (`/users`): provision user accounts, assign roles, and toggle account activation status.<br>• **Audit Logs & Forensics** (`/audit-logs`): inspect tamper-evident audit trails, filter security events, and export CSV forensic reports.<br>• **Landing Page CMS** (`/landing-editor`): customize published and draft landing sections, upload hero/crest media assets, and publish live CMS configurations.<br>• **System Branding** (`/api/branding`): configure institutional logos and header layouts.<br>• **Announcements** (`/announcements`): broadcast emergency IT, maintenance, and administrative announcements.<br>• **Rate Limiting Controls**: enable or disable anti-brute-force rate limiting globally for campus events or testing. | • Academic & financial document creation, submission, or approval (Annexes 1–10).<br>• Certificate design customization.<br>• Student application validation or discrepancy resolution.<br>• Mutating or deleting audit log records (strictly append-only). |
+| `STUDENT` | • **Student Portal** (`/portal`): browse active TDP scholarship calls, submit online applications with dynamic forms.<br>• **Application Tracking** (`/portal/applications`): track review status in real-time using unique tracking codes.<br>• **Student Profile** (`/portal/profile`): view and maintain profile information (GWA, contact number, address, parent contacts).<br>• **Announcements** (`/portal/announcements`): view announcements targeted to Students or Public. | • Accessing operational dashboard routes (`/dashboard/*`).<br>• Accessing reviewer or administrative API endpoints.<br>• Viewing or mutating any other student's data (anti-IDOR). |
 
-### Authentication & Cookie Security
-- **Session Tokens**: Use server-generated cryptographically secure tokens stored in the `minsu_session_token` cookie.
+### 3.2 Edge Route Protection & Middleware Enforcement (`src/middleware.ts`)
+Middleware must enforce edge authentication and role isolation before route handlers or React Server Components execute:
+
+1. **Exhaustive Edge Protected Prefixes**:
+   ```ts
+   const DASHBOARD_PROTECTED_PREFIXES = [
+     "/dashboard", "/documents", "/review", "/analytics", "/notifications",
+     "/users", "/calls", "/outgoing", "/registrations", "/verification",
+     "/certificate-editor", "/landing-editor", "/audit-logs", "/announcements",
+   ];
+   const PORTAL_PROTECTED_PREFIXES = ["/portal"];
+   ```
+2. **Boundary Redirection Rules**:
+   - **Unauthenticated Users**: Redirect to `/?auth=login&from=<pathname>`.
+   - **Student Isolation**: Authenticated `STUDENT` accounts navigating to any `/dashboard/*` or operational path must be immediately redirected to `/portal`.
+   - **Staff/Admin Isolation**: Non-student roles attempting to navigate to `/portal/*` must be redirected to `/dashboard`.
+   - **Role Guardrails**: Unauthorized access attempts on gated pages (e.g. non-admin visiting `/users`, `/audit-logs`, or `/landing-editor`; non-director visiting `/review` or `/analytics`) must redirect to `/dashboard` with an access-denied state.
+
+### 3.3 Data Privacy & Student PII Protection (RA 10173 Compliance)
+1. **Horizontal Authorization (Anti-IDOR)**:
+   - When fetching or updating application or registration data (`/api/registrations`, `/api/applications`), the backend must strictly enforce that `STUDENT` users can query and mutate only records where `studentId === sessionUser.id`.
+   - Client-provided user IDs or student IDs in query parameters or request bodies must never be trusted without validating session ownership.
+2. **Selective Grantee Profile Lock**:
+   - Once an applicant is marked `ACCEPTED` as an official scholar, their core institutional identity fields (**Student ID Number** and **Full Legal Name**) are permanently locked from student modification to preserve masterlist integrity.
+   - Non-static student attributes—including **GWA**, mobile number, residential address, and parent/guardian contact details—remain editable by the student to support continuous renewal and communication.
+3. **Protected Export Streams**:
+   - All Excel, Word, and CSV export endpoints (`/api/annex-*/export-excel`, `/api/annex-10/export-doc`, `/api/verification/runs/[id]/export`, `/api/audit-logs?export=true`) must enforce server-side role authentication before streaming tabular PII to the client.
+
+### 3.4 File Upload Security & Media Asset Serving
+1. **Logo & Media Uploads (`/api/branding/logo/upload`, `/api/landing/upload`)**:
+   - **MIME Whitelist**: Restrict uploads strictly to verified image MIME types (`image/png`, `image/jpeg`, `image/webp`, `image/svg+xml`).
+   - **File Size Restrictions**: Maximum 5 MB per file.
+   - **Path Traversal Defense**: File names must be cryptographically generated using `crypto.randomBytes(12)` and timestamp prefixes. Never construct file system paths using raw client-supplied filenames. Always sanitize paths with `path.basename`.
+   - **Storage Directory Containment**: Validate that target paths resolve strictly within designated storage directories (`storage/uploads/logos/` or `storage/uploads/landing/`).
+2. **SVG XSS Mitigation**:
+   - SVGs served via `/api/media/logo/[filename]` must include the header `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'` and `X-Content-Type-Options: nosniff` to prevent stored cross-site scripting via embedded scripts.
+3. **Verification Dataset Processing (`/api/verification/run`)**:
+   - Uploaded CHED and Registrar CSVs must be parsed in-memory using streaming buffers.
+   - Strict header schema validation is mandatory before initiating parsing.
+   - Temporary file artifacts must never be persisted to publicly accessible directories.
+
+### 3.5 Rate Limiting & Anti-Brute-Force Policies (`src/lib/rate-limit.ts`)
+To protect against credential stuffing, automated enumeration, and denial of service:
+- `POST /api/auth/login`: Maximum 5 failed attempts per IP per minute.
+- `POST /api/auth/register`: Maximum 3 registration requests per IP per 10 minutes.
+- `POST /api/registrations`: Maximum 10 public application submissions per IP per hour.
+- Exceeded thresholds must immediately respond with HTTP `429 Too Many Requests` including standard `Retry-After` headers.
+- **System Admin Bypass/Control**: System Administrators have configuration access to temporarily enable or disable rate limiting globally (e.g. during on-campus mass registration drives where all students share a campus gateway IP).
+
+### 3.6 Immutable Audit Trail Contract (`src/lib/audit.ts`)
+Every mutating action across all modules must invoke `logAudit()`:
+```ts
+await logAudit({
+  actorId: user.id,
+  action: "STANDARDIZED_ACTION_NAME",
+  entity: "ENTITY_NAME",
+  entityId: targetEntityId,
+  details: { ...relevantDiffOrContext },
+});
+```
+- **Standardized Action Nomenclature**:
+  - **Documents**: `DOCUMENT_CREATED`, `DOCUMENT_UPDATED`, `DOCUMENT_SUBMITTED`, `DOCUMENT_APPROVED`, `DOCUMENT_RETURNED`, `DOCUMENT_TRANSMITTED`, `DOCUMENT_ARCHIVED`
+  - **Calls**: `CALL_CREATED`, `CALL_UPDATED`, `CALL_CLOSED`
+  - **Registrations**: `REGISTRATION_SUBMITTED`, `REGISTRATION_ACCEPTED`, `REGISTRATION_REJECTED`
+  - **Verification**: `VERIFICATION_RUN_EXECUTED`, `VERIFICATION_DISCREPANCY_RESOLVED`, `VERIFICATION_REPORT_EXPORTED`
+  - **Certificates**: `CERTIFICATE_TEMPLATE_UPDATED`, `CERTIFICATE_TEMPLATE_RESET`
+  - **Branding & CMS**: `BRANDING_UPDATED`, `LOGO_UPLOADED`, `LANDING_CMS_PUBLISHED`
+  - **Identity & Auth**: `USER_LOGIN`, `USER_LOGOUT`, `USER_REGISTERED`, `USER_CREATED`, `USER_UPDATED`, `USER_DELETED`
+- **Tamper Resistance**: Audit logs are strictly append-only. No API endpoint, service method, or UI exists to update or delete records from the `audit_log` table.
+
+### 3.7 Authentication, Session & Password Standards
+- **Session Tokens**: Cryptographically secure 32-byte tokens generated via `crypto.randomBytes(32).toString("hex")` stored in the `sessions` table and in the `minsu_session_token` cookie.
 - **Cookie Security Flags**:
   ```ts
   {
@@ -125,31 +195,20 @@ Every server endpoint, action, and page must verify roles using `src/lib/rbac.ts
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7 // 7 days
+    expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
   }
   ```
-- **Credentials**: Passwords must always be hashed using `bcrypt` (minimum 10 salt rounds). Never log or return password hashes in API responses.
+- **Password Standards**: Minimum 8 characters, requiring at least one letter and one number, hashed with `bcryptjs` (minimum 10 salt rounds). Never log or return password hashes in responses.
+- **Email Validation**: Strict RFC 5322 regex validation with active filtering rejecting disposable and temporary email domains in `src/lib/validation.ts`.
 
-### Immutable Audit Trail
-- Every mutating action (create, edit, submit, approve, return, delete, dispatch) **must** invoke `logAuditEvent()` from `src/lib/audit.ts`.
-- Required audit fields:
-  1. `userId`: ID of the authenticated user performing the action.
-  2. `action`: Standardized verb (e.g., `DOCUMENT_SUBMITTED`, `DOCUMENT_APPROVED`, `ANNEX_CALL_PUBLISHED`).
-  3. `resourceType`: Entity type (`DOCUMENT`, `USER`, `CALL`, `TRANSMITTAL`).
-  4. `resourceId`: UUID of target entity.
-  5. `metadata`: JSON payload capturing relevant field diffs or status transitions.
-
-### Input Validation & Sanitization
-- Validate all incoming request bodies with **Zod** schemas in `src/lib/validation.ts`.
-- Never trust client IDs directly without verifying ownership or role permissions.
-- Validate external URLs (e.g., Google Drive links for Annex 1) against safe protocol schemes (`https://`).
-
-### Security Headers Enforcement
+### 3.8 Security Headers Enforcement
 Middleware (`src/middleware.ts`) must enforce:
 - `X-Frame-Options: SAMEORIGIN` (Clickjacking prevention)
 - `X-Content-Type-Options: nosniff` (MIME sniffing prevention)
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()`
+- `Cross-Origin-Opener-Policy: same-origin`
+- `Cross-Origin-Resource-Policy: same-origin`
 
 ---
 

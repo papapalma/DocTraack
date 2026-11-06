@@ -13,6 +13,14 @@ const PROTECTED_PREFIXES = [
   "/users",
   "/calls",
   "/outgoing",
+  "/registrations",
+  "/verification",
+  "/certificate-editor",
+  "/landing-editor",
+  "/landing-preview",
+  "/audit-logs",
+  "/announcements",
+  "/portal",
 ];
 
 // Auth routes where authenticated users should be redirected to dashboard

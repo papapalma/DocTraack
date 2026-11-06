@@ -60,6 +60,22 @@ export default function NewDocumentPage() {
 
   if (!user) return null;
 
+  if (user.role !== "STAFF" && user.role !== "ACCOUNTING") {
+    return (
+      <div className="py-20 text-center max-w-md mx-auto">
+        <h3 className="text-lg font-bold text-[#B3261E]">Access Restricted</h3>
+        <p className="text-sm text-[#55645B] mt-1 mb-4">
+          Only TDP Staff Coordinators and Accounting Officers are authorized to prepare annex documents.
+        </p>
+        <Link href="/dashboard">
+          <Button variant="outline" size="sm">
+            Return to Dashboard
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
   // Filter annexes available for this user's role
   const availableAnnexes = annexTypes.filter((a) =>
     canCreateAnnex(user.role, a.number)

@@ -105,7 +105,6 @@ export const Sidebar: React.FC = () => {
         return [
           { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
           { label: "Announcements", href: "/announcements", icon: BellRing },
-          { label: "3-Way Verification", href: "/verification", icon: FileCheck },
           { label: "Notifications", href: "/notifications", icon: Bell },
           { label: "Landing Page Editor", href: "/landing-editor", icon: LayoutTemplate },
           { label: "User Management", href: "/users", icon: Users },

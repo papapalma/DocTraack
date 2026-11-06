@@ -12,8 +12,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (user.role === Role.STUDENT) {
-      return NextResponse.json({ error: "Forbidden: Access restricted to staff" }, { status: 403 });
+    if (user.role !== Role.STAFF && user.role !== Role.DIRECTOR) {
+      return NextResponse.json(
+        { error: "Forbidden: Access restricted to TDP Staff and Campus Director" },
+        { status: 403 }
+      );
     }
 
     const formData = await req.formData().catch(() => null);

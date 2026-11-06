@@ -163,7 +163,7 @@ export default function DocumentDetailPage({
     );
   }
 
-  if (user?.role === "SYSTEM_ADMIN") {
+  if (user?.role === "SYSTEM_ADMIN" || user?.role === "STUDENT") {
     return (
       <div className="py-20 text-center max-w-md mx-auto">
         <h3 className="text-lg font-bold text-[#B3261E]">Access Restricted</h3>

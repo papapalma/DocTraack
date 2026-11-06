@@ -80,12 +80,12 @@ export default function CallsManagementPage() {
 
   if (!user) return null;
 
-  if (user.role === "SYSTEM_ADMIN") {
+  if (user.role !== "STAFF" && user.role !== "DIRECTOR") {
     return (
       <div className="py-20 text-center max-w-md mx-auto">
         <h3 className="text-lg font-bold text-[#B3261E]">Access Restricted</h3>
         <p className="text-sm text-[#55645B] mt-1 mb-4">
-          Applicant calls are managed exclusively by TDP Staff Coordinators.
+          Applicant calls are managed exclusively by TDP Staff Coordinators and Campus Directors.
         </p>
         <Link href="/dashboard">
           <Button variant="outline" size="sm">
