@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { useDraftAutoSave } from "@/hooks/use-draft-autosave";
 import { SuccessConfirmationModal } from "@/components/ui/success-confirmation-modal";
 import { SessionRecoveryModal } from "@/components/ui/session-recovery-modal";
+import { useDownload } from "@/components/providers/download-provider";
+import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
 import {
   FileSpreadsheet,
   Printer,
@@ -45,6 +47,7 @@ export function Annex7SheetSuite({
   onSaved,
 }: Annex7SheetSuiteProps) {
   const router = useRouter();
+  const { downloadBlob } = useDownload();
 
   // Mode: "workspace" or "sheet" (Official Canvas)
   const [viewMode, setViewMode] = useState<"workspace" | "sheet">("workspace");
@@ -459,15 +462,11 @@ export function Annex7SheetSuite({
       if (!res.ok) throw new Error("Failed to generate Excel file");
 
       const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
       const safeReportNo = String(formData?.reportNo || "Report").replace(/[^a-zA-Z0-9_-]/g, "_");
-      a.download = `Annex_7_RADAI_${safeReportNo}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
+      downloadBlob({
+        blob,
+        filename: `Annex_7_RADAI_${safeReportNo}.xlsx`,
+      });
     } catch (err) {
       console.error(err);
       alert("Failed to export Excel file. Please try again.");
@@ -880,7 +879,35 @@ export function Annex7SheetSuite({
           {/* TAB 2: Entity & Bank Details */}
           {workspaceTab === "identification" && (
             <div className="bg-white p-6 rounded-xl border border-line shadow-sm space-y-4">
-              <h3 className="text-sm font-bold text-ink">Entity Identification & Bank Accounts</h3>
+              <div>
+                <h3 className="text-sm font-bold text-ink">Entity Identification & Bank Accounts</h3>
+                <p className="text-xs text-ink-muted">Configure executing campus entity and official bank advice details.</p>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-minsu-green-200 bg-minsu-green-50/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                <div>
+                  <label className="block text-minsu-green-950 font-bold mb-1">Quick Select MinSU Campus</label>
+                  <p className="text-[11px] text-minsu-green-800">Auto-populates official entity name matching the selected campus.</p>
+                </div>
+                <select
+                  value={getMinsuCampusConfig(formData.entityName).key}
+                  onChange={(e) => {
+                    const cfg = getMinsuCampusConfig(e.target.value);
+                    setFormData((prev) => ({
+                      ...prev,
+                      entityName: cfg.heiName,
+                    }));
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-minsu-green-300 bg-white font-bold text-minsu-green-900 focus:ring-2 focus:ring-minsu-green-700 outline-none text-xs"
+                >
+                  {MINSU_CAMPUSES.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                 <div>
                   <label className="block text-ink-muted mb-1 font-medium">Entity Name</label>
@@ -888,7 +915,7 @@ export function Annex7SheetSuite({
                     type="text"
                     value={formData.entityName}
                     onChange={(e) => setFormData({ ...formData, entityName: e.target.value })}
-                    className="w-full p-2 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700"
+                    className="w-full p-2 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700 font-medium"
                   />
                 </div>
                 <div>
@@ -1233,6 +1260,8 @@ export function Annex7SheetSuite({
               annexNumber={7}
               orientation={printOrientation}
               onOrientationChange={setPrintOrientation}
+              excelExportUrl={documentId ? `/api/annex-7/export-excel?documentId=${documentId}` : undefined}
+              excelExportLabel="Download Excel (.xlsx)"
               onPrint={() => {
                 setViewMode("sheet");
               }}

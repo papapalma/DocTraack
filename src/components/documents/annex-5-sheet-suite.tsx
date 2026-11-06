@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChedLogo, UniFastLogo } from "./ched-unifast-logos";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
 import { Annex5FormData, Annex5HeiEntry, LogoConfig } from "@/types";
@@ -964,6 +963,8 @@ export function Annex5SheetSuite({
         annexNumber={5}
         orientation={printOrientation}
         onOrientationChange={setPrintOrientation}
+        excelExportUrl={documentId ? `/api/annex-5/export-excel?documentId=${documentId}` : undefined}
+        excelExportLabel="Download Excel (.xlsx)"
         previewContent={
           <div className="text-black text-xs space-y-3">
             <div className="p-4 border border-dashed border-neutral-300 rounded bg-[#F1F8F1]">

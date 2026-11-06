@@ -20,6 +20,9 @@ import {
   Sparkles,
   LayoutTemplate,
   ShieldCheck,
+  FileCheck,
+  BellRing,
+  Award,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
@@ -68,6 +71,9 @@ export const Sidebar: React.FC = () => {
           { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
           { label: "Review Queue", href: "/review", icon: CheckSquare },
           { label: "Student Masterlist (A-1)", href: "/registrations", icon: Users },
+          { label: "3-Way Verification", href: "/verification", icon: FileCheck },
+          { label: "Certificate Designer", href: "/certificate-editor", icon: Award },
+          { label: "Announcements", href: "/announcements", icon: BellRing },
           { label: "All Documents", href: "/documents", icon: FileText },
           { label: "Executive Analytics", href: "/analytics", icon: BarChart3 },
           { label: "Notifications", href: "/notifications", icon: Bell },
@@ -76,7 +82,10 @@ export const Sidebar: React.FC = () => {
       case "STAFF":
         return [
           { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+          { label: "Announcements", href: "/announcements", icon: BellRing },
           { label: "Student Registrations (A-1)", href: "/registrations", icon: Users },
+          { label: "3-Way Verification", href: "/verification", icon: FileCheck },
+          { label: "Certificate Designer", href: "/certificate-editor", icon: Award },
           { label: "Annex Documents", href: "/documents", icon: FileText },
           { label: "Prepare Annex", href: "/documents/new", icon: PlusCircle },
           { label: "Applicant Calls (A-2)", href: "/calls", icon: Megaphone },
@@ -95,6 +104,8 @@ export const Sidebar: React.FC = () => {
       case "SYSTEM_ADMIN":
         return [
           { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+          { label: "Announcements", href: "/announcements", icon: BellRing },
+          { label: "3-Way Verification", href: "/verification", icon: FileCheck },
           { label: "Notifications", href: "/notifications", icon: Bell },
           { label: "Landing Page Editor", href: "/landing-editor", icon: LayoutTemplate },
           { label: "User Management", href: "/users", icon: Users },

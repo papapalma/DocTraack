@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { Role, ApplicationStatus } from "@prisma/client";
+import { getMinsuCampusConfig } from "@/lib/campus-constants";
 
 export const dynamic = "force-dynamic";
 
@@ -20,16 +21,23 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const batch = searchParams.get("batch") || "1";
+    const batchesParam = searchParams.get("batches") || searchParams.get("batch") || "1";
     const campus = searchParams.get("campus");
 
     const whereClause: any = {
       status: ApplicationStatus.ACCEPTED,
     };
-    if (batch && batch !== "ALL") {
-      const parsedBatch = parseInt(batch, 10);
-      if (!isNaN(parsedBatch)) {
-        whereClause.batchNumber = parsedBatch;
+
+    let targetBatches: number[] = [];
+    if (batchesParam && batchesParam !== "ALL") {
+      targetBatches = batchesParam
+        .split(",")
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => !isNaN(n));
+      if (targetBatches.length === 1) {
+        whereClause.batchNumber = targetBatches[0];
+      } else if (targetBatches.length > 1) {
+        whereClause.batchNumber = { in: targetBatches };
       }
     }
 
@@ -39,14 +47,15 @@ export async function GET(req: NextRequest) {
       include: {
         student: { select: { id: true, name: true, email: true } },
       },
-      orderBy: { submittedAt: "asc" },
+      orderBy: [{ batchNumber: "asc" }, { submittedAt: "asc" }],
     });
 
     const candidates = applications.map((app, index) => {
       const data = (app.formData as any) || {};
       const controlNum = String(index + 1).padStart(5, "0");
       const middleInitial = data.middle_name ? `${data.middle_name.charAt(0).toUpperCase()}.` : "";
-      const rawCampus = data.hei_campus || "Main Campus (Victoria / Alcate)";
+      const rawCampus = data.hei_campus || data.campus || "Main Campus (Victoria / Alcate)";
+      const campusCfg = getMinsuCampusConfig(rawCampus);
 
       return {
         id: app.id,
@@ -62,22 +71,31 @@ export async function GET(req: NextRequest) {
         yearLevel: String(data.year_level || "2"),
         email: data.email || app.student.email,
         phone: data.contact_number || "09170000000",
-        tdpBatch: String(app.batchNumber || batch),
+        tdpBatch: String(app.batchNumber || (targetBatches.length > 0 ? targetBatches[0] : 1)),
         semesterAmount: 7500,
         totalAmount: 7500,
-        campus: rawCampus,
+        campus: campusCfg.label,
       };
     });
 
-    // If filtered by campus
-    const filtered = campus && campus !== "ALL"
-      ? candidates.filter((c) => c.campus.toLowerCase().includes(campus.toLowerCase()))
-      : candidates;
+    // If filtered by campus:
+    // If specific targetBatches were explicitly requested, each batch is already bound to its campus cohort,
+    // so we return the requested batch's candidates without dropping them due to client document campus mismatch.
+    // If batchesParam === "ALL" or no specific batch was requested, apply normalized campus filter.
+    const filtered =
+      campus && campus !== "ALL" && targetBatches.length === 0
+        ? candidates.filter((c) => {
+            const targetCfg = getMinsuCampusConfig(campus);
+            const candCfg = getMinsuCampusConfig(c.campus);
+            return targetCfg.key === candCfg.key;
+          })
+        : candidates;
 
     return NextResponse.json({
       candidates: filtered,
       count: filtered.length,
-      batch,
+      batch: batchesParam,
+      batches: targetBatches,
     });
   } catch (error) {
     console.error("Failed to fetch Annex 3 candidate grantees:", error);

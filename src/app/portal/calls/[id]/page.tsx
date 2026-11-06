@@ -86,7 +86,7 @@ export default function StudentApplicationFormPage({
         throw new Error("Could not retrieve registration profile.");
       }
       const data = await res.json();
-      const reg = data.application?.formData;
+      const reg = data.profile || data.application?.formData;
       if (!reg) {
         setError("No registered profile found. Please fill in your details manually.");
         setIsAutofilling(false);
@@ -95,13 +95,15 @@ export default function StudentApplicationFormPage({
 
       setFormData((prev) => ({
         ...prev,
-        student_id_number: reg.student_id || prev.student_id_number,
-        campus: reg.hei_campus?.includes("Calapan")
-          ? "Calapan City Campus"
-          : reg.hei_campus?.includes("Bongabong")
-          ? "Bongabong Campus"
-          : "Main Campus (Alcate)",
-        program_course: reg.course_degree || prev.program_course,
+        student_id_number: reg.student_id_number || reg.student_id || prev.student_id_number,
+        campus:
+          reg.campus ||
+          (reg.hei_campus?.includes("Calapan")
+            ? "Calapan City Campus"
+            : reg.hei_campus?.includes("Bongabong")
+            ? "Bongabong Campus"
+            : "Main Campus (Alcate)"),
+        program_course: reg.program_course || reg.course_degree || prev.program_course,
         year_level:
           reg.year_level === "1"
             ? "1st Year"
@@ -111,8 +113,10 @@ export default function StudentApplicationFormPage({
             ? "3rd Year"
             : reg.year_level === "4"
             ? "4th Year"
-            : prev.year_level,
+            : reg.year_level || prev.year_level,
         contact_number: reg.contact_number || prev.contact_number,
+        family_monthly_income: reg.family_monthly_income || prev.family_monthly_income,
+        latest_gwa: reg.latest_gwa || prev.latest_gwa,
       }));
 
       // Clear related field errors
@@ -121,6 +125,8 @@ export default function StudentApplicationFormPage({
         delete next.student_id_number;
         delete next.program_course;
         delete next.contact_number;
+        delete next.family_monthly_income;
+        delete next.latest_gwa;
         return next;
       });
 

@@ -6,28 +6,23 @@ import { useRouter } from "next/navigation";
 import { useSession } from "@/hooks/use-session";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Megaphone, PlusCircle } from "lucide-react";
+import { Megaphone, PlusCircle, Settings2, ExternalLink } from "lucide-react";
 import { SkeletonTableRows } from "@/components/ui/skeleton";
 import { StateContainer, ErrorStateConfig } from "@/components/ui/state-container";
-
-interface CallItem {
-  id: string;
-  title: string;
-  description?: string;
-  batchNumber?: number;
-  startDate?: string;
-  deadline: string;
-  windowStatus?: "UPCOMING" | "OPEN" | "CLOSED";
-  isCurrentlyOpen?: boolean;
-  _count?: { applications: number };
-}
+import { CreateCallModal } from "@/components/calls/create-call-modal";
+import { CallDetailsModal, CallDetailsItem } from "@/components/calls/call-details-modal";
 
 export default function CallsManagementPage() {
   const router = useRouter();
   const { user } = useSession();
-  const [calls, setCalls] = useState<CallItem[]>([]);
+  const [calls, setCalls] = useState<CallDetailsItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<ErrorStateConfig | null>(null);
+
+  // Modal Control States
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedCall, setSelectedCall] = useState<CallDetailsItem | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   const loadCalls = useCallback(async () => {
     setIsLoading(true);
@@ -57,6 +52,32 @@ export default function CallsManagementPage() {
     loadCalls();
   }, [loadCalls]);
 
+  const handleSelectCall = (call: CallDetailsItem) => {
+    setSelectedCall(call);
+    setIsDetailsModalOpen(true);
+  };
+
+  const handleCallCreated = async () => {
+    await loadCalls();
+  };
+
+  const handleCallUpdated = async () => {
+    await loadCalls();
+    if (selectedCall) {
+      try {
+        const res = await fetch(`/api/calls/${selectedCall.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.call) {
+            setSelectedCall(data.call);
+          }
+        }
+      } catch (err) {
+        console.error("Error refreshing selected call:", err);
+      }
+    }
+  };
+
   if (!user) return null;
 
   if (user.role === "SYSTEM_ADMIN") {
@@ -74,6 +95,9 @@ export default function CallsManagementPage() {
       </div>
     );
   }
+
+  const maxBatch = calls.reduce((max, c) => Math.max(max, c.batchNumber || 1), 0);
+  const nextBatchNumber = maxBatch > 0 ? maxBatch + 1 : 1;
 
   return (
     <div className="space-y-6">
@@ -94,12 +118,14 @@ export default function CallsManagementPage() {
         </div>
 
         {user.role === "STAFF" && (
-          <Link href="/calls/new">
-            <Button variant="primary">
-              <PlusCircle className="w-4 h-4 mr-2" />
-              Open New Call (Annex 2)
-            </Button>
-          </Link>
+          <Button
+            variant="primary"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="apple-press bg-[#1B5E20] hover:bg-[#25702A] text-white flex items-center gap-2 font-semibold shadow-xs"
+          >
+            <PlusCircle className="w-4 h-4" />
+            Open New Call (Annex 2)
+          </Button>
         )}
       </div>
 
@@ -116,7 +142,7 @@ export default function CallsManagementPage() {
               description: "Open a new call for applicants to begin receiving online student grant submissions.",
               icon: Megaphone,
               actionLabel: user.role === "STAFF" ? "Publish Call (Annex 2)" : undefined,
-              onAction: user.role === "STAFF" ? () => router.push("/calls/new") : undefined,
+              onAction: user.role === "STAFF" ? () => setIsCreateModalOpen(true) : undefined,
             }}
           >
             <div className="overflow-x-auto">
@@ -137,13 +163,14 @@ export default function CallsManagementPage() {
                     const start = call.startDate ? new Date(call.startDate) : null;
                     const end = new Date(call.deadline);
                     const isUpcoming = start ? now < start : false;
-                    const isClosed = now > end;
-                    const isOpen = !isUpcoming && !isClosed;
+                    const isClosed = !call.isActive || now > end;
+                    const isOpen = call.isActive && !isUpcoming && !isClosed;
 
                     return (
                       <tr
                         key={call.id}
-                        className="hover:bg-[#F6F8F6] transition-colors"
+                        onClick={() => handleSelectCall(call)}
+                        className="hover:bg-[#F6F8F6] transition-colors cursor-pointer group"
                       >
                         <td className="py-3.5 px-4">
                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-[#1B5E20] text-white shadow-xs">
@@ -151,11 +178,11 @@ export default function CallsManagementPage() {
                           </span>
                         </td>
                         <td className="py-3.5 px-4">
-                          <p className="font-semibold text-[#1F2A24]">
+                          <p className="font-semibold text-[#1F2A24] group-hover:text-[#1B5E20] transition-colors">
                             {call.title}
                           </p>
                           <p className="text-xs text-[#55645B] line-clamp-1">
-                            {call.description}
+                            {call.description || "No specific guidelines provided."}
                           </p>
                         </td>
                         <td className="py-3.5 px-4 text-xs text-[#55645B] space-y-0.5">
@@ -192,11 +219,37 @@ export default function CallsManagementPage() {
                           )}
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <Link href={`/portal/calls/${call.id}`} target="_blank">
-                            <Button variant="outline" size="sm" className="apple-press h-8 text-xs font-semibold">
-                              View Portal
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectCall(call);
+                              }}
+                              className="apple-press h-8 text-xs font-semibold text-[#1B5E20] border-[#1B5E20]/30 hover:bg-[#DCEFDD] flex items-center gap-1.5"
+                            >
+                              <Settings2 className="w-3.5 h-3.5" />
+                              Manage
                             </Button>
-                          </Link>
+
+                            <Link
+                              href={`/portal/calls/${call.id}`}
+                              target="_blank"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="apple-press h-8 text-xs font-semibold flex items-center gap-1.5"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                View Portal
+                              </Button>
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -207,6 +260,25 @@ export default function CallsManagementPage() {
           </StateContainer>
         </CardContent>
       </Card>
+
+      {/* Modal 1: Create Call Modal */}
+      <CreateCallModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onCallCreated={handleCallCreated}
+        defaultBatchNumber={nextBatchNumber}
+      />
+
+      {/* Modal 2: Call Details & Management Modal */}
+      <CallDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedCall(null);
+        }}
+        call={selectedCall}
+        onCallUpdated={handleCallUpdated}
+      />
     </div>
   );
 }

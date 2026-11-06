@@ -2,11 +2,12 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChedLogo, UniFastLogo } from "./ched-unifast-logos";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
 import { Annex4FormData, Annex4Grantee, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
+import { BatchSelectorDropdown } from "./batch-selector-dropdown";
+import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
 import {
   FileSpreadsheet,
   Printer,
@@ -23,17 +24,9 @@ import {
   DollarSign,
   ShieldCheck,
   Building,
-  UserCheck,
+  Sparkles,
   X,
 } from "lucide-react";
-
-interface ImportableApplication {
-  id: string;
-  trackingCode: string;
-  status: string;
-  formData?: Record<string, any>;
-  student?: { id: string; name: string; email: string };
-}
 
 interface Annex4SheetSuiteProps {
   initialData?: Annex4FormData;
@@ -79,13 +72,6 @@ export function Annex4SheetSuite({
     return () => window.removeEventListener("minsu:open-print-modal", handleOpenPrint);
   }, []);
 
-  // Annex 2 Import Modal state
-  const [showImportModal, setShowImportModal] = useState<boolean>(false);
-  const [availableApplications, setAvailableApplications] = useState<ImportableApplication[]>([]);
-  const [isLoadingApps, setIsLoadingApps] = useState<boolean>(false);
-  const [selectedAppIds, setSelectedAppIds] = useState<string[]>([]);
-  const [appSearch, setAppSearch] = useState<string>("");
-
   // Default initial values
   const defaultData: Annex4FormData = useMemo(() => {
     return (
@@ -97,8 +83,8 @@ export function Annex4SheetSuite({
         academicYear: "2023-2024",
         termCode: "2",
         trancheNumber: "1",
-        batchNumber: "20.1",
-        referenceNumber: "MIMAROPA-MINSU-2023-2-1:20.1",
+        batchNumber: "1",
+        referenceNumber: "MIMAROPA-MINSU-2023-2-1:1",
         billingDate: new Date().toLocaleDateString("en-US", {
           month: "long",
           day: "numeric",
@@ -107,31 +93,14 @@ export function Annex4SheetSuite({
         isLastBatch: false,
         campus: "Bongabong Campus",
 
-        totalGrantees: 10,
+        totalGrantees: 0,
         stipendPerGrantee: 7500,
-        totalSubsidy: 75000,
+        totalSubsidy: 0,
         managementFeeRate: 0.005,
-        managementFeeAmount: 375,
-        grandTotalBilling: 75375,
+        managementFeeAmount: 0,
+        grandTotalBilling: 0,
 
-        grantees: Array.from({ length: 10 }).map((_, idx) => ({
-          controlNumber: String(idx + 1).padStart(5, "0"),
-          studentNumber: `2023-${String(1001 + idx)}`,
-          tdpAwardNumber: `2024-TDP-4060-${String(idx + 1).padStart(5, "0")}`,
-          lastName: ["DELA CRUZ", "SANTOS", "REYES", "GARCIA", "RAMOS", "MENDOZA", "FLORES", "GONZALES", "BAUTISTA", "VILLANUEVA"][idx] || "STUDENT",
-          givenName: ["JUAN", "MARIA", "CARLOS", "ANA", "JOSE", "MARK", "SARAH", "CHRISTIAN", "JASMINE", "DANIEL"][idx] || "FIRSTNAME",
-          middleInitial: "P.",
-          sex: idx % 2 === 0 ? "M" : "F",
-          birthdate: "05/14/2004",
-          degreeProgram: "BS Information Technology",
-          yearLevel: "1",
-          email: `grantee${idx + 1}@minsu.edu.ph`,
-          phone: "09171234567",
-          tdpBatch: "20.1",
-          tdpAmount: 7500,
-          totalAmount: 7500,
-          campus: "Bongabong Campus",
-        })),
+        grantees: [],
 
         jmcNumber: "04",
         jmcSeries: "2022",
@@ -267,13 +236,102 @@ export function Annex4SheetSuite({
     updateGranteesAndTotals(updated);
   };
 
-  // Update Reference Number based on codes
+  // Batches currently injected in the document roster
+  const alreadyInjectedBatches = useMemo(() => {
+    const list = formData.grantees
+      .map((g) => String(g.tdpBatch || "").trim())
+      .filter(Boolean);
+    return Array.from(new Set(list));
+  }, [formData.grantees]);
+
+  const [selectedBatchesToInject, setSelectedBatchesToInject] = useState<number[]>([1]);
+  const [isInjecting, setIsInjecting] = useState<boolean>(false);
+
+  // Inject 1, 2, or 3 batches dynamically with duplicate prevention & re-injection alert
+  const handleInjectBatches = async (batchesToInject: number[]) => {
+    setError(null);
+    if (!batchesToInject || batchesToInject.length === 0) return;
+
+    const alreadyPresent = batchesToInject.filter((b) => alreadyInjectedBatches.includes(String(b)));
+    if (alreadyPresent.length > 0) {
+      setError(`Batch ${alreadyPresent.join(", ")} has already been injected into this document.`);
+      return;
+    }
+
+    try {
+      setIsInjecting(true);
+      const res = await fetch(`/api/annex-4/compile?batches=${batchesToInject.join(",")}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.candidates && data.candidates.length > 0) {
+          const firstCandidateCampus = data.candidates[0]?.campus;
+          const campusCfg = getMinsuCampusConfig(firstCandidateCampus);
+
+          const nextGrantees = [...formData.grantees, ...data.candidates];
+          const allBatches = Array.from(new Set([...alreadyInjectedBatches, ...batchesToInject.map(String)])).sort((a, b) => Number(a) - Number(b));
+          const compoundBatch = allBatches.join(", ");
+
+          const reindexed = reindexList(nextGrantees);
+          const totalGrantees = reindexed.length;
+          const stipendPerGrantee = 7500;
+          const totalSubsidy = totalGrantees * stipendPerGrantee;
+          const managementFeeRate = 0.005;
+          const managementFeeAmount = totalSubsidy * managementFeeRate;
+          const grandTotalBilling = totalSubsidy + managementFeeAmount;
+          const nextBatchNumber = compoundBatch || formData.batchNumber;
+
+          setFormData((prev) => {
+            const shouldSyncCampus = prev.grantees.length === 0 && campusCfg;
+            const updatedCampus = shouldSyncCampus ? campusCfg.label : prev.campus;
+            const updatedHeiName = shouldSyncCampus ? campusCfg.heiName : prev.heiName;
+            const updatedHeiAddress = shouldSyncCampus ? campusCfg.heiAddress : prev.heiAddress;
+
+            const next = {
+              ...prev,
+              campus: updatedCampus,
+              heiName: updatedHeiName,
+              heiAddress: updatedHeiAddress,
+              grantees: reindexed,
+              totalGrantees,
+              stipendPerGrantee,
+              totalSubsidy,
+              managementFeeRate,
+              managementFeeAmount,
+              grandTotalBilling,
+              batchNumber: nextBatchNumber,
+            };
+            const ref = `${next.regionCode}-${next.heiCode}-${next.academicYear.split("-")[0]}-${next.termCode}-${next.trancheNumber}:${next.batchNumber}`;
+            return {
+              ...next,
+              referenceNumber: ref,
+            };
+          });
+
+          setSelectedBatchesToInject([]);
+          setSaveSuccess(true);
+          setTimeout(() => setSaveSuccess(false), 3500);
+        } else {
+          setError(`No accepted candidate records found in database for Batch ${batchesToInject.join(", ")}.`);
+        }
+      } else {
+        setError("Failed to compile candidate grantees from database.");
+      }
+    } catch {
+      setError("Failed to connect to candidate database.");
+    } finally {
+      setIsInjecting(false);
+    }
+  };
+
+  // Update Reference Number based on codes (using functional state to prevent race conditions)
   const updateReferenceNumber = (fields: Partial<Annex4FormData>) => {
-    const next = { ...formData, ...fields };
-    const ref = `${next.regionCode}-${next.heiCode}-${next.academicYear.split("-")[0]}-${next.termCode}-${next.trancheNumber}:${next.batchNumber}`;
-    setFormData({
-      ...next,
-      referenceNumber: ref,
+    setFormData((prev) => {
+      const next = { ...prev, ...fields };
+      const ref = `${next.regionCode}-${next.heiCode}-${next.academicYear.split("-")[0]}-${next.termCode}-${next.trancheNumber}:${next.batchNumber}`;
+      return {
+        ...next,
+        referenceNumber: ref,
+      };
     });
   };
 
@@ -290,57 +348,6 @@ export function Annex4SheetSuite({
         g.degreeProgram.toLowerCase().includes(q)
     );
   }, [formData.grantees, searchQuery]);
-
-  // Fetch applications for Annex 2 Import Modal
-  const openImportModal = async () => {
-    setShowImportModal(true);
-    setIsLoadingApps(true);
-    setSelectedAppIds([]);
-    try {
-      const res = await fetch("/api/applications");
-      if (res.ok) {
-        const data = await res.json();
-        const apps = (data.applications || []).filter(
-          (a: ImportableApplication) => a.status === "ACCEPTED" || a.status === "APPROVED" || a.status === "SUBMITTED"
-        );
-        setAvailableApplications(apps);
-      }
-    } catch (err) {
-      console.error("Failed to load applications for import:", err);
-    } finally {
-      setIsLoadingApps(false);
-    }
-  };
-
-  // Commit imported applications into Form 2
-  const commitImportApplications = () => {
-    const chosen = availableApplications.filter((a) => selectedAppIds.includes(a.id));
-    const importedGrantees: Annex4Grantee[] = chosen.map((app, idx) => {
-      const f = app.formData || {};
-      const nextNum = formData.grantees.length + idx + 1;
-      return {
-        controlNumber: String(nextNum).padStart(5, "0"),
-        studentNumber: f.student_id || app.student?.id || `2024-${String(nextNum).padStart(5, "0")}`,
-        tdpAwardNumber: `2024-TDP-4060-${String(nextNum).padStart(5, "0")}`,
-        lastName: (f.last_name || app.student?.name?.split(" ").slice(-1)[0] || "STUDENT").toUpperCase(),
-        givenName: (f.given_name || app.student?.name?.split(" ")[0] || "FIRSTNAME").toUpperCase(),
-        middleInitial: f.middle_name ? `${f.middle_name[0].toUpperCase()}.` : "A.",
-        sex: (f.gender || "M").toUpperCase(),
-        birthdate: f.birthdate || "01/01/2004",
-        degreeProgram: f.course_degree || "BS Information Technology",
-        yearLevel: f.year_level || "1",
-        email: f.email || app.student?.email || "student@minsu.edu.ph",
-        phone: f.contact_number || "09170000000",
-        tdpBatch: formData.batchNumber,
-        tdpAmount: 7500,
-        totalAmount: 7500,
-        campus: f.hei_campus || formData.campus,
-      };
-    });
-
-    updateGranteesAndTotals(reindexList([...formData.grantees, ...importedGrantees]));
-    setShowImportModal(false);
-  };
 
   // Save to backend
   const handleSave = async (submitDirectly: boolean = false) => {
@@ -629,6 +636,44 @@ export function Annex4SheetSuite({
             </div>
           </div>
 
+          {/* Dynamic Batch Injection Dropdown Card */}
+          <div className="bg-white rounded-2xl border border-line p-4 apple-shadow flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-minsu-green-700" />
+                <h4 className="text-xs font-bold text-minsu-green-900 uppercase tracking-wider">
+                  Inject Grantees by Batch (Select 1, 2, or 3 Batches)
+                </h4>
+              </div>
+              <p className="text-[11px] text-ink-muted">
+                Populate Form 2 new grantees directly from verified intake batches. Batches already injected are guarded against duplicate addition.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="w-full md:w-80">
+                <BatchSelectorDropdown
+                  selectedBatches={selectedBatchesToInject}
+                  onBatchesChange={setSelectedBatchesToInject}
+                  alreadyInjectedBatches={alreadyInjectedBatches}
+                  onInject={handleInjectBatches}
+                  allowDirectAction={true}
+                  maxBatches={3}
+                  placeholder="Choose batch(es) to inject..."
+                />
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => handleInjectBatches(selectedBatchesToInject)}
+                disabled={selectedBatchesToInject.length === 0 || isInjecting}
+                className="h-[42px] px-4 font-bold bg-minsu-green-700 hover:bg-minsu-green-600 text-white shadow-xs shrink-0 apple-press"
+              >
+                <Sparkles className={`w-4 h-4 mr-1.5 text-minsu-gold-400 ${isInjecting ? "animate-spin" : ""}`} />
+                {isInjecting ? "Injecting..." : `Inject (${selectedBatchesToInject.length})`}
+              </Button>
+            </div>
+          </div>
+
           {/* TAB CONTENT: GRANTEES */}
           {workspaceTab === "grantees" && (
             <div className="bg-white rounded-2xl border border-line shadow-xs overflow-hidden">
@@ -648,18 +693,9 @@ export function Annex4SheetSuite({
 
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                   <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={openImportModal}
-                    className="text-xs h-8 border-minsu-gold-500/50 bg-minsu-gold-100/60 hover:bg-minsu-gold-100 text-minsu-gold-600 gap-1.5 font-semibold"
-                  >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>Import from Annex 2</span>
-                  </Button>
-                  <Button
                     size="sm"
                     onClick={addBlankRow}
-                    className="bg-minsu-green-700 hover:bg-minsu-green-600 text-white text-xs h-8 gap-1.5 font-semibold"
+                    className="bg-minsu-green-700 hover:bg-minsu-green-600 text-white text-xs h-8 gap-1.5 font-semibold apple-press"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Grantee</span>
@@ -673,6 +709,7 @@ export function Annex4SheetSuite({
                   <thead className="bg-minsu-green-50 text-minsu-green-900 font-bold sticky top-0 z-10 border-b border-line">
                     <tr>
                       <th className="py-2.5 px-3 w-14">Ctrl #</th>
+                      <th className="py-2.5 px-2 w-16 text-center">Batch</th>
                       <th className="py-2.5 px-3 min-w-[110px]">Student No.</th>
                       <th className="py-2.5 px-3 min-w-[160px]">TDP Award No.</th>
                       <th className="py-2.5 px-3 min-w-[130px]">Last Name</th>
@@ -691,8 +728,20 @@ export function Annex4SheetSuite({
                   <tbody className="divide-y divide-line text-ink">
                     {filteredGrantees.length === 0 ? (
                       <tr>
-                        <td colSpan={14} className="py-12 text-center text-ink-muted">
-                          No grantees match the search criteria.
+                        <td colSpan={15} className="py-16 text-center text-ink-muted">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Users className="w-8 h-8 text-minsu-green-700/40" />
+                            <p className="font-semibold text-ink text-xs">
+                              {formData.grantees.length === 0
+                                ? "No grantees loaded yet"
+                                : "No grantees match your search criteria"}
+                            </p>
+                            <p className="text-[11px] text-ink-muted max-w-sm">
+                              {formData.grantees.length === 0
+                                ? "Select verified intake batch(es) in the card above and click 'Inject Selected' to populate this Form 2 roster, or click '+ Add Grantee' to insert manually."
+                                : "Try adjusting your search terms or clearing the search query."}
+                            </p>
+                          </div>
                         </td>
                       </tr>
                     ) : (
@@ -700,6 +749,15 @@ export function Annex4SheetSuite({
                         <tr key={idx} className="hover:bg-minsu-green-50/50 transition-colors">
                           <td className="py-2 px-3 font-mono font-bold text-minsu-green-800">
                             {g.controlNumber}
+                          </td>
+                          <td className="py-2 px-1 text-center">
+                            <input
+                              value={g.tdpBatch}
+                              onChange={(e) => updateRowField(idx, "tdpBatch", e.target.value)}
+                              className="w-12 text-center font-bold font-mono text-minsu-green-900 bg-minsu-green-100/70 focus:bg-white focus:ring-1 focus:ring-minsu-green-700 rounded px-1 py-0.5 border border-minsu-green-700/20 text-xs"
+                              title="Override batch for this student (e.g. change from Batch 1 to Batch 5)"
+                              placeholder="Batch"
+                            />
                           </td>
                           <td className="py-2 px-3">
                             <input
@@ -837,18 +895,21 @@ export function Annex4SheetSuite({
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-ink-muted">TDP Batch Number</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-ink-muted">TDP Batch Number</label>
+                    <span className="text-[10px] text-ink-muted">(Editable)</span>
+                  </div>
                   <input
                     value={formData.batchNumber}
                     onChange={(e) => {
                       const batch = e.target.value;
                       updateReferenceNumber({
                         batchNumber: batch,
-                        grantees: formData.grantees.map((g) => ({ ...g, tdpBatch: batch })),
                       });
                     }}
-                    placeholder="e.g. 20.1"
+                    placeholder="e.g. 20.1 or 1, 2"
                     className="w-full mt-1.5 h-9 rounded-lg border border-line bg-page px-3 text-xs font-mono font-semibold text-ink focus:outline-none focus:ring-1 focus:ring-minsu-green-700"
+                    title="Document batch code (can be customized freely)"
                   />
                 </div>
 
@@ -1876,6 +1937,8 @@ export function Annex4SheetSuite({
         annexNumber={4}
         orientation={printOrientation}
         onOrientationChange={setPrintOrientation}
+        excelExportUrl={documentId ? `/api/annex-4/export-excel?documentId=${documentId}` : undefined}
+        excelExportLabel="Download Excel (.xlsx)"
         availableForms={availableForms}
         activeFormId={activeTab}
         activeFormLabel={activeFormLabel}
@@ -1905,129 +1968,6 @@ export function Annex4SheetSuite({
           </div>
         }
       />
-
-      {/* ========================================================================= */}
-      {/* 4. MODAL: IMPORT FROM ANNEX 2 APPLICANT CALLS                              */}
-      {/* ========================================================================= */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl border border-line shadow-2xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-line">
-              <div className="flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-minsu-green-700" />
-                <h3 className="font-bold text-sm text-ink">
-                  Import Grantees from Annex 2 Student Portal
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="text-ink-muted hover:text-ink p-1 rounded-lg"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-ink-muted">
-              Select verified or accepted applicant submissions from online TDP calls to automatically append them as new grantees in Form 2.
-            </p>
-
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
-              <input
-                type="text"
-                placeholder="Filter by applicant name or email..."
-                value={appSearch}
-                onChange={(e) => setAppSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-line bg-page focus:outline-none focus:ring-1 focus:ring-minsu-green-700"
-              />
-            </div>
-
-            <div className="flex-1 overflow-y-auto divide-y divide-line border border-line rounded-xl max-h-60 apple-scrollbar">
-              {isLoadingApps ? (
-                <div className="p-8 text-center text-xs text-ink-muted">Loading applications...</div>
-              ) : availableApplications.length === 0 ? (
-                <div className="p-8 text-center text-xs text-ink-muted">
-                  No accepted student applications found in database.
-                </div>
-              ) : (
-                availableApplications
-                  .filter((a) => {
-                    if (!appSearch) return true;
-                    const q = appSearch.toLowerCase();
-                    return (
-                      a.student?.name?.toLowerCase().includes(q) ||
-                      a.student?.email?.toLowerCase().includes(q) ||
-                      a.trackingCode?.toLowerCase().includes(q)
-                    );
-                  })
-                  .map((app) => {
-                    const isSelected = selectedAppIds.includes(app.id);
-                    return (
-                      <div
-                        key={app.id}
-                        onClick={() => {
-                          if (isSelected) {
-                            setSelectedAppIds(selectedAppIds.filter((id) => id !== app.id));
-                          } else {
-                            setSelectedAppIds([...selectedAppIds, app.id]);
-                          }
-                        }}
-                        className={`p-3 text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                          isSelected ? "bg-minsu-green-50" : "hover:bg-page"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            readOnly
-                            className="rounded-xs text-minsu-green-700"
-                          />
-                          <div>
-                            <div className="font-bold text-ink">
-                              {app.student?.name || "Student Applicant"}
-                            </div>
-                            <div className="text-[11px] text-ink-muted">
-                              {app.student?.email} • Tracking: <span className="font-mono">{app.trackingCode}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-minsu-green-100 text-minsu-green-700">
-                          {app.status}
-                        </span>
-                      </div>
-                    );
-                  })
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-line">
-              <span className="text-xs text-ink-muted">
-                {selectedAppIds.length} applicant{selectedAppIds.length === 1 ? "" : "s"} selected
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowImportModal(false)}
-                  className="text-xs"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={commitImportApplications}
-                  disabled={selectedAppIds.length === 0}
-                  className="bg-minsu-green-700 hover:bg-minsu-green-600 text-white text-xs gap-1.5"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Import {selectedAppIds.length} to Form 2</span>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

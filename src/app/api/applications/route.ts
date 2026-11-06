@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Security & Anti-Impersonation Check: Validate Student ID ownership
-    const studentIdNumber = (formData?.student_id_number || "").trim().toUpperCase();
+    const studentIdNumber = (formData?.student_id_number || formData?.student_id || "").trim().toUpperCase();
     if (!studentIdNumber || !isValidStudentId(studentIdNumber)) {
       return NextResponse.json(
         { error: "A valid MinSU Student ID number is required (e.g. 2024-00123-BC)." },
@@ -152,12 +152,14 @@ export async function POST(req: NextRequest) {
       orderBy: { submittedAt: "desc" },
     });
 
+    const regData = (studentReg?.formData as any) || {};
+
     if (studentReg) {
-      const regData = (studentReg.formData as any) || {};
-      if (regData.student_id && studentIdNumber !== String(regData.student_id).trim().toUpperCase()) {
+      const regId = (regData.student_id || regData.student_id_number || "").trim().toUpperCase();
+      if (regId && studentIdNumber !== regId) {
         return NextResponse.json(
           {
-            error: `Identity mismatch: The submitted Student ID (${studentIdNumber}) does not match your registered Student ID (${regData.student_id}). You cannot submit under another student's profile.`,
+            error: `Identity mismatch: The submitted Student ID (${studentIdNumber}) does not match your registered Student ID (${regId}). You cannot submit under another student's profile.`,
           },
           { status: 403 }
         );
@@ -165,8 +167,11 @@ export async function POST(req: NextRequest) {
     } else {
       const otherClaimed = await prisma.application.findFirst({
         where: {
-          formData: { path: ["student_id"], equals: studentIdNumber },
           NOT: { studentId: user.id },
+          OR: [
+            { formData: { path: ["student_id"], equals: studentIdNumber } },
+            { formData: { path: ["student_id_number"], equals: studentIdNumber } },
+          ],
         },
       });
       if (otherClaimed) {
@@ -203,12 +208,47 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Extract names, falling back to user.name if needed
+    let givenName = regData.given_name || formData?.given_name || "";
+    let lastName = regData.last_name || formData?.last_name || "";
+    let middleName = regData.middle_name || formData?.middle_name || "";
+    let extName = regData.ext_name || formData?.ext_name || "";
+
+    if (!givenName && !lastName && user.name) {
+      const parts = user.name.trim().split(/\s+/);
+      if (parts.length === 1) {
+        givenName = parts[0];
+        lastName = parts[0];
+      } else {
+        lastName = parts[parts.length - 1];
+        givenName = parts.slice(0, parts.length - 1).join(" ");
+      }
+    }
+
+    const campusVal = formData?.campus || formData?.hei_campus || regData.campus || regData.hei_campus || "Main Campus (Alcate)";
+    const courseVal = formData?.program_course || formData?.course_degree || regData.program_course || regData.course_degree || "";
+    const yearLevelVal = formData?.year_level || regData.year_level || "1st Year";
+
     const sanitizedFormData = {
+      ...regData,
       ...formData,
+      student_id: studentIdNumber,
       student_id_number: studentIdNumber,
-      contact_number: formData?.contact_number ? normalizePhilippineMobile(formData.contact_number) : "",
+      given_name: givenName,
+      last_name: lastName,
+      middle_name: middleName,
+      ext_name: extName,
+      campus: campusVal,
+      hei_campus: campusVal,
+      program_course: courseVal,
+      course_degree: courseVal,
+      year_level: yearLevelVal,
+      contact_number: formData?.contact_number
+        ? normalizePhilippineMobile(formData.contact_number)
+        : regData.contact_number || "",
       latest_gwa: gwaCheck.normalized,
       family_monthly_income: incomeCheck.value,
+      email: user.email,
     };
 
     // Generate unique batch-coded tracking code e.g. MINSU-TDP-2026-B1-A1B2C

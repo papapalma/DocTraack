@@ -5,20 +5,22 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SkeletonCard } from "@/components/ui/skeleton";
-import { Megaphone, Calendar, ArrowRight, CheckCircle2, Clock, AlertTriangle, UserCheck, ShieldCheck } from "lucide-react";
+import { Megaphone, Calendar, ArrowRight, CheckCircle2, Clock, AlertTriangle, UserCheck, ShieldCheck, BellRing, Pin } from "lucide-react";
 import { StaggerContainer, StaggerItem } from "@/components/ui/page-transition";
 
 export default function StudentPortalHomePage() {
   const [calls, setCalls] = useState<any[]>([]);
   const [myRegistration, setMyRegistration] = useState<any | null>(null);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadPortalData() {
       try {
-        const [callsRes, regRes] = await Promise.all([
+        const [callsRes, regRes, annRes] = await Promise.all([
           fetch("/api/calls"),
           fetch("/api/registrations"),
+          fetch("/api/announcements?limit=2"),
         ]);
 
         if (callsRes.ok) {
@@ -29,6 +31,11 @@ export default function StudentPortalHomePage() {
         if (regRes.ok) {
           const regData = await regRes.json();
           setMyRegistration(regData.application || null);
+        }
+
+        if (annRes.ok) {
+          const annData = await annRes.json();
+          setAnnouncements(annData.announcements || []);
         }
       } catch (e) {
         console.error(e);
@@ -120,6 +127,73 @@ export default function StudentPortalHomePage() {
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Announcements Highlight Section for Students */}
+      {announcements.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-heading font-bold text-[#1B5E20] flex items-center gap-1.5 uppercase tracking-wide">
+              <BellRing className="w-4 h-4 text-[#B88A00]" />
+              <span>Official Announcements</span>
+            </h2>
+            <Link
+              href="/portal/announcements"
+              className="text-xs font-bold text-[#1B5E20] hover:underline flex items-center gap-1 group"
+            >
+              <span>View all notices ({announcements.length})</span>
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {announcements.map((item) => (
+              <Link key={item.id} href="/portal/announcements" className="block group">
+                <div
+                  className={`p-4 rounded-xl border transition-all duration-200 bg-white hover:shadow-md hover:-translate-y-0.5 h-full flex flex-col justify-between ${
+                    item.isPinned
+                      ? "border-[#F2B705] bg-gradient-to-br from-[#FFFDF5] to-white ring-1 ring-[#F2B705]/30"
+                      : "border-[#D6DDD8]"
+                  }`}
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        {item.isPinned && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFF1C2] text-[#B88A00] border border-[#F2B705]/40">
+                            <Pin className="w-2.5 h-2.5 fill-[#B88A00]" />
+                            Pinned
+                          </span>
+                        )}
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#DCEFDD] text-[#123F17]">
+                          {item.category}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-[#55645B]">
+                        {new Date(item.createdAt).toLocaleDateString("en-PH", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    </div>
+
+                    <h3 className="text-sm font-bold text-[#1F2A24] group-hover:text-[#1B5E20] transition-colors line-clamp-1">
+                      {item.title}
+                    </h3>
+                    <p className="text-xs text-[#55645B] line-clamp-2 leading-relaxed">
+                      {item.content}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 text-[11px] font-semibold text-[#1B5E20] flex items-center gap-1 mt-2 border-t border-neutral-100">
+                    <span>Read full announcement</span>
+                    <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 

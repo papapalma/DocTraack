@@ -6,6 +6,8 @@ import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
 import { Annex8FormData, Annex8CheckEntry, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
+import { useDownload } from "@/components/providers/download-provider";
+import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
 import {
   FileSpreadsheet,
   Printer,
@@ -42,6 +44,7 @@ export function Annex8SheetSuite({
   onSaved,
 }: Annex8SheetSuiteProps) {
   const router = useRouter();
+  const { downloadBlob } = useDownload();
 
   // Mode: "workspace" or "sheet" (Official Canvas)
   const [viewMode, setViewMode] = useState<"workspace" | "sheet">("workspace");
@@ -398,15 +401,11 @@ export function Annex8SheetSuite({
       if (!res.ok) throw new Error("Failed to generate Excel file");
 
       const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
       const safeReportNo = String(formData?.reportNo || "Report").replace(/[^a-zA-Z0-9_-]/g, "_");
-      a.download = `Annex_8_RCI_${safeReportNo}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
+      downloadBlob({
+        blob,
+        filename: `Annex_8_RCI_${safeReportNo}.xlsx`,
+      });
     } catch (err) {
       console.error(err);
       alert("Failed to export Excel file. Please try again.");
@@ -794,7 +793,36 @@ export function Annex8SheetSuite({
           {/* TAB 2: HEI & Report Identification */}
           {workspaceTab === "identification" && (
             <div className="bg-white p-6 rounded-xl border border-line shadow-sm space-y-4">
-              <h3 className="text-sm font-bold text-ink">Institution & Report Parameters</h3>
+              <div>
+                <h3 className="text-sm font-bold text-ink">Institution & Report Parameters</h3>
+                <p className="text-xs text-ink-muted">Configure reporting campus and official HEI institution parameters.</p>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-minsu-green-200 bg-minsu-green-50/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                <div>
+                  <label className="block text-minsu-green-950 font-bold mb-1">Quick Select MinSU Campus</label>
+                  <p className="text-[11px] text-minsu-green-800">Auto-populates official HEI institution name and physical campus address.</p>
+                </div>
+                <select
+                  value={getMinsuCampusConfig(formData.heiName).key}
+                  onChange={(e) => {
+                    const cfg = getMinsuCampusConfig(e.target.value);
+                    setFormData((prev) => ({
+                      ...prev,
+                      heiName: cfg.heiName,
+                      heiAddress: cfg.heiAddress,
+                    }));
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-minsu-green-300 bg-white font-bold text-minsu-green-900 focus:ring-2 focus:ring-minsu-green-700 outline-none text-xs"
+                >
+                  {MINSU_CAMPUSES.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                 <div>
                   <label className="block text-ink-muted mb-1 font-medium">Name of HEI</label>
@@ -1166,6 +1194,8 @@ export function Annex8SheetSuite({
               annexNumber={8}
               orientation={printOrientation}
               onOrientationChange={setPrintOrientation}
+              excelExportUrl={documentId ? `/api/annex-8/export-excel?documentId=${documentId}` : undefined}
+              excelExportLabel="Download Excel (.xlsx)"
               onPrint={() => {
                 setViewMode("sheet");
               }}

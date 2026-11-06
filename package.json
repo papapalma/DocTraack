@@ -7,6 +7,10 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "seed": "tsx prisma/seed.ts",
+    "db:refresh": "tsx prisma/seed.ts",
+    "test": "tsx tests/student-data-integrity.test.ts",
+    "test:all": "tsx tests/verification-matcher.test.ts && tsx tests/student-data-integrity.test.ts",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d --build",
     "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
@@ -41,5 +45,8 @@
     "tailwindcss": "^3.4.19",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

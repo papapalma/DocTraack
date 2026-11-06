@@ -2,11 +2,13 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChedLogo, UniFastLogo } from "./ched-unifast-logos";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
 import { Annex10FormData, Annex10Grantee, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
+import { BatchSelectorDropdown } from "./batch-selector-dropdown";
+import { useDownload } from "@/components/providers/download-provider";
+import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
 import {
   FileText,
   Printer,
@@ -46,6 +48,7 @@ export function Annex10SheetSuite({
   onSaved,
 }: Annex10SheetSuiteProps) {
   const router = useRouter();
+  const { downloadBlob } = useDownload();
 
   // Mode: "workspace" or "canvas" (Official Notice of Award Letter Canvas)
   const [viewMode, setViewMode] = useState<"workspace" | "canvas">("canvas");
@@ -74,63 +77,17 @@ export function Annex10SheetSuite({
   const defaultData: Annex10FormData = useMemo(() => {
     if (initialData) return initialData;
 
-    const initialGrantees: Annex10Grantee[] = [
-      {
-        id: "g-1",
-        seqNo: 1,
-        awardNo: "2024-IVB-00101",
-        studentIdNo: "21-0492",
-        granteeName: "JUAN P. DELA CRUZ",
-        salutation: "Dear Mr. Dela Cruz:",
-        address: "Labasan, Bongabong",
-        cityMunicipality: "Oriental Mindoro, 5211",
-        startingSemester: "1st",
-        academicYear: "2024-2025",
-        stipendAmount: 7500,
-        heiName: "Mindoro State University - Bongabong Campus",
-        program: "BS Information Technology",
-      },
-      {
-        id: "g-2",
-        seqNo: 2,
-        awardNo: "2024-IVB-00102",
-        studentIdNo: "21-0493",
-        granteeName: "MARIA C. SANTOS",
-        salutation: "Dear Ms. Santos:",
-        address: "Poblacion, Bongabong",
-        cityMunicipality: "Oriental Mindoro, 5211",
-        startingSemester: "1st",
-        academicYear: "2024-2025",
-        stipendAmount: 7500,
-        heiName: "Mindoro State University - Bongabong Campus",
-        program: "BS Fisheries",
-      },
-      {
-        id: "g-3",
-        seqNo: 3,
-        awardNo: "2024-IVB-00103",
-        studentIdNo: "22-1084",
-        granteeName: "CARLO M. REYES",
-        salutation: "Dear Mr. Reyes:",
-        address: "Aplaya, Bongabong",
-        cityMunicipality: "Oriental Mindoro, 5211",
-        startingSemester: "1st",
-        academicYear: "2024-2025",
-        stipendAmount: 7500,
-        heiName: "Mindoro State University - Bongabong Campus",
-        program: "BS Criminology",
-      },
-    ];
-
     return {
       topRightLabelType: "annex10",
       letterDate: "October 28, 2026",
       defaultStartingSemester: "1st",
       defaultAcademicYear: "2024-2025",
       stipendAmountPerSem: 7500,
+      campus: "Bongabong Campus",
+      heiName: "Mindoro State University - Bongabong Campus",
       memorandumOrderRef: "Sec. 9 of the UniFAST Memorandum Order No. 3 series 2024",
-      grantees: initialGrantees,
-      selectedGranteeId: initialGrantees[0].id,
+      grantees: [],
+      selectedGranteeId: "",
       signatory: {
         name: "DR. EDNA IMELDA F. LEGAZPI",
         position: "Director IV",
@@ -267,7 +224,87 @@ export function Annex10SheetSuite({
     }));
   };
 
-  // Import Grantees from System (Annex 3/4 or sample pool)
+  // Batches currently in Notice of Awards cohort
+  const alreadyInjectedBatches = useMemo(() => {
+    const list = formData.grantees
+      .map((g) => String(g.batchNumber || "").trim())
+      .filter(Boolean);
+    return Array.from(new Set(list));
+  }, [formData.grantees]);
+
+  const [selectedBatchesToInject, setSelectedBatchesToInject] = useState<number[]>([1]);
+
+  // Inject scholars by batch for Notice of Awards (1, 2, or 3 batches)
+  const handleImportBatches = async (batchesToInject: number[]) => {
+    setIsImporting(true);
+    setImportMessage(null);
+    if (batchesToInject.length === 0) {
+      setIsImporting(false);
+      return;
+    }
+
+    const alreadyPresent = batchesToInject.filter((b) => alreadyInjectedBatches.includes(String(b)));
+    if (alreadyPresent.length > 0) {
+      setImportMessage(`Batch ${alreadyPresent.join(", ")} has already been injected into this Notice of Awards document.`);
+      setIsImporting(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/annex-3/compile?batches=${batchesToInject.join(",")}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.candidates && data.candidates.length > 0) {
+          const startIndex = formData.grantees.length;
+          const firstCandidateCampus = data.candidates[0]?.campus;
+          const campusCfg = getMinsuCampusConfig(firstCandidateCampus || formData.campus);
+
+          const newAwardees: Annex10Grantee[] = data.candidates.map((c: any, idx: number) => {
+            const fullName = `${c.lastName || ""}, ${c.givenName || ""}`.trim() || `SCHOLAR ${startIndex + idx + 1}`;
+            const indivCampusCfg = getMinsuCampusConfig(c.campus || formData.campus);
+            return {
+              id: `noa-${Date.now()}-${startIndex + idx + 1}`,
+              seqNo: startIndex + idx + 1,
+              batchNumber: String(c.tdpBatch || batchesToInject[0] || "1"),
+              awardNo: (c.tdpAwardNumber || `2024-IVB-${String(startIndex + idx + 1).padStart(5, "0")}`).replace("TDP-TES", "").replace("TDP-", "").trim(),
+              studentIdNo: c.studentNumber || "",
+              granteeName: fullName.toUpperCase(),
+              salutation: `Dear Mr./Ms. ${c.lastName || "Grantee"}:`,
+              address: c.campus || indivCampusCfg.key,
+              cityMunicipality: "Oriental Mindoro",
+              startingSemester: formData.defaultStartingSemester,
+              academicYear: formData.defaultAcademicYear,
+              stipendAmount: formData.stipendAmountPerSem || 7500,
+              heiName: `Mindoro State University - ${indivCampusCfg.key}`,
+              program: c.degreeProgram || "BS Information Technology",
+            };
+          });
+
+          const combined = [...formData.grantees, ...newAwardees];
+          setFormData((prev) => ({
+            ...prev,
+            campus: prev.grantees.length === 0 && campusCfg ? campusCfg.label : prev.campus,
+            heiName: prev.grantees.length === 0 && campusCfg ? campusCfg.heiName : prev.heiName,
+            grantees: combined,
+            selectedGranteeId: prev.selectedGranteeId || combined[0]?.id,
+          }));
+          setSelectedBatchesToInject([]);
+          setImportMessage(`Successfully populated ${newAwardees.length} awardees from Batch ${batchesToInject.join(", ")}.`);
+        } else {
+          setImportMessage(`No verified candidates found for Batch ${batchesToInject.join(", ")}.`);
+        }
+      } else {
+        setImportMessage("Failed to fetch grantee data for selected batches.");
+      }
+    } catch {
+      setImportMessage("Connection error while importing batches.");
+    } finally {
+      setIsImporting(false);
+      setTimeout(() => setImportMessage(null), 4000);
+    }
+  };
+
+  // Import Grantees from System fallback
   const handleImportGrantees = async () => {
     setIsImporting(true);
     setImportMessage(null);
@@ -328,94 +365,10 @@ export function Annex10SheetSuite({
         }
       }
 
-      // Fallback: Populate with verified cohort roster
-      const sampleCohort: Annex10Grantee[] = [
-        {
-          id: "c-1",
-          seqNo: 1,
-          awardNo: "2024-IVB-00101",
-          studentIdNo: "21-0492",
-          granteeName: "JUAN P. DELA CRUZ",
-          salutation: "Dear Mr. Dela Cruz:",
-          address: "Labasan, Bongabong",
-          cityMunicipality: "Oriental Mindoro, 5211",
-          startingSemester: "1st",
-          academicYear: "2024-2025",
-          stipendAmount: 7500,
-          heiName: "Mindoro State University - Bongabong Campus",
-          program: "BS Information Technology",
-        },
-        {
-          id: "c-2",
-          seqNo: 2,
-          awardNo: "2024-IVB-00102",
-          studentIdNo: "21-0493",
-          granteeName: "MARIA C. SANTOS",
-          salutation: "Dear Ms. Santos:",
-          address: "Poblacion, Bongabong",
-          cityMunicipality: "Oriental Mindoro, 5211",
-          startingSemester: "1st",
-          academicYear: "2024-2025",
-          stipendAmount: 7500,
-          heiName: "Mindoro State University - Bongabong Campus",
-          program: "BS Fisheries",
-        },
-        {
-          id: "c-3",
-          seqNo: 3,
-          awardNo: "2024-IVB-00103",
-          studentIdNo: "22-1084",
-          granteeName: "CARLO M. REYES",
-          salutation: "Dear Mr. Reyes:",
-          address: "Aplaya, Bongabong",
-          cityMunicipality: "Oriental Mindoro, 5211",
-          startingSemester: "1st",
-          academicYear: "2024-2025",
-          stipendAmount: 7500,
-          heiName: "Mindoro State University - Bongabong Campus",
-          program: "BS Criminology",
-        },
-        {
-          id: "c-4",
-          seqNo: 4,
-          awardNo: "2024-IVB-00104",
-          studentIdNo: "22-1090",
-          granteeName: "ANGELA D. GARCIA",
-          salutation: "Dear Ms. Garcia:",
-          address: "Lisap, Bongabong",
-          cityMunicipality: "Oriental Mindoro, 5211",
-          startingSemester: "1st",
-          academicYear: "2024-2025",
-          stipendAmount: 7500,
-          heiName: "Mindoro State University - Bongabong Campus",
-          program: "BS Computer Science",
-        },
-        {
-          id: "c-5",
-          seqNo: 5,
-          awardNo: "2024-IVB-00105",
-          studentIdNo: "23-0144",
-          granteeName: "MARK ANTHONY L. BAUTISTA",
-          salutation: "Dear Mr. Bautista:",
-          address: "Hagan, Bongabong",
-          cityMunicipality: "Oriental Mindoro, 5211",
-          startingSemester: "1st",
-          academicYear: "2024-2025",
-          stipendAmount: 7500,
-          heiName: "Mindoro State University - Bongabong Campus",
-          program: "BS Hospitality Management",
-        },
-      ];
-
-      setFormData((prev) => ({
-        ...prev,
-        grantees: sampleCohort,
-        selectedGranteeId: sampleCohort[0].id,
-      }));
-      setImportMessage("Populated verified MinSU TDP grantee cohort (5 awardees).");
+      setImportMessage("No eligible billing documents (Annex 3 or Annex 4) found in database.");
     } catch (e) {
       console.error(e);
-      setImportMessage("Failed to connect to billing database. Default cohort preserved.");
+      setImportMessage("Failed to connect to billing database.");
     } finally {
       setIsImporting(false);
     }
@@ -675,15 +628,11 @@ export function Annex10SheetSuite({
     const blob = new Blob(["\ufeff", htmlContent], {
       type: "application/msword",
     });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
     const safeTitle = (isBatchPrint ? "Annex10_Batch_Notice_of_Awards" : `Annex10_NOA_${currentGrantee?.granteeName.replace(/[^a-zA-Z0-9]/g, "_")}`).substring(0, 50);
-    link.download = `${safeTitle}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadBlob({
+      blob,
+      filename: `${safeTitle}.doc`,
+    });
   };
 
   // 1-Click Print / PDF
@@ -895,6 +844,44 @@ export function Annex10SheetSuite({
             </div>
           )}
 
+          {/* Dynamic Batch Injection Dropdown Card */}
+          <div className="bg-white rounded-2xl border border-[#D6DDD8] p-4 apple-shadow flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#1B5E20]" />
+                <h4 className="text-xs font-bold text-[#123F17] uppercase tracking-wider">
+                  Inject Awardees by Batch (Select 1, 2, or 3 Batches)
+                </h4>
+              </div>
+              <p className="text-[11px] text-[#55645B]">
+                Generate official Notice of Awards from verified intake cohorts. Batches already present are guarded against duplicate addition.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="w-full md:w-80">
+                <BatchSelectorDropdown
+                  selectedBatches={selectedBatchesToInject}
+                  onBatchesChange={setSelectedBatchesToInject}
+                  alreadyInjectedBatches={alreadyInjectedBatches}
+                  onInject={handleImportBatches}
+                  allowDirectAction={true}
+                  maxBatches={3}
+                  placeholder="Choose batch(es) to generate NOAs..."
+                />
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => handleImportBatches(selectedBatchesToInject)}
+                disabled={selectedBatchesToInject.length === 0 || isImporting}
+                className="h-[42px] px-4 font-bold bg-[#1B5E20] hover:bg-[#164D1C] text-white shadow-xs shrink-0 apple-press"
+              >
+                <Sparkles className={`w-4 h-4 mr-1.5 text-[#F2B705] ${isImporting ? "animate-spin" : ""}`} />
+                {isImporting ? "Injecting..." : `Inject (${selectedBatchesToInject.length})`}
+              </Button>
+            </div>
+          </div>
+
           {/* TAB 1: GRANTEES ROSTER */}
           {workspaceTab === "grantees" && (
             <div className="bg-white rounded-2xl border border-[#D6DDD8] shadow-sm overflow-hidden">
@@ -919,6 +906,7 @@ export function Annex10SheetSuite({
                   <thead className="bg-[#F6F8F6] text-[#1F2A24] font-semibold uppercase tracking-wider sticky top-0 border-b border-[#D6DDD8]">
                     <tr>
                       <th className="py-2.5 px-3 w-12 text-center">#</th>
+                      <th className="py-2.5 px-2 w-16 text-center">Batch</th>
                       <th className="py-2.5 px-3">Award No.</th>
                       <th className="py-2.5 px-3">Grantee Full Name</th>
                       <th className="py-2.5 px-3">Salutation</th>
@@ -929,7 +917,26 @@ export function Annex10SheetSuite({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#D6DDD8]">
-                    {filteredGrantees.map((grantee) => {
+                    {filteredGrantees.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-16 text-center text-ink-muted">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Users className="w-8 h-8 text-minsu-green-700/40" />
+                            <p className="font-semibold text-ink text-xs">
+                              {formData.grantees.length === 0
+                                ? "No awardees loaded yet"
+                                : "No awardees match your search criteria"}
+                            </p>
+                            <p className="text-[11px] text-ink-muted max-w-sm">
+                              {formData.grantees.length === 0
+                                ? "Select verified intake batch(es) in the card above and click 'Inject Selected' to generate NOAs, or click '+ Add Awardee' to insert manually."
+                                : "Try adjusting your search terms or clearing the search query."}
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredGrantees.map((grantee) => {
                       const isSelected = grantee.id === formData.selectedGranteeId;
                       return (
                         <tr
@@ -940,6 +947,18 @@ export function Annex10SheetSuite({
                         >
                           <td className="py-2 px-3 text-center font-medium text-neutral-500">
                             {grantee.seqNo}
+                          </td>
+                          <td className="py-2 px-1 text-center">
+                            <input
+                              type="text"
+                              value={grantee.batchNumber || "1"}
+                              onChange={(e) =>
+                                handleUpdateGrantee(grantee.id, "batchNumber", e.target.value)
+                              }
+                              className="w-12 text-center py-1 px-1 font-bold font-mono text-xs rounded border border-[#D6DDD8] bg-[#DCEFDD]/70 text-[#123F17] focus:ring-1 focus:ring-[#1B5E20]"
+                              title="Staff can override batch for this scholar (e.g. change to Batch 5)"
+                              placeholder="1"
+                            />
                           </td>
                           <td className="py-2 px-3">
                             <input
@@ -1030,7 +1049,7 @@ export function Annex10SheetSuite({
                           </td>
                         </tr>
                       );
-                    })}
+                    }))}
                   </tbody>
                 </table>
               </div>
@@ -1045,7 +1064,40 @@ export function Annex10SheetSuite({
                 Notice & Award Parameters
               </h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#1F2A24]">
+                    Designated MinSU Campus
+                  </label>
+                  <select
+                    value={formData.campus || "Bongabong Campus"}
+                    onChange={(e) => {
+                      const campusKey = e.target.value;
+                      const cfg = getMinsuCampusConfig(campusKey);
+                      setFormData((prev) => ({
+                        ...prev,
+                        campus: cfg.key,
+                        heiName: `Mindoro State University - ${cfg.key}`,
+                        grantees: prev.grantees.map((g) => ({
+                          ...g,
+                          address: cfg.key,
+                          heiName: `Mindoro State University - ${cfg.key}`,
+                        })),
+                      }));
+                    }}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-[#D6DDD8] focus:ring-2 focus:ring-[#1B5E20] bg-white font-medium"
+                  >
+                    {MINSU_CAMPUSES.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-[#55645B]">
+                    Synchronizes HEI campus name & address across all notice of award letters.
+                  </p>
+                </div>
+
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#1F2A24]">
                     Notice of Award Date (Letterhead Date)
@@ -1368,7 +1420,23 @@ export function Annex10SheetSuite({
         {/* LETTER CANVAS CONTAINER */}
         <div className="annex-printable-document flex justify-center bg-neutral-100 p-2 sm:p-6 rounded-2xl print:bg-white print:p-0">
           <div className="w-full max-w-[850px] space-y-8 print:space-y-0">
-            {(isBatchPrint ? formData.grantees : [currentGrantee]).map((grantee, gIndex) => {
+            {formData.grantees.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-md border border-neutral-300 p-16 text-center text-ink-muted">
+                <FileText className="w-12 h-12 mx-auto mb-3 text-minsu-green-700/40" />
+                <h4 className="font-bold text-sm text-ink">No Notice of Award to Preview</h4>
+                <p className="text-xs text-ink-muted mt-1 max-w-sm mx-auto">
+                  Select intake batch(es) in Workspace mode to inject scholar records and generate official Notice of Award certificates.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("workspace")}
+                  className="mt-4 px-4 py-1.5 rounded-xl bg-minsu-green-700 text-white font-bold text-xs apple-press hover:bg-minsu-green-600 transition"
+                >
+                  Switch to Workspace
+                </button>
+              </div>
+            ) : (
+              (isBatchPrint ? formData.grantees : [currentGrantee]).map((grantee, gIndex) => {
               const labelRight =
                 formData.topRightLabelType === "annex3_original"
                   ? "Annex 3 - NOA"
@@ -1510,7 +1578,7 @@ export function Annex10SheetSuite({
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
         </div>
       </div>
@@ -1523,10 +1591,16 @@ export function Annex10SheetSuite({
         annexNumber={10}
         orientation={printOrientation}
         onOrientationChange={setPrintOrientation}
-        availableForms={[
-          { id: "single", label: currentGrantee ? currentGrantee.granteeName : "Current NOA", defaultOrientation: "portrait" },
-          { id: "batch", label: `Batch All (${formData.grantees.length} Scholars)`, defaultOrientation: "portrait" },
-        ]}
+        wordExportUrl={documentId ? `/api/annex-10/export-doc?documentId=${documentId}` : undefined}
+        wordExportLabel="Download Word (.doc)"
+        availableForms={
+          formData.grantees.length === 0
+            ? [{ id: "empty", label: "No NOA available", defaultOrientation: "portrait" }]
+            : [
+                { id: "single", label: currentGrantee ? currentGrantee.granteeName : "Current NOA", defaultOrientation: "portrait" },
+                { id: "batch", label: `Batch All (${formData.grantees.length} Scholars)`, defaultOrientation: "portrait" },
+              ]
+        }
         activeFormId={isBatchPrint ? "batch" : "single"}
         activeFormLabel={isBatchPrint ? `Batch All (${formData.grantees.length})` : (currentGrantee?.granteeName || "Single NOA")}
         scope={printScope}
@@ -1535,7 +1609,11 @@ export function Annex10SheetSuite({
           <div className="text-black text-xs space-y-4">
             <div className="p-4 border border-dashed border-neutral-300 rounded bg-[#F1F8F1]">
               <div className="font-bold text-sm text-[#123F17]">
-                {printScope === "all" ? `Batch Notice of Awards (${formData.grantees.length} Scholars)` : `Notice of Award: ${currentGrantee?.granteeName}`}
+                {formData.grantees.length === 0
+                  ? "No Notice of Award loaded"
+                  : printScope === "all"
+                  ? `Batch Notice of Awards (${formData.grantees.length} Scholars)`
+                  : `Notice of Award: ${currentGrantee?.granteeName || ""}`}
               </div>
               <div className="text-xs text-neutral-600 mt-1">
                 MinSU Campus: {currentGrantee?.heiName || "Mindoro State University"} • Award: ₱{(currentGrantee?.stipendAmount || formData.stipendAmountPerSem).toLocaleString()} • AY {currentGrantee?.academicYear || formData.defaultAcademicYear}

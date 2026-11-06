@@ -21,7 +21,20 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { applicationIds, batchNumber, targetAgency, academicYear, remarks } = body;
+    const { applicationIds, batchNumber, batchNumbers, targetAgency, academicYear, remarks } = body;
+
+    // Normalize batch selection into an array of numbers if provided
+    let targetBatches: number[] = [];
+    if (Array.isArray(batchNumbers) && batchNumbers.length > 0) {
+      targetBatches = batchNumbers.map((b: any) => parseInt(b, 10)).filter((n: number) => !isNaN(n));
+    } else if (typeof batchNumbers === "string" && batchNumbers.trim() !== "") {
+      targetBatches = batchNumbers.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
+    } else if (batchNumber && batchNumber !== "ALL") {
+      const parsed = parseInt(String(batchNumber), 10);
+      if (!isNaN(parsed)) {
+        targetBatches = [parsed];
+      }
+    }
 
     // Find Annex 1 type
     const annex1Type = await prisma.annexType.findFirst({
@@ -39,11 +52,10 @@ export async function POST(req: NextRequest) {
     const whereClause: any = {
       status: ApplicationStatus.ACCEPTED,
     };
-    if (batchNumber && batchNumber !== "ALL") {
-      const parsed = parseInt(batchNumber, 10);
-      if (!isNaN(parsed)) {
-        whereClause.batchNumber = parsed;
-      }
+    if (targetBatches.length === 1) {
+      whereClause.batchNumber = targetBatches[0];
+    } else if (targetBatches.length > 1) {
+      whereClause.batchNumber = { in: targetBatches };
     }
     if (Array.isArray(applicationIds) && applicationIds.length > 0) {
       whereClause.id = { in: applicationIds };
@@ -54,7 +66,7 @@ export async function POST(req: NextRequest) {
       include: {
         student: { select: { id: true, name: true, email: true } },
       },
-      orderBy: { submittedAt: "asc" },
+      orderBy: [{ batchNumber: "asc" }, { submittedAt: "asc" }],
     });
 
     if (applications.length === 0) {
@@ -67,27 +79,43 @@ export async function POST(req: NextRequest) {
     // Format students with 1-indexed SEQ
     const formattedStudents = applications.map((app, index) => {
       const data = (app.formData as any) || {};
+
+      let lastName = data.last_name || "";
+      let givenName = data.given_name || "";
+      let middleName = data.middle_name || "";
+
+      if ((!lastName || !givenName) && app.student?.name) {
+        const parts = app.student.name.trim().split(/\s+/);
+        if (parts.length === 1) {
+          givenName = parts[0];
+          lastName = parts[0];
+        } else {
+          lastName = parts[parts.length - 1];
+          givenName = parts.slice(0, parts.length - 1).join(" ");
+        }
+      }
+
       return {
         seq: index + 1,
         applicationId: app.id,
-        student_id: data.student_id || app.student.id,
-        last_name: data.last_name || "",
-        given_name: data.given_name || "",
+        student_id: data.student_id || data.student_id_number || app.student.id,
+        last_name: lastName,
+        given_name: givenName,
         ext_name: data.ext_name || "",
-        middle_name: data.middle_name || "",
+        middle_name: middleName,
         gender: data.gender || "M",
         birthdate: data.birthdate || "",
-        course_degree: data.course_degree || "",
+        course_degree: data.course_degree || data.program_course || "",
         year_level: data.year_level || "1",
         street_barangay: data.street_barangay || "",
         town_city: data.town_city || "",
-        province: data.province || "",
-        zipcode: data.zipcode || "",
+        province: data.province || "Oriental Mindoro",
+        zipcode: data.zipcode || "5200",
         contact_number: data.contact_number || "",
         email: data.email || app.student.email,
         hei_uii: data.hei_uii || "4060",
         hei_name: data.hei_name || "MINDORO STATE COLLEGE OF AGRICULTURE AND TECHNOLOGY-MAIN CAMPUS",
-        hei_campus: data.hei_campus || "Main Campus (Victoria / Alcate)",
+        hei_campus: data.hei_campus || data.campus || "Main Campus (Victoria / Alcate)",
         father_last_name: data.father_last_name || "",
         father_given_name: data.father_given_name || "",
         father_middle_name: data.father_middle_name || "",
@@ -100,17 +128,24 @@ export async function POST(req: NextRequest) {
         mother_email: data.mother_email || "",
         parent_contact_number: data.parent_contact_number || "",
         parent_email: data.parent_email || "",
+        batch_number: app.batchNumber || 1,
       };
     });
 
     const now = new Date();
-    const batchLabel = batchNumber && batchNumber !== "ALL" ? `Batch ${batchNumber}` : "All Batches";
+    let batchLabel = "All Batches";
+    if (targetBatches.length === 1) {
+      batchLabel = `Batch ${targetBatches[0]}`;
+    } else if (targetBatches.length > 1) {
+      batchLabel = `Batches ${targetBatches.join(" & ")}`;
+    }
     const docTitle = `Annex 1: Masterlist of TDP Grantees (${batchLabel}) - ${academicYear || `A.Y. ${now.getFullYear()}-${now.getFullYear() + 1}`} (${formattedStudents.length} Students)`;
 
     const docFormData = {
       target_agency: targetAgency || "Commission on Higher Education (CHED) / UniFAST",
       academic_year: academicYear || `A.Y. ${now.getFullYear()}-${now.getFullYear() + 1}`,
-      batch_number: batchNumber || "1",
+      batch_number: targetBatches.length > 0 ? targetBatches.join(", ") : (batchNumber || "1"),
+      selected_batches: targetBatches,
       transmittal_number: `MINSU-ANNEX1-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       submission_date: now.toISOString().split("T")[0],
       total_grantees: formattedStudents.length,

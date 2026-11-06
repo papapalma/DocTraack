@@ -76,13 +76,16 @@ export function sanitizeText(input: string, maxLength = 2000): string {
 export function isValidPhilippineMobile(phone: string): boolean {
   if (!phone || typeof phone !== "string") return false;
   const clean = phone.replace(/[\s-]/g, "");
-  return /^(09\d{9}|\+639\d{9})$/.test(clean);
+  return /^(09\d{9}|\+639\d{9}|639\d{9})$/.test(clean);
 }
 
 export function normalizePhilippineMobile(phone: string): string {
   const clean = (phone || "").replace(/[\s-]/g, "");
   if (clean.startsWith("+63")) {
     return "0" + clean.slice(3);
+  }
+  if (clean.startsWith("63") && clean.length === 12) {
+    return "0" + clean.slice(2);
   }
   return clean;
 }

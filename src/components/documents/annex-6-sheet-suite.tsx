@@ -2,11 +2,11 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChedLogo, UniFastLogo } from "./ched-unifast-logos";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
 import { Annex6FormData, Annex6ManagementFeeExpenses, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
+import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
 import {
   FileSpreadsheet,
   Printer,
@@ -519,9 +519,31 @@ export function Annex6SheetSuite({
 
               {/* Grid 1: Basic Information & Check Details */}
               <div className="bg-white p-6 rounded-2xl border border-line shadow-xs space-y-4">
-                <h3 className="text-xs font-bold text-minsu-green-900 uppercase tracking-wider">
-                  1. Check Information & Period
-                </h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line pb-2">
+                  <h3 className="text-xs font-bold text-minsu-green-900 uppercase tracking-wider">
+                    1. Campus Setting & Check Information
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-ink-muted">MinSU Campus:</span>
+                    <select
+                      value={getMinsuCampusConfig(formData.heiName).key}
+                      onChange={(e) => {
+                        const cfg = getMinsuCampusConfig(e.target.value);
+                        recalculateLedger({
+                          heiName: cfg.heiName,
+                          heiAddress: cfg.heiAddress,
+                        });
+                      }}
+                      className="px-2.5 py-1 rounded-lg border border-line bg-page text-xs font-bold text-minsu-green-900 focus:ring-1 focus:ring-minsu-green-700 outline-none"
+                    >
+                      {MINSU_CAMPUSES.map((c) => (
+                        <option key={c.key} value={c.key}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
@@ -1109,6 +1131,8 @@ export function Annex6SheetSuite({
         annexNumber={6}
         orientation={printOrientation}
         onOrientationChange={setPrintOrientation}
+        excelExportUrl={documentId ? `/api/annex-6/export-excel?documentId=${documentId}` : undefined}
+        excelExportLabel="Download Excel (.xlsx)"
         previewContent={
           <div className="text-black text-xs space-y-3">
             <div className="p-4 border border-dashed border-neutral-300 rounded bg-[#F1F8F1]">

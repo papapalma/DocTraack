@@ -29,7 +29,12 @@ import {
   ShieldAlert,
   FileSpreadsheet,
   Download,
+  Printer,
+  FileText,
 } from "lucide-react";
+import { PrintPreviewModal } from "@/components/documents/print-preview-modal";
+import { Logo } from "@/components/ui/logo";
+import { PaperSize } from "@/types";
 import { Annex3Viewer } from "@/components/documents/annex-3-viewer";
 import { Annex4Viewer } from "@/components/documents/annex-4-viewer";
 import { Annex5Viewer } from "@/components/documents/annex-5-viewer";
@@ -71,6 +76,11 @@ export default function DocumentDetailPage({
 
   // Annex 3 layout state: Toggle between full-width immersive canvas and workflow sidebar
   const [showWorkflowPanel, setShowWorkflowPanel] = useState(false);
+
+  // Universal Save / Download / Print modal state
+  const [isUniversalPrintOpen, setIsUniversalPrintOpen] = useState(false);
+  const [universalPrintOrientation, setUniversalPrintOrientation] = useState<"portrait" | "landscape">("portrait");
+  const [universalPaperSize, setUniversalPaperSize] = useState<PaperSize>("a4");
 
   // Fetch document
   const loadDoc = async () => {
@@ -374,238 +384,77 @@ export default function DocumentDetailPage({
           </p>
         </div>
 
-        {document.annexType?.number === 1 && (
-          <a href={`/api/annex-1/export-excel?documentId=${document.id}`} download>
-            <Button
-              variant="outline"
-              size="sm"
-              className="font-semibold border-[#1B5E20] text-[#1B5E20] hover:bg-[#F1F8F1] shadow-xs"
-            >
-              <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#1B5E20]" />
-              Export Annex 1 Excel (.xlsx)
-            </Button>
-          </a>
-        )}
-
-        {document.annexType?.number === 3 && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Workflow Sidebar Toggle for suites that support it */}
+          {isSpecialSuite && (
             <Button
               variant={showWorkflowPanel ? "primary" : "outline"}
               size="sm"
               onClick={() => setShowWorkflowPanel(!showWorkflowPanel)}
-              className={`font-semibold apple-press transition-all ${
-                showWorkflowPanel
+              className={`font-semibold apple-press transition-all ${showWorkflowPanel
                   ? "bg-minsu-green-700 text-white"
                   : "border-minsu-green-700 text-minsu-green-700 hover:bg-minsu-green-50"
-              }`}
+                }`}
             >
               <Clock className="w-4 h-4 mr-1.5" />
               {showWorkflowPanel ? "Hide Workflow Actions" : "Workflow & Review Queue"}
             </Button>
-            <a href={`/api/annex-3/export-excel?documentId=${document.id}`} download>
+          )}
+
+          {/* Universal Save & Download / Print Action Button */}
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              if (isSpecialSuite) {
+                window.dispatchEvent(new CustomEvent("minsu:open-print-modal"));
+              } else {
+                setIsUniversalPrintOpen(true);
+              }
+            }}
+            className="bg-[#1B5E20] hover:bg-[#164D1C] text-white font-bold h-9 px-3.5 gap-2 apple-press shadow-xs border border-[#F2B705]/40"
+            title="Save, download, or export this document to PDF with custom paper size (A4, Short, Long, Legal)"
+          >
+            <Download className="w-4 h-4 text-[#F2B705]" />
+            <span>Save & Download</span>
+          </Button>
+
+          {/* Direct Excel Download (Annexes 1, 3, 4, 5, 6, 7, 8, 9) */}
+          {[1, 3, 4, 5, 6, 7, 8, 9].includes(document.annexType?.number) && (
+            <a href={`/api/annex-${document.annexType.number}/export-excel?documentId=${document.id}`} download>
               <Button
                 variant="outline"
                 size="sm"
                 className="font-semibold border-[#1B5E20] text-[#1B5E20] hover:bg-[#F1F8F1] shadow-xs"
+                title={`Export official Annex ${document.annexType.number} spreadsheet`}
               >
                 <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#1B5E20]" />
-                Export Annex 3 Excel (.xlsx)
+                Excel (.xlsx)
               </Button>
             </a>
-          </div>
-        )}
+          )}
 
-        {document.annexType?.number === 4 && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant={showWorkflowPanel ? "primary" : "outline"}
-              size="sm"
-              onClick={() => setShowWorkflowPanel(!showWorkflowPanel)}
-              className={`font-semibold apple-press transition-all ${
-                showWorkflowPanel
-                  ? "bg-minsu-green-700 text-white"
-                  : "border-minsu-green-700 text-minsu-green-700 hover:bg-minsu-green-50"
-              }`}
-            >
-              <Clock className="w-4 h-4 mr-1.5" />
-              {showWorkflowPanel ? "Hide Workflow Actions" : "Workflow & Review Queue"}
-            </Button>
-            <a href={`/api/annex-4/export-excel?documentId=${document.id}`} download>
+          {/* Direct Word Download (Annex 10) */}
+          {document.annexType?.number === 10 && (
+            <a href={`/api/annex-10/export-doc?documentId=${document.id}`} download>
               <Button
                 variant="outline"
                 size="sm"
                 className="font-semibold border-[#1B5E20] text-[#1B5E20] hover:bg-[#F1F8F1] shadow-xs"
+                title="Download official Microsoft Word (.doc) Notice of Award"
               >
-                <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#1B5E20]" />
-                Export Annex 4 Excel (.xlsx)
+                <FileText className="w-4 h-4 mr-1.5 text-[#1B5E20]" />
+                Word (.doc)
               </Button>
             </a>
-          </div>
-        )}
-
-        {document.annexType?.number === 5 && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant={showWorkflowPanel ? "primary" : "outline"}
-              size="sm"
-              onClick={() => setShowWorkflowPanel(!showWorkflowPanel)}
-              className={`font-semibold apple-press transition-all ${
-                showWorkflowPanel
-                  ? "bg-minsu-green-700 text-white"
-                  : "border-minsu-green-700 text-minsu-green-700 hover:bg-minsu-green-50"
-              }`}
-            >
-              <Clock className="w-4 h-4 mr-1.5" />
-              {showWorkflowPanel ? "Hide Workflow Actions" : "Workflow & Review Queue"}
-            </Button>
-            <a href={`/api/annex-5/export-excel?documentId=${document.id}`} download>
-              <Button
-                variant="outline"
-                size="sm"
-                className="font-semibold border-[#1B5E20] text-[#1B5E20] hover:bg-[#F1F8F1] shadow-xs"
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#1B5E20]" />
-                Export Annex 5 Excel (.xlsx)
-              </Button>
-            </a>
-          </div>
-        )}
-
-        {document.annexType?.number === 6 && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant={showWorkflowPanel ? "primary" : "outline"}
-              size="sm"
-              onClick={() => setShowWorkflowPanel(!showWorkflowPanel)}
-              className={`font-semibold apple-press transition-all ${
-                showWorkflowPanel
-                  ? "bg-minsu-green-700 text-white"
-                  : "border-minsu-green-700 text-minsu-green-700 hover:bg-minsu-green-50"
-              }`}
-            >
-              <Clock className="w-4 h-4 mr-1.5" />
-              {showWorkflowPanel ? "Hide Workflow Actions" : "Workflow & Review Queue"}
-            </Button>
-            <a href={`/api/annex-6/export-excel?documentId=${document.id}`} download>
-              <Button
-                variant="outline"
-                size="sm"
-                className="font-semibold border-[#1B5E20] text-[#1B5E20] hover:bg-[#F1F8F1] shadow-xs"
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#1B5E20]" />
-                Export Annex 6 Excel (.xlsx)
-              </Button>
-            </a>
-          </div>
-        )}
-
-        {document.annexType?.number === 7 && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant={showWorkflowPanel ? "primary" : "outline"}
-              size="sm"
-              onClick={() => setShowWorkflowPanel(!showWorkflowPanel)}
-              className={`font-semibold apple-press transition-all ${
-                showWorkflowPanel
-                  ? "bg-minsu-green-700 text-white"
-                  : "border-minsu-green-700 text-minsu-green-700 hover:bg-minsu-green-50"
-              }`}
-            >
-              <Clock className="w-4 h-4 mr-1.5" />
-              {showWorkflowPanel ? "Hide Workflow Actions" : "Workflow & Review Queue"}
-            </Button>
-            <a href={`/api/annex-7/export-excel?documentId=${document.id}`} download>
-              <Button
-                variant="outline"
-                size="sm"
-                className="font-semibold border-[#1B5E20] text-[#1B5E20] hover:bg-[#F1F8F1] shadow-xs"
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#1B5E20]" />
-                Export Annex 7 Excel (.xlsx)
-              </Button>
-            </a>
-          </div>
-        )}
-
-        {document.annexType?.number === 8 && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant={showWorkflowPanel ? "primary" : "outline"}
-              size="sm"
-              onClick={() => setShowWorkflowPanel(!showWorkflowPanel)}
-              className={`font-semibold apple-press transition-all ${
-                showWorkflowPanel
-                  ? "bg-minsu-green-700 text-white"
-                  : "border-minsu-green-700 text-minsu-green-700 hover:bg-minsu-green-50"
-              }`}
-            >
-              <Clock className="w-4 h-4 mr-1.5" />
-              {showWorkflowPanel ? "Hide Workflow Actions" : "Workflow & Review Queue"}
-            </Button>
-            <a href={`/api/annex-8/export-excel?documentId=${document.id}`} download>
-              <Button
-                variant="outline"
-                size="sm"
-                className="font-semibold border-[#1B5E20] text-[#1B5E20] hover:bg-[#F1F8F1] shadow-xs"
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#1B5E20]" />
-                Export Annex 8 Excel (.xlsx)
-              </Button>
-            </a>
-          </div>
-        )}
-
-        {document.annexType?.number === 9 && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant={showWorkflowPanel ? "primary" : "outline"}
-              size="sm"
-              onClick={() => setShowWorkflowPanel(!showWorkflowPanel)}
-              className={`font-semibold apple-press transition-all ${
-                showWorkflowPanel
-                  ? "bg-minsu-green-700 text-white"
-                  : "border-minsu-green-700 text-minsu-green-700 hover:bg-minsu-green-50"
-              }`}
-            >
-              <Clock className="w-4 h-4 mr-1.5" />
-              {showWorkflowPanel ? "Hide Workflow Actions" : "Workflow & Review Queue"}
-            </Button>
-            <a href={`/api/annex-9/export-excel?documentId=${document.id}`} download>
-              <Button
-                variant="outline"
-                size="sm"
-                className="font-semibold border-[#1B5E20] text-[#1B5E20] hover:bg-[#F1F8F1] shadow-xs"
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#1B5E20]" />
-                Export Annex 9 Excel (.xlsx)
-              </Button>
-            </a>
-          </div>
-        )}
-
-        {document.annexType?.number === 10 && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant={showWorkflowPanel ? "primary" : "outline"}
-              size="sm"
-              onClick={() => setShowWorkflowPanel(!showWorkflowPanel)}
-              className={`font-semibold apple-press transition-all ${
-                showWorkflowPanel
-                  ? "bg-minsu-green-700 text-white"
-                  : "border-minsu-green-700 text-minsu-green-700 hover:bg-minsu-green-50"
-              }`}
-            >
-              <Clock className="w-4 h-4 mr-1.5" />
-              {showWorkflowPanel ? "Hide Workflow Actions" : "Workflow & Review Queue"}
-            </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Main Grid: Left = Form Fields / Full Canvas, Right = Workflow & Timeline */}
       <div className={isSpecialSuite && !showWorkflowPanel ? "space-y-6 print:block" : "grid grid-cols-1 lg:grid-cols-3 gap-6 print:block"}>
         {/* Left Column: Document Data */}
-        <div className={isSpecialSuite && !showWorkflowPanel ? "w-full print:w-full print:max-w-none" : "lg:col-span-2 space-y-6 print:w-full print:max-w-none"}>
+        <div className={isSpecialSuite ? (showWorkflowPanel ? "lg:col-span-2 space-y-6 print:w-full print:max-w-none" : "w-full print:w-full print:max-w-none") : "lg:col-span-2 space-y-6 print:hidden"}>
           {isAnnex3 ? (
             <Annex3Viewer
               documentId={document.id}
@@ -672,99 +521,98 @@ export default function DocumentDetailPage({
                   </CardDescription>
                 </div>
 
-              {isEditable && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsEditing(!isEditing)}
-                  className="text-xs"
-                >
-                  {isEditing ? "Cancel Editing" : "Edit Fields"}
-                </Button>
-              )}
-            </CardHeader>
-
-            <CardContent className="pt-5 space-y-4">
-              {/* Document Title */}
-              <div className="space-y-1">
-                <Label htmlFor="doc-title">Document Title</Label>
-                {isEditing ? (
-                  <Input
-                    id="doc-title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                  />
-                ) : (
-                  <p className="text-sm font-semibold text-[#1F2A24] bg-[#F6F8F6] p-2.5 rounded-lg border border-[#D6DDD8]">
-                    {document.title}
-                  </p>
-                )}
-              </div>
-
-              {/* Form Schema Fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                {fields.map((field) => (
-                  <div
-                    key={field.id}
-                    className={`space-y-1 ${
-                      field.type === "textarea" ? "sm:col-span-2" : ""
-                    }`}
-                  >
-                    <Label htmlFor={field.id}>{field.label}</Label>
-
-                    {isEditing ? (
-                      field.type === "textarea" ? (
-                        <textarea
-                          id={field.id}
-                          rows={3}
-                          value={formData[field.id] || ""}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              [field.id]: e.target.value,
-                            })
-                          }
-                          className="w-full rounded-lg border border-[#D6DDD8] bg-white p-2.5 text-sm"
-                        />
-                      ) : (
-                        <Input
-                          id={field.id}
-                          type={field.type}
-                          value={formData[field.id] || ""}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              [field.id]: e.target.value,
-                            })
-                          }
-                        />
-                      )
-                    ) : (
-                      <div className="text-sm bg-[#F6F8F6] p-2.5 rounded-lg border border-[#D6DDD8] text-[#1F2A24] min-h-[38px] whitespace-pre-wrap">
-                        {formData[field.id] !== undefined && formData[field.id] !== ""
-                          ? String(formData[field.id])
-                          : <span className="text-[#55645B]/60 italic">Not specified</span>}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {isEditing && (
-                <div className="pt-4 border-t border-[#D6DDD8] flex justify-end">
+                {isEditable && (
                   <Button
-                    variant="primary"
+                    variant="outline"
                     size="sm"
-                    onClick={handleSaveDraft}
-                    isLoading={isActionLoading}
+                    onClick={() => setIsEditing(!isEditing)}
+                    className="text-xs"
                   >
-                    <Save className="w-4 h-4 mr-1.5" />
-                    Save Updates
+                    {isEditing ? "Cancel Editing" : "Edit Fields"}
                   </Button>
+                )}
+              </CardHeader>
+
+              <CardContent className="pt-5 space-y-4">
+                {/* Document Title */}
+                <div className="space-y-1">
+                  <Label htmlFor="doc-title">Document Title</Label>
+                  {isEditing ? (
+                    <Input
+                      id="doc-title"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-[#1F2A24] bg-[#F6F8F6] p-2.5 rounded-lg border border-[#D6DDD8]">
+                      {document.title}
+                    </p>
+                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+
+                {/* Form Schema Fields */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  {fields.map((field) => (
+                    <div
+                      key={field.id}
+                      className={`space-y-1 ${field.type === "textarea" ? "sm:col-span-2" : ""
+                        }`}
+                    >
+                      <Label htmlFor={field.id}>{field.label}</Label>
+
+                      {isEditing ? (
+                        field.type === "textarea" ? (
+                          <textarea
+                            id={field.id}
+                            rows={3}
+                            value={formData[field.id] || ""}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                [field.id]: e.target.value,
+                              })
+                            }
+                            className="w-full rounded-lg border border-[#D6DDD8] bg-white p-2.5 text-sm"
+                          />
+                        ) : (
+                          <Input
+                            id={field.id}
+                            type={field.type}
+                            value={formData[field.id] || ""}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                [field.id]: e.target.value,
+                              })
+                            }
+                          />
+                        )
+                      ) : (
+                        <div className="text-sm bg-[#F6F8F6] p-2.5 rounded-lg border border-[#D6DDD8] text-[#1F2A24] min-h-[38px] whitespace-pre-wrap">
+                          {formData[field.id] !== undefined && formData[field.id] !== ""
+                            ? String(formData[field.id])
+                            : <span className="text-[#55645B]/60 italic">Not specified</span>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {isEditing && (
+                  <div className="pt-4 border-t border-[#D6DDD8] flex justify-end">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleSaveDraft}
+                      isLoading={isActionLoading}
+                    >
+                      <Save className="w-4 h-4 mr-1.5" />
+                      Save Updates
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           )}
 
           {/* Annex 1 Validated Grantees Table */}
@@ -793,6 +641,7 @@ export default function DocumentDetailPage({
                     <thead className="bg-[#F1F8F1] font-semibold text-[#1F2A24] uppercase border-b border-[#D6DDD8] sticky top-0">
                       <tr>
                         <th className="py-2.5 px-3">Seq</th>
+                        <th className="py-2.5 px-3">Batch</th>
                         <th className="py-2.5 px-3">Student ID</th>
                         <th className="py-2.5 px-3">Student Name</th>
                         <th className="py-2.5 px-3">Course / Degree</th>
@@ -805,6 +654,11 @@ export default function DocumentDetailPage({
                       {formData.students.map((st: any, idx: number) => (
                         <tr key={idx} className="hover:bg-[#F6F8F6]">
                           <td className="py-2.5 px-3 font-bold text-[#55645B]">{st.seq || idx + 1}</td>
+                          <td className="py-2.5 px-3">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCEFDD] text-[#123F17] border border-[#1B5E20]/20">
+                              B{st.batch_number || 1}
+                            </span>
+                          </td>
                           <td className="py-2.5 px-3 font-mono font-bold text-[#1B5E20]">{st.student_id}</td>
                           <td className="py-2.5 px-3 font-semibold text-[#1F2A24]">
                             {st.last_name}, {st.given_name} {st.ext_name || ""} {st.middle_name || ""}
@@ -949,173 +803,173 @@ export default function DocumentDetailPage({
         {(!isAnnex3 || showWorkflowPanel) && (
           <div className="workflow-sidebar-panel space-y-6 animate-in fade-in duration-200 print:hidden">
             {/* Action Decision Card */}
-          <Card className="border-t-4 border-t-[#1B5E20]">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Workflow Actions</CardTitle>
-              <CardDescription>
-                Available operations based on current status and role
-              </CardDescription>
-            </CardHeader>
+            <Card className="border-t-4 border-t-[#1B5E20]">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Workflow Actions</CardTitle>
+                <CardDescription>
+                  Available operations based on current status and role
+                </CardDescription>
+              </CardHeader>
 
-            <CardContent className="space-y-4">
-              {/* Preparer actions: Submit for Review */}
-              {isPreparer && (document.status === "DRAFT" || document.status === "RETURNED") && (
-                <div className="space-y-2">
-                  <p className="text-xs text-[#55645B]">
-                    {document.status === "RETURNED"
-                      ? "The document has been revised. Resubmit to the Director for endorsement."
-                      : "Ready to proceed? Submit this annex for formal review."}
-                  </p>
-                  <Button
-                    variant="accent"
-                    size="md"
-                    className="w-full"
-                    onClick={handleSubmitReview}
-                    isLoading={isActionLoading}
-                  >
-                    <Send className="w-4 h-4 mr-2" />
-                    {document.status === "RETURNED" ? "Resubmit for Review" : "Submit for Review"}
-                  </Button>
-                </div>
-              )}
-
-              {/* Director actions: Review Queue Actions */}
-              {isReviewable && (
-                <div className="space-y-3 p-3.5 rounded-xl bg-[#FFF1C2]/60 border border-[#F2B705]">
-                  <p className="text-xs font-semibold text-[#123F17]">
-                    Director Review Decision
-                  </p>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="review-note" className="text-xs">
-                      Director Remarks / Feedback (Optional on return)
-                    </Label>
-                    <textarea
-                      id="review-note"
-                      rows={2}
-                      placeholder="Add formal feedback, instructions, or conditions..."
-                      value={reviewComment}
-                      onChange={(e) => setReviewComment(e.target.value)}
-                      className="w-full rounded-lg border border-[#D6DDD8] bg-white p-2 text-xs"
-                    />
-                  </div>
-
-                  <div className="flex gap-2 pt-1">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      className="flex-1"
-                      onClick={handleApprove}
-                      isLoading={isActionLoading}
-                    >
-                      <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                      Approve
-                    </Button>
-
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="flex-1"
-                      onClick={handleReturn}
-                      isLoading={isActionLoading}
-                    >
-                      <XCircle className="w-4 h-4 mr-1.5" />
-                      Return
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Approved Document: Next Steps (Scan Upload & Transmission) */}
-              {(user.role === "STAFF" || user.role === "ACCOUNTING") &&
-                (document.status === "APPROVED" || document.status === "UPLOADED") && (
-                  <div className="space-y-2 pt-2">
+              <CardContent className="space-y-4">
+                {/* Preparer actions: Submit for Review */}
+                {isPreparer && (document.status === "DRAFT" || document.status === "RETURNED") && (
+                  <div className="space-y-2">
                     <p className="text-xs text-[#55645B]">
-                      Document is approved! Proceed to agency transmission.
+                      {document.status === "RETURNED"
+                        ? "The document has been revised. Resubmit to the Director for endorsement."
+                        : "Ready to proceed? Submit this annex for formal review."}
                     </p>
-
                     <Button
-                      variant="primary"
+                      variant="accent"
                       size="md"
                       className="w-full"
-                      onClick={() => setShowTransmitModal(true)}
+                      onClick={handleSubmitReview}
+                      isLoading={isActionLoading}
                     >
                       <Send className="w-4 h-4 mr-2" />
-                      Record Agency Transmittal
+                      {document.status === "RETURNED" ? "Resubmit for Review" : "Submit for Review"}
                     </Button>
                   </div>
                 )}
 
-              {/* Archive Action */}
-              {canArchive(user.role, document.status) && (
-                <div className="pt-2 border-t border-[#D6DDD8]">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-xs text-[#55645B] hover:text-[#B3261E]"
-                    onClick={handleArchive}
-                    isLoading={isActionLoading}
-                  >
-                    <Archive className="w-3.5 h-3.5 mr-1.5" />
-                    Archive this Document
-                  </Button>
-                </div>
-              )}
+                {/* Director actions: Review Queue Actions */}
+                {isReviewable && (
+                  <div className="space-y-3 p-3.5 rounded-xl bg-[#FFF1C2]/60 border border-[#F2B705]">
+                    <p className="text-xs font-semibold text-[#123F17]">
+                      Director Review Decision
+                    </p>
 
-              {/* Locked Notice */}
-              {document.status === "APPROVED" && !isReviewable && (
-                <div className="p-3 rounded-lg bg-[#DCEFDD] text-[#123F17] text-xs font-medium flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-[#1B5E20]" />
-                  <span>Approved & locked. Edits are disabled.</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="review-note" className="text-xs">
+                        Director Remarks / Feedback (Optional on return)
+                      </Label>
+                      <textarea
+                        id="review-note"
+                        rows={2}
+                        placeholder="Add formal feedback, instructions, or conditions..."
+                        value={reviewComment}
+                        onChange={(e) => setReviewComment(e.target.value)}
+                        className="w-full rounded-lg border border-[#D6DDD8] bg-white p-2 text-xs"
+                      />
+                    </div>
 
-          {/* Status Timeline History */}
-          <Card>
-            <CardHeader className="pb-3 border-b border-[#D6DDD8]">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#1B5E20]" />
-                Status History Audit Trail
-              </CardTitle>
-            </CardHeader>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="flex-1"
+                        onClick={handleApprove}
+                        isLoading={isActionLoading}
+                      >
+                        <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                        Approve
+                      </Button>
 
-            <CardContent className="pt-4">
-              <div className="space-y-4">
-                {document.statusHistory?.map((item: any, idx: number) => (
-                  <div key={item.id} className="relative pl-6 pb-4 last:pb-0">
-                    {/* Stepper Line */}
-                    {idx < document.statusHistory.length - 1 && (
-                      <span className="absolute left-2.5 top-3 -bottom-3 w-0.5 bg-[#D6DDD8]" />
-                    )}
-                    {/* Stepper Dot */}
-                    <span className="absolute left-1 top-1 w-3.5 h-3.5 rounded-full bg-[#1B5E20] ring-4 ring-white" />
-
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <StatusBadge status={item.toStatus} size="sm" />
-                        <span className="text-[10px] text-[#55645B]">
-                          {new Date(item.createdAt).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </div>
-                      {item.comment && (
-                        <p className="text-xs text-[#55645B] italic bg-[#F6F8F6] p-2 rounded border border-[#D6DDD8]">
-                          "{item.comment}"
-                        </p>
-                      )}
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="flex-1"
+                        onClick={handleReturn}
+                        isLoading={isActionLoading}
+                      >
+                        <XCircle className="w-4 h-4 mr-1.5" />
+                        Return
+                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                )}
+
+                {/* Approved Document: Next Steps (Scan Upload & Transmission) */}
+                {(user.role === "STAFF" || user.role === "ACCOUNTING") &&
+                  (document.status === "APPROVED" || document.status === "UPLOADED") && (
+                    <div className="space-y-2 pt-2">
+                      <p className="text-xs text-[#55645B]">
+                        Document is approved! Proceed to agency transmission.
+                      </p>
+
+                      <Button
+                        variant="primary"
+                        size="md"
+                        className="w-full"
+                        onClick={() => setShowTransmitModal(true)}
+                      >
+                        <Send className="w-4 h-4 mr-2" />
+                        Record Agency Transmittal
+                      </Button>
+                    </div>
+                  )}
+
+                {/* Archive Action */}
+                {canArchive(user.role, document.status) && (
+                  <div className="pt-2 border-t border-[#D6DDD8]">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs text-[#55645B] hover:text-[#B3261E]"
+                      onClick={handleArchive}
+                      isLoading={isActionLoading}
+                    >
+                      <Archive className="w-3.5 h-3.5 mr-1.5" />
+                      Archive this Document
+                    </Button>
+                  </div>
+                )}
+
+                {/* Locked Notice */}
+                {document.status === "APPROVED" && !isReviewable && (
+                  <div className="p-3 rounded-lg bg-[#DCEFDD] text-[#123F17] text-xs font-medium flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-[#1B5E20]" />
+                    <span>Approved & locked. Edits are disabled.</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Status Timeline History */}
+            <Card>
+              <CardHeader className="pb-3 border-b border-[#D6DDD8]">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-[#1B5E20]" />
+                  Status History Audit Trail
+                </CardTitle>
+              </CardHeader>
+
+              <CardContent className="pt-4">
+                <div className="space-y-4">
+                  {document.statusHistory?.map((item: any, idx: number) => (
+                    <div key={item.id} className="relative pl-6 pb-4 last:pb-0">
+                      {/* Stepper Line */}
+                      {idx < document.statusHistory.length - 1 && (
+                        <span className="absolute left-2.5 top-3 -bottom-3 w-0.5 bg-[#D6DDD8]" />
+                      )}
+                      {/* Stepper Dot */}
+                      <span className="absolute left-1 top-1 w-3.5 h-3.5 rounded-full bg-[#1B5E20] ring-4 ring-white" />
+
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <StatusBadge status={item.toStatus} size="sm" />
+                          <span className="text-[10px] text-[#55645B]">
+                            {new Date(item.createdAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                        {item.comment && (
+                          <p className="text-xs text-[#55645B] italic bg-[#F6F8F6] p-2 rounded border border-[#D6DDD8]">
+                            "{item.comment}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </div>
 
@@ -1199,6 +1053,161 @@ export default function DocumentDetailPage({
           </div>
         </form>
       </Modal>
+
+      {/* Universal Print & PDF Export for Non-Suite Annexes (Annex 1, Annex 2 & Generic Documents) */}
+      {!isSpecialSuite && (() => {
+        const universalPrintContent = (
+          <div className="space-y-6 text-[#1F2A24] font-sans">
+            {/* Official MinSU Letterhead */}
+            <div className="flex items-center justify-between border-b-2 border-[#1B5E20] pb-4 gap-4">
+              <div className="w-14 h-14 shrink-0 flex items-center justify-center">
+                <Logo size="lg" />
+              </div>
+              <div className="text-center flex-1">
+                <p className="text-[11px] tracking-wider uppercase font-medium text-[#55645B]">
+                  Republic of the Philippines
+                </p>
+                <h3 className="text-base font-bold font-heading text-[#123F17]">
+                  MINDORO STATE UNIVERSITY
+                </h3>
+                <p className="text-[11px] text-[#55645B]">
+                  Victoria, Oriental Mindoro 5205 Philippines
+                </p>
+                <p className="text-xs font-semibold text-[#1B5E20] mt-1">
+                  TULONG DUNONG PROGRAM UNDER TERTIARY EDUCATION SUBSIDY (TDP-TES)
+                </p>
+              </div>
+              <div className="w-14 h-14 shrink-0 flex flex-col items-center justify-center font-bold text-xs bg-[#F1F8F1] text-[#123F17] rounded-lg border border-[#DCEFDD]">
+                <span className="text-[9px] uppercase tracking-wider text-[#55645B]">Annex</span>
+                <span className="text-base">{document.annexType?.number || 1}</span>
+              </div>
+            </div>
+
+            {/* Document Title & Reference Header */}
+            <div className="text-center py-2 border-b border-[#D6DDD8]">
+              <h2 className="text-base font-bold uppercase tracking-wide text-[#1F2A24]">
+                {document.title}
+              </h2>
+              <p className="text-xs text-[#55645B] mt-0.5">
+                Status: <strong className="uppercase">{document.status}</strong> • Prepared by {document.createdBy?.name} ({document.createdBy?.role}) on {new Date(document.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+
+            {/* Annex 1 Specific Content: Transmittal Details + Grantees Table */}
+            {document.annexType?.number === 1 ? (
+              <div className="space-y-4">
+                {/* Transmittal Summary */}
+                {document.transmittal && (
+                  <div className="p-3 bg-[#F6F8F6] border border-[#D6DDD8] rounded-lg text-xs grid grid-cols-2 gap-2">
+                    <div><span className="text-[#55645B]">Recipient Agency:</span> <strong>{document.transmittal.recipient}</strong></div>
+                    <div><span className="text-[#55645B]">Method:</span> <strong className="uppercase">{document.transmittal.method}</strong></div>
+                    <div><span className="text-[#55645B]">Date Sent:</span> <strong>{new Date(document.transmittal.sentAt).toLocaleDateString()}</strong></div>
+                    <div><span className="text-[#55645B]">Recorded By:</span> <strong>{document.transmittal.sentBy?.name || "Staff"}</strong></div>
+                  </div>
+                )}
+
+                {/* Grantees Table */}
+                {formData.students && Array.isArray(formData.students) ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border border-[#D6DDD8]">
+                      <thead className="bg-[#F1F8F1] font-bold text-[#1F2A24] border-b border-[#D6DDD8]">
+                        <tr>
+                          <th className="py-2 px-2.5 border-r border-[#D6DDD8]">Seq</th>
+                          <th className="py-2 px-2.5 border-r border-[#D6DDD8]">Student ID</th>
+                          <th className="py-2 px-2.5 border-r border-[#D6DDD8]">Full Name</th>
+                          <th className="py-2 px-2.5 border-r border-[#D6DDD8]">Course / Degree</th>
+                          <th className="py-2 px-2.5 border-r border-[#D6DDD8]">Year</th>
+                          <th className="py-2 px-2.5 border-r border-[#D6DDD8]">HEI Campus</th>
+                          <th className="py-2 px-2.5">Address</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#D6DDD8]">
+                        {formData.students.map((st: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-neutral-50">
+                            <td className="py-1.5 px-2.5 font-bold border-r border-[#D6DDD8]">{st.seq || idx + 1}</td>
+                            <td className="py-1.5 px-2.5 font-mono border-r border-[#D6DDD8]">{st.student_id}</td>
+                            <td className="py-1.5 px-2.5 font-semibold border-r border-[#D6DDD8]">
+                              {st.last_name}, {st.given_name} {st.ext_name || ""} {st.middle_name || ""}
+                            </td>
+                            <td className="py-1.5 px-2.5 border-r border-[#D6DDD8]">{st.course_degree}</td>
+                            <td className="py-1.5 px-2.5 border-r border-[#D6DDD8]">Year {st.year_level}</td>
+                            <td className="py-1.5 px-2.5 border-r border-[#D6DDD8]">{st.hei_campus || st.hei_name || "Bongabong"}</td>
+                            <td className="py-1.5 px-2.5">{st.street_barangay}, {st.town_city}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#55645B] italic py-4 text-center">
+                    No student records attached to this Annex 1 transmittal.
+                  </p>
+                )}
+              </div>
+            ) : (
+              /* Generic Document Fields */
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {fields.map((f: AnnexFormField) => (
+                    <div
+                      key={f.id}
+                      className={f.type === "textarea" ? "col-span-2 border-b border-[#D6DDD8] pb-2" : "border-b border-[#D6DDD8] pb-2"}
+                    >
+                      <span className="text-[11px] font-bold uppercase text-[#55645B] block">{f.label}</span>
+                      <span className="text-xs text-[#1F2A24] font-medium mt-0.5 block whitespace-pre-wrap">
+                        {formData[f.id] !== undefined && formData[f.id] !== "" ? String(formData[f.id]) : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Official Signatory Blocks */}
+            <div className="pt-8 grid grid-cols-2 gap-8 text-center text-xs">
+              <div>
+                <p className="text-[11px] text-[#55645B] mb-8">Prepared and Certified by:</p>
+                <div className="w-48 border-b border-[#1F2A24] mx-auto mb-1"></div>
+                <p className="font-bold text-[#1F2A24] uppercase">{document.createdBy?.name || "Staff Coordinator"}</p>
+                <p className="text-[11px] text-[#55645B]">{document.createdBy?.role || "Staff Coordinator"}, MinSU</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-[#55645B] mb-8">Endorsed & Approved by:</p>
+                <div className="w-48 border-b border-[#1F2A24] mx-auto mb-1"></div>
+                <p className="font-bold text-[#1F2A24] uppercase">CAMPUS DIRECTOR</p>
+                <p className="text-[11px] text-[#55645B]">Mindoro State University</p>
+              </div>
+            </div>
+          </div>
+        );
+
+        return (
+          <>
+            <PrintPreviewModal
+              isOpen={isUniversalPrintOpen}
+              onClose={() => setIsUniversalPrintOpen(false)}
+              documentTitle={document.title}
+              annexNumber={document.annexType?.number || 1}
+              orientation={universalPrintOrientation}
+              onOrientationChange={setUniversalPrintOrientation}
+              paperSize={universalPaperSize}
+              onPaperSizeChange={setUniversalPaperSize}
+              excelExportUrl={
+                document.annexType?.number === 1
+                  ? `/api/annex-1/export-excel?documentId=${document.id}`
+                  : undefined
+              }
+              excelExportLabel="Download Excel (.xlsx)"
+              previewContent={universalPrintContent}
+            />
+
+            {/* Print-Ready Official Sheet for Non-Suite Documents (Annex 1 & Generic) */}
+            <div className="hidden print:block annex-printable-document bg-white text-[#1F2A24] font-sans p-6 sm:p-10 border border-neutral-800 shadow-xl rounded-sm max-w-5xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none">
+              {universalPrintContent}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

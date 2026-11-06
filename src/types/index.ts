@@ -23,6 +23,8 @@ export interface SessionUser {
   role: Role;
   active: boolean;
   departmentId?: string | null;
+  notifyAnnouncements?: boolean;
+  notifyPush?: boolean;
 }
 
 export interface AnnexFormField {
@@ -418,6 +420,7 @@ export interface Annex8FormData {
 export interface Annex9GranteePayroll {
   id: string;
   seqNo: number;
+  batchNumber?: string | number;
   tdpAwardNo: string;
   studentIdNo: string;
   lastName: string;
@@ -425,6 +428,7 @@ export interface Annex9GranteePayroll {
   middleInitial: string;
   degreeProgram: string;
   yearLevel: string;
+  campus?: string;
 
   // First Semester Payout
   firstSemAmount: number;
@@ -444,6 +448,8 @@ export interface Annex9FormData {
   payrollDate: string;
   heiName: string;
   heiAddress: string;
+  stipendTier?: "7500" | "10000" | "custom";
+  stipendAmountPerScholar?: number;
 
   grantees: Annex9GranteePayroll[];
 
@@ -463,6 +469,7 @@ export interface Annex9FormData {
 export interface Annex10Grantee {
   id: string;
   seqNo: number;
+  batchNumber?: string | number;
   awardNo: string;
   studentIdNo?: string;
   granteeName: string;
@@ -482,6 +489,8 @@ export interface Annex10FormData {
   defaultStartingSemester: string;
   defaultAcademicYear: string;
   stipendAmountPerSem: number;
+  campus?: string;
+  heiName?: string;
   memorandumOrderRef: string;
   grantees: Annex10Grantee[];
   selectedGranteeId?: string;
@@ -493,3 +502,101 @@ export interface Annex10FormData {
   conditions: string[];
   headerLogos?: HeaderLogosConfig;
 }
+
+export type AnnouncementCategory =
+  | "GENERAL"
+  | "URGENT"
+  | "DEADLINE"
+  | "REQUIREMENTS"
+  | "PAYROLL";
+
+export type AnnouncementTarget = "ALL" | "STUDENTS" | "PUBLIC";
+
+export interface AnnouncementItem {
+  id: string;
+  title: string;
+  content: string;
+  category: AnnouncementCategory;
+  isPinned: boolean;
+  targetAudience: AnnouncementTarget;
+  authorId: string;
+  author?: {
+    id: string;
+    name: string;
+    role: Role;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserNotificationPreferences {
+  notifyAnnouncements: boolean;
+  notifyPush: boolean;
+}
+
+export type PaperSize = "a4" | "short" | "long" | "legal";
+
+export interface PaperSizeConfig {
+  id: PaperSize;
+  label: string;
+  sublabel: string;
+  widthMm: number;
+  heightMm: number;
+  widthIn: number;
+  heightIn: number;
+  cssSize: string;
+  aspectRatio: number; // width / height in portrait
+  description: string;
+}
+
+export const PAPER_SIZE_CONFIGS: Record<PaperSize, PaperSizeConfig> = {
+  a4: {
+    id: "a4",
+    label: "A4",
+    sublabel: "210 × 297 mm",
+    widthMm: 210,
+    heightMm: 297,
+    widthIn: 8.27,
+    heightIn: 11.69,
+    cssSize: "210mm 297mm",
+    aspectRatio: 210 / 297,
+    description: "Standard ISO A4 — Official international document format",
+  },
+  short: {
+    id: "short",
+    label: "Short",
+    sublabel: "8.5 × 11 in (Letter)",
+    widthMm: 215.9,
+    heightMm: 279.4,
+    widthIn: 8.5,
+    heightIn: 11.0,
+    cssSize: "8.5in 11in",
+    aspectRatio: 8.5 / 11.0,
+    description: "Short Bond Paper / US Letter — Ideal for letters and certificates",
+  },
+  long: {
+    id: "long",
+    label: "Long",
+    sublabel: "8.5 × 13 in (Folio)",
+    widthMm: 215.9,
+    heightMm: 330.2,
+    widthIn: 8.5,
+    heightIn: 13.0,
+    cssSize: "8.5in 13in",
+    aspectRatio: 8.5 / 13.0,
+    description: "Long Bond Paper / Philippine Folio — Standard for government ledgers and TDP billings",
+  },
+  legal: {
+    id: "legal",
+    label: "Legal",
+    sublabel: "8.5 × 14 in",
+    widthMm: 215.9,
+    heightMm: 355.6,
+    widthIn: 8.5,
+    heightIn: 14.0,
+    cssSize: "8.5in 14in",
+    aspectRatio: 8.5 / 14.0,
+    description: "US Legal — Extended format for extensive data matrices",
+  },
+};
+

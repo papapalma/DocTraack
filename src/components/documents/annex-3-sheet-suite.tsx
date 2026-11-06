@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ChedLogo, UniFastLogo } from "./ched-unifast-logos";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
 import {
@@ -13,6 +12,8 @@ import {
   LogoConfig,
 } from "@/types";
 import { Button } from "@/components/ui/button";
+import { BatchSelectorDropdown } from "./batch-selector-dropdown";
+import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
 import {
   FileSpreadsheet,
   Printer,
@@ -37,6 +38,7 @@ import {
   Scale,
   Calendar,
   Building,
+  Sparkles,
 } from "lucide-react";
 
 interface Annex3SheetSuiteProps {
@@ -99,104 +101,13 @@ export function Annex3SheetSuite({
         referenceNumber: "MIMAROPA-MINSU-2024-1-1:3",
         billingDate: "March 4, 2025",
         isLastBatch: false,
-        totalGrantees: 5,
+        totalGrantees: 0,
         stipendPerGrantee: 7500,
-        totalSubsidy: 37500,
+        totalSubsidy: 0,
         managementFeeRate: 0.005,
-        managementFeeAmount: 187.5,
-        grandTotalBilling: 37687.5,
-        billedGrantees: [
-          {
-            controlNumber: "00001",
-            studentNumber: "2023-00101",
-            tdpAwardNumber: "2024-TDP-4060-00001",
-            lastName: "DELA CRUZ",
-            givenName: "JUAN",
-            middleInitial: "P.",
-            sex: "M",
-            birthdate: "05/14/2004",
-            degreeProgram: "BS Information Technology",
-            yearLevel: "2",
-            email: "juan.delacruz@minsu.edu.ph",
-            phone: "09171112233",
-            tdpBatch: "3",
-            semesterAmount: 7500,
-            totalAmount: 7500,
-            campus: "Bongabong Campus",
-          },
-          {
-            controlNumber: "00002",
-            studentNumber: "2023-00102",
-            tdpAwardNumber: "2024-TDP-4060-00002",
-            lastName: "SANTOS",
-            givenName: "MARIA",
-            middleInitial: "C.",
-            sex: "F",
-            birthdate: "09/20/2003",
-            degreeProgram: "BS Agriculture",
-            yearLevel: "2",
-            email: "maria.santos@minsu.edu.ph",
-            phone: "09172223344",
-            tdpBatch: "3",
-            semesterAmount: 7500,
-            totalAmount: 7500,
-            campus: "Bongabong Campus",
-          },
-          {
-            controlNumber: "00003",
-            studentNumber: "2023-00201",
-            tdpAwardNumber: "2024-TDP-4060-00003",
-            lastName: "REYES",
-            givenName: "ANGELO",
-            middleInitial: "D.",
-            sex: "M",
-            birthdate: "11/12/2004",
-            degreeProgram: "BS Hospitality Management",
-            yearLevel: "2",
-            email: "angelo.reyes@minsu.edu.ph",
-            phone: "09173334455",
-            tdpBatch: "3",
-            semesterAmount: 7500,
-            totalAmount: 7500,
-            campus: "Bongabong Campus",
-          },
-          {
-            controlNumber: "00004",
-            studentNumber: "2023-00202",
-            tdpAwardNumber: "2024-TDP-4060-00004",
-            lastName: "GARCIA",
-            givenName: "CAMILLE",
-            middleInitial: "M.",
-            sex: "F",
-            birthdate: "02/28/2004",
-            degreeProgram: "BS Computer Science",
-            yearLevel: "2",
-            email: "camille.garcia@minsu.edu.ph",
-            phone: "09174445566",
-            tdpBatch: "3",
-            semesterAmount: 7500,
-            totalAmount: 7500,
-            campus: "Bongabong Campus",
-          },
-          {
-            controlNumber: "00005",
-            studentNumber: "2023-00301",
-            tdpAwardNumber: "2024-TDP-4060-00005",
-            lastName: "RAMOS",
-            givenName: "JOSHUA",
-            middleInitial: "B.",
-            sex: "M",
-            birthdate: "07/04/2003",
-            degreeProgram: "BS Fisheries",
-            yearLevel: "2",
-            email: "joshua.ramos@minsu.edu.ph",
-            phone: "09175556677",
-            tdpBatch: "3",
-            semesterAmount: 7500,
-            totalAmount: 7500,
-            campus: "Bongabong Campus",
-          },
-        ],
+        managementFeeAmount: 0,
+        grandTotalBilling: 0,
+        billedGrantees: [],
         otherGrantees: [],
         signatories: {
           accountingHead: { name: "Atty. Juan De Castro", position: "Head, Accounting/Authorized Representative" },
@@ -409,16 +320,38 @@ export function Annex3SheetSuite({
     }));
   };
 
-  // Load from candidate database
-  const loadDatabaseCandidates = async () => {
+  // Batches currently injected in the document roster
+  const alreadyInjectedBatches = useMemo(() => {
+    const list = formData.billedGrantees
+      .map((g) => String(g.tdpBatch || "").trim())
+      .filter(Boolean);
+    return Array.from(new Set(list));
+  }, [formData.billedGrantees]);
+
+  const [selectedBatchesToInject, setSelectedBatchesToInject] = useState<number[]>([1]);
+  const [isInjecting, setIsInjecting] = useState<boolean>(false);
+
+  // Inject 1, 2, or 3 batches dynamically with duplicate prevention & re-injection alert
+  const handleInjectBatches = async (batchesToInject: number[]) => {
     setError(null);
+    if (!batchesToInject || batchesToInject.length === 0) return;
+
+    // Check if any of the requested batches are already in this document
+    const alreadyPresent = batchesToInject.filter((b) => alreadyInjectedBatches.includes(String(b)));
+    if (alreadyPresent.length > 0) {
+      setError(`Batch ${alreadyPresent.join(", ")} has already been injected into this document.`);
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/annex-3/compile?batch=${formData.batchNumber}`);
+      setIsInjecting(true);
+      const res = await fetch(`/api/annex-3/compile?batches=${batchesToInject.join(",")}`);
       if (res.ok) {
         const data = await res.json();
         if (data.candidates && data.candidates.length > 0) {
+          const startNum = formData.billedGrantees.length;
           const mapped: Annex3Grantee[] = data.candidates.map((c: any, idx: number) => ({
-            controlNumber: String(idx + 1).padStart(5, "0"),
+            controlNumber: String(startNum + idx + 1).padStart(5, "0"),
             studentNumber: c.studentNumber,
             tdpAwardNumber: c.tdpAwardNumber,
             lastName: c.lastName,
@@ -430,23 +363,56 @@ export function Annex3SheetSuite({
             yearLevel: c.yearLevel,
             email: c.email,
             phone: c.phone,
-            tdpBatch: formData.batchNumber,
+            tdpBatch: String(c.tdpBatch || batchesToInject[0] || "1"),
             semesterAmount: 7500,
             totalAmount: 7500,
-            campus: c.campus || "Bongabong Campus",
+            campus: getMinsuCampusConfig(c.campus).label,
           }));
+
+          const updatedBilled = [...formData.billedGrantees, ...mapped];
+          const allBatches = Array.from(new Set([...alreadyInjectedBatches, ...batchesToInject.map(String)])).sort((a, b) => Number(a) - Number(b));
+          const compoundBatch = allBatches.join(", ");
+
+          const totalGrantees = updatedBilled.length;
+          const stipendPerGrantee = 7500;
+          const totalSubsidy = totalGrantees * stipendPerGrantee;
+          const managementFeeRate = 0.005;
+          const managementFeeAmount = totalSubsidy * managementFeeRate;
+          const grandTotalBilling = totalSubsidy + managementFeeAmount;
+
           setFormData((prev) => ({
             ...prev,
-            billedGrantees: mapped,
+            billedGrantees: updatedBilled,
+            totalGrantees,
+            stipendPerGrantee,
+            totalSubsidy,
+            managementFeeRate,
+            managementFeeAmount,
+            grandTotalBilling,
+            batchNumber: compoundBatch || prev.batchNumber,
           }));
+          setSelectedBatchesToInject([]);
           setSaveSuccess(true);
-          setTimeout(() => setSaveSuccess(false), 3000);
+          setTimeout(() => setSaveSuccess(false), 3500);
         } else {
-          setError("No candidates found in database for this batch.");
+          setError(`No verified candidates found for Batch ${batchesToInject.join(", ")}.`);
         }
+      } else {
+        setError("Failed to compile candidate grantees from database.");
       }
     } catch {
-      setError("Failed to fetch database candidates");
+      setError("Failed to inject batches into Annex 3.");
+    } finally {
+      setIsInjecting(false);
+    }
+  };
+
+  // Load from candidate database fallback
+  const loadDatabaseCandidates = async () => {
+    if (selectedBatchesToInject.length > 0) {
+      await handleInjectBatches(selectedBatchesToInject);
+    } else {
+      setError("Please select at least one batch in the batch selector.");
     }
   };
 
@@ -474,7 +440,9 @@ export function Annex3SheetSuite({
   // Filtered lists for interactive workspace
   const filteredBilled = useMemo(() => {
     return formData.billedGrantees.filter((g) => {
-      const matchesCampus = selectedCampus === "ALL" || g.campus === selectedCampus;
+      const matchesCampus =
+        selectedCampus === "ALL" ||
+        getMinsuCampusConfig(g.campus).key === getMinsuCampusConfig(selectedCampus).key;
       if (!matchesCampus) return false;
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -490,7 +458,9 @@ export function Annex3SheetSuite({
 
   const filteredOther = useMemo(() => {
     return formData.otherGrantees.filter((g) => {
-      const matchesCampus = selectedCampus === "ALL" || g.campus === selectedCampus;
+      const matchesCampus =
+        selectedCampus === "ALL" ||
+        getMinsuCampusConfig(g.campus).key === getMinsuCampusConfig(selectedCampus).key;
       if (!matchesCampus) return false;
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -823,16 +793,20 @@ export function Annex3SheetSuite({
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-ink-muted flex items-center gap-1.5">
-                <Building className="w-3.5 h-3.5 text-minsu-green-700" />
-                Batch & Tranche
+              <label className="text-xs font-semibold text-ink-muted flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Building className="w-3.5 h-3.5 text-minsu-green-700" />
+                  Doc Batch & Tranche
+                </span>
+                <span className="text-[10px] text-ink-muted">(Editable)</span>
               </label>
               <div className="flex gap-2">
                 <input
                   value={formData.batchNumber}
                   onChange={(e) => setFormData({ ...formData, batchNumber: e.target.value })}
-                  placeholder="Batch #"
+                  placeholder="e.g. 1, 2"
                   className="w-1/2 text-xs font-bold text-ink bg-page px-3 py-2 rounded-xl border border-line focus:ring-2 focus:ring-minsu-green-700 outline-none"
+                  title="Document batch identifier (can be manually edited by staff)"
                 />
                 <select
                   value={formData.trancheNumber}
@@ -843,6 +817,44 @@ export function Annex3SheetSuite({
                   <option value="2">Tranche 2</option>
                 </select>
               </div>
+            </div>
+          </div>
+
+          {/* Dynamic Batch Injection Dropdown Card */}
+          <div className="bg-white rounded-2xl border border-line p-4 apple-shadow flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-minsu-green-700" />
+                <h4 className="text-xs font-bold text-minsu-green-900 uppercase tracking-wider">
+                  Inject Grantees by Batch (Select 1, 2, or 3 Batches)
+                </h4>
+              </div>
+              <p className="text-[11px] text-ink-muted">
+                Add verified scholar cohorts to this Annex 3 statement. Batches already injected are guarded against duplication.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="w-full md:w-80">
+                <BatchSelectorDropdown
+                  selectedBatches={selectedBatchesToInject}
+                  onBatchesChange={setSelectedBatchesToInject}
+                  alreadyInjectedBatches={alreadyInjectedBatches}
+                  onInject={handleInjectBatches}
+                  allowDirectAction={true}
+                  maxBatches={3}
+                  placeholder="Choose batch(es) to inject..."
+                />
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => handleInjectBatches(selectedBatchesToInject)}
+                disabled={selectedBatchesToInject.length === 0 || isInjecting}
+                className="h-[42px] px-4 font-bold bg-minsu-green-700 hover:bg-minsu-green-600 text-white shadow-xs shrink-0 apple-press"
+              >
+                <Sparkles className={`w-4 h-4 mr-1.5 text-minsu-gold-400 ${isInjecting ? "animate-spin" : ""}`} />
+                {isInjecting ? "Injecting..." : `Inject (${selectedBatchesToInject.length})`}
+              </Button>
             </div>
           </div>
 
@@ -932,22 +944,23 @@ export function Annex3SheetSuite({
                   >
                     All Campuses ({workspaceTab === "billed" ? formData.billedGrantees.length : formData.otherGrantees.length})
                   </button>
-                  {availableCampuses.map((c) => {
+                  {MINSU_CAMPUSES.map((cfg) => {
                     const count =
                       workspaceTab === "billed"
-                        ? formData.billedGrantees.filter((g) => g.campus === c).length
-                        : formData.otherGrantees.filter((g) => g.campus === c).length;
+                        ? formData.billedGrantees.filter((g) => getMinsuCampusConfig(g.campus).key === cfg.key).length
+                        : formData.otherGrantees.filter((g) => getMinsuCampusConfig(g.campus).key === cfg.key).length;
+                    const isSelected = selectedCampus !== "ALL" && getMinsuCampusConfig(selectedCampus).key === cfg.key;
                     return (
                       <button
-                        key={c}
-                        onClick={() => setSelectedCampus(c)}
+                        key={cfg.key}
+                        onClick={() => setSelectedCampus(cfg.key)}
                         className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all apple-press ${
-                          selectedCampus === c
+                          isSelected
                             ? "bg-minsu-green-700 text-white"
                             : "bg-minsu-green-50 text-minsu-green-800 hover:bg-minsu-green-100"
                         }`}
                       >
-                        {c.replace(" Campus", "")} ({count})
+                        {cfg.label.replace(" (Victoria / Alcate)", "")} ({count})
                       </button>
                     );
                   })}
@@ -973,6 +986,7 @@ export function Annex3SheetSuite({
                   <thead>
                     <tr className="bg-minsu-green-50 text-minsu-green-900 border-b border-line text-[11px] font-bold">
                       <th className="py-2.5 px-3 w-12 text-center">Ctrl #</th>
+                      <th className="py-2.5 px-2 w-16 text-center">Batch</th>
                       <th className="py-2.5 px-3 w-28">Student No.</th>
                       <th className="py-2.5 px-3 w-36">TDP Award No.</th>
                       <th className="py-2.5 px-3">Student Name</th>
@@ -985,7 +999,26 @@ export function Annex3SheetSuite({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
-                    {filteredBilled.map((g, idx) => {
+                    {filteredBilled.length === 0 ? (
+                      <tr>
+                        <td colSpan={11} className="py-16 text-center text-ink-muted">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Users className="w-8 h-8 text-minsu-green-700/40" />
+                            <p className="font-semibold text-ink text-xs">
+                              {formData.billedGrantees.length === 0
+                                ? "No continuing grantees loaded yet"
+                                : "No scholars match your search criteria"}
+                            </p>
+                            <p className="text-[11px] text-ink-muted max-w-sm">
+                              {formData.billedGrantees.length === 0
+                                ? "Select verified intake batch(es) in the card above and click 'Inject Selected' to populate this Annex 3 roster, or click '+ Add Scholar' to insert manually."
+                                : "Try adjusting your search terms or clearing the search query."}
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredBilled.map((g, idx) => {
                       const realIndex = formData.billedGrantees.findIndex(
                         (item) => item.controlNumber === g.controlNumber
                       );
@@ -993,6 +1026,15 @@ export function Annex3SheetSuite({
                         <tr key={g.controlNumber || idx} className="hover:bg-minsu-green-50/40 transition-colors">
                           <td className="py-2 px-3 text-center font-mono font-bold text-minsu-green-900">
                             {g.controlNumber}
+                          </td>
+                          <td className="py-2 px-1 text-center">
+                            <input
+                              value={g.tdpBatch}
+                              onChange={(e) => updateGranteeField(realIndex, "tdpBatch", e.target.value)}
+                              className="w-12 text-center font-bold font-mono text-minsu-green-900 bg-minsu-green-100/70 focus:bg-white focus:ring-1 focus:ring-minsu-green-700 rounded px-1 py-0.5 border border-minsu-green-700/20 text-xs"
+                              title="Override batch for this student (e.g. change from Batch 1 to Batch 5)"
+                              placeholder="Batch"
+                            />
                           </td>
                           <td className="py-2 px-3 font-mono">
                             <input
@@ -1088,14 +1130,7 @@ export function Annex3SheetSuite({
                           </td>
                         </tr>
                       );
-                    })}
-                    {filteredBilled.length === 0 && (
-                      <tr>
-                        <td colSpan={10} className="py-12 text-center text-ink-muted italic">
-                          No billed scholars found matching the filters.
-                        </td>
-                      </tr>
-                    )}
+                    }))}
                   </tbody>
                 </table>
               </div>
@@ -2331,6 +2366,8 @@ export function Annex3SheetSuite({
         annexNumber={3}
         orientation={printOrientation}
         onOrientationChange={setPrintOrientation}
+        excelExportUrl={documentId ? `/api/annex-3/export-excel?documentId=${documentId}` : undefined}
+        excelExportLabel="Download Excel (.xlsx)"
         availableForms={availableForms}
         activeFormId={activeTab}
         activeFormLabel={activeFormLabel}

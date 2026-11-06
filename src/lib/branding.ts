@@ -5,14 +5,14 @@ import { HeaderLogosConfig, LogoLibraryItem } from "@/types";
 
 export const DEFAULT_HEADER_LOGOS: HeaderLogosConfig = {
   leftLogo: {
-    type: "preset",
-    presetId: "ched",
-    alt: "Commission on Higher Education (CHED)",
+    type: "custom",
+    url: "/api/media/logo/logo-1793718455151-d1b4dffbe4e2.png",
+    alt: "Institutional Left Seal",
   },
   rightLogo: {
-    type: "preset",
-    presetId: "unifast",
-    alt: "Unified Student Financial Assistance System for Tertiary Education (UniFAST)",
+    type: "custom",
+    url: "/api/media/logo/logo-1793718328666-3e70a8323e95.png",
+    alt: "Institutional Right Seal",
   },
   library: [],
 };

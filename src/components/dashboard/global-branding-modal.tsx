@@ -16,7 +16,6 @@ import {
   Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ChedLogo, UniFastLogo } from "@/components/documents/ched-unifast-logos";
 import {
   LogoConfig,
   LogoPresetId,
@@ -30,13 +29,6 @@ interface GlobalBrandingModalProps {
   onClose: () => void;
   onSaved?: (logos: HeaderLogosConfig) => void;
 }
-
-const PRESET_OPTIONS: { id: LogoPresetId; label: string }[] = [
-  { id: "ched", label: "CHED Official" },
-  { id: "unifast", label: "UniFAST Official" },
-  { id: "minsu", label: "MinSU University" },
-  { id: "none", label: "None / Blank" },
-];
 
 export function GlobalBrandingModal({
   isOpen,
@@ -52,14 +44,14 @@ export function GlobalBrandingModal({
   const [success, setSuccess] = useState<boolean>(false);
 
   const [leftLogo, setLeftLogo] = useState<LogoConfig>({
-    type: "preset",
-    presetId: "ched",
-    alt: "CHED Logo",
+    type: "custom",
+    url: "/api/media/logo/logo-1793718455151-d1b4dffbe4e2.png",
+    alt: "Institutional Left Seal",
   });
   const [rightLogo, setRightLogo] = useState<LogoConfig>({
-    type: "preset",
-    presetId: "unifast",
-    alt: "UniFAST Logo",
+    type: "custom",
+    url: "/api/media/logo/logo-1793718328666-3e70a8323e95.png",
+    alt: "Institutional Right Seal",
   });
   const [library, setLibrary] = useState<LogoLibraryItem[]>([]);
 
@@ -188,12 +180,12 @@ export function GlobalBrandingModal({
 
       setLibrary((prev) => prev.filter((i) => i.id !== item.id && i.url !== item.url));
 
-      // If active logo was deleted, revert that slot to default statutory preset
+      // If active logo was deleted, revert that slot to default uploaded logo or blank
       if (leftLogo.type === "custom" && leftLogo.url === item.url) {
-        setLeftLogo({ type: "preset", presetId: "ched", alt: "CHED Logo" });
+        setLeftLogo({ type: "custom", url: "/logo.png", alt: "MinSU University Crest" });
       }
       if (rightLogo.type === "custom" && rightLogo.url === item.url) {
-        setRightLogo({ type: "preset", presetId: "unifast", alt: "UniFAST Logo" });
+        setRightLogo({ type: "custom", url: "/logo.png", alt: "MinSU University Crest" });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to delete item.";
@@ -240,14 +232,14 @@ export function GlobalBrandingModal({
 
   const handleResetDefaults = () => {
     setLeftLogo({
-      type: "preset",
-      presetId: "ched",
-      alt: "CHED Logo",
+      type: "custom",
+      url: "/api/media/logo/logo-1793718455151-d1b4dffbe4e2.png",
+      alt: "Institutional Left Seal",
     });
     setRightLogo({
-      type: "preset",
-      presetId: "unifast",
-      alt: "UniFAST Logo",
+      type: "custom",
+      url: "/api/media/logo/logo-1793718328666-3e70a8323e95.png",
+      alt: "Institutional Right Seal",
     });
   };
 
@@ -351,124 +343,110 @@ export function GlobalBrandingModal({
                       <div className="w-28 h-28 mx-auto rounded-2xl bg-white border border-[#D6DDD8] p-3 shadow-xs flex items-center justify-center overflow-hidden">
                         <AnimatePresence mode="wait">
                           <motion.div
-                            key={leftLogo.type === "preset" ? leftLogo.presetId : leftLogo.url || "none"}
+                            key={leftLogo.url || "none"}
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.9 }}
                             transition={{ duration: 0.15, ease: "easeOut" }}
                             className="w-20 h-20 flex items-center justify-center"
                           >
-                            {leftLogo.type === "preset" ? (
-                              leftLogo.presetId === "ched" ? (
-                                <ChedLogo className="w-20 h-20" />
-                              ) : leftLogo.presetId === "unifast" ? (
-                                <UniFastLogo className="w-20 h-20" />
-                              ) : leftLogo.presetId === "minsu" ? (
-                                <img src="/logo.png" alt="MinSU" className="w-20 h-20 object-contain drop-shadow-xs" />
-                              ) : (
-                                <EyeOff className="w-8 h-8 text-neutral-400" />
-                              )
-                            ) : leftLogo.url ? (
-                              <img src={leftLogo.url} alt="Custom" className="w-20 h-20 object-contain drop-shadow-xs" />
-                            ) : null}
+                            {leftLogo.url ? (
+                              <img src={leftLogo.url} alt={leftLogo.alt || "Custom"} className="w-20 h-20 object-contain drop-shadow-xs" />
+                            ) : (
+                              <EyeOff className="w-8 h-8 text-neutral-400" />
+                            )}
                           </motion.div>
                         </AnimatePresence>
                       </div>
 
-                      {/* Section 1: Official Statutory Presets */}
+                      {/* Institutional Logo Library Selection */}
                       <div className="space-y-1.5 pt-1">
-                        <span className="text-[11px] font-semibold text-[#55645B] uppercase tracking-wider block">
-                          Statutory Presets:
+                        <span className="text-[11px] font-semibold text-[#1B5E20] uppercase tracking-wider flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-[#B88A00]" />
+                            Institutional Logo Library:
+                          </span>
+                          <span className="text-[10px] text-[#55645B] font-normal">
+                            ({library.length})
+                          </span>
                         </span>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {PRESET_OPTIONS.map((opt) => {
-                            const isSelected = leftLogo.type === "preset" && leftLogo.presetId === opt.id;
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto apple-scrollbar pr-0.5">
+                          {/* Blank / None option */}
+                          <div
+                            onClick={() =>
+                              setLeftLogo({
+                                type: "custom",
+                                url: "",
+                                alt: "None / Blank",
+                              })
+                            }
+                            className={cn(
+                              "p-2 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all apple-press",
+                              !leftLogo.url
+                                ? "bg-[#DCEFDD] border-[#1B5E20] text-[#123F17] ring-1 ring-[#1B5E20]/20 font-semibold"
+                                : "bg-white border-[#D6DDD8] hover:bg-[#F1F8F1] text-[#1F2A24]"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-7 h-7 rounded-lg bg-neutral-100 border border-[#D6DDD8] flex items-center justify-center shrink-0 text-neutral-400">
+                                <EyeOff className="w-3.5 h-3.5" />
+                              </div>
+                              <span className="text-xs truncate">None / Blank</span>
+                            </div>
+                            {!leftLogo.url && (
+                              <span className="text-[10px] bg-[#1B5E20] text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                                <Check className="w-2.5 h-2.5" />
+                                Active
+                              </span>
+                            )}
+                          </div>
+
+                          {library.map((item) => {
+                            const isSelected = leftLogo.url === item.url;
                             return (
-                              <button
-                                key={opt.id}
-                                type="button"
+                              <div
+                                key={item.id}
                                 onClick={() =>
                                   setLeftLogo({
-                                    type: "preset",
-                                    presetId: opt.id,
-                                    alt: opt.label,
+                                    type: "custom",
+                                    url: item.url,
+                                    alt: item.name,
                                   })
                                 }
                                 className={cn(
-                                  "py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all apple-press text-center flex items-center justify-center gap-1",
+                                  "p-2 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all apple-press",
                                   isSelected
-                                    ? "bg-[#1B5E20] text-white border-[#1B5E20] shadow-xs"
-                                    : "bg-white text-[#1F2A24] border-[#D6DDD8] hover:bg-[#F1F8F1]"
+                                    ? "bg-[#DCEFDD] border-[#1B5E20] text-[#123F17] ring-1 ring-[#1B5E20]/20 font-semibold"
+                                    : "bg-white border-[#D6DDD8] hover:bg-[#F1F8F1] text-[#1F2A24]"
                                 )}
                               >
-                                {isSelected && <Check className="w-3 h-3 text-white" />}
-                                <span>{opt.label}</span>
-                              </button>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-7 h-7 rounded-lg bg-white border border-[#D6DDD8] p-0.5 flex items-center justify-center shrink-0">
+                                    <img src={item.url} alt={item.name} className="w-full h-full object-contain" />
+                                  </div>
+                                  <span className="text-xs truncate">{item.name}</span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {isSelected && (
+                                    <span className="text-[10px] bg-[#1B5E20] text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                                      <Check className="w-2.5 h-2.5" />
+                                      Active
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleDeleteLibraryItem(e, item)}
+                                    className="p-1 text-[#55645B] hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                    title="Remove from library"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
                             );
                           })}
                         </div>
                       </div>
-
-                      {/* Section 2: Institutional Logo Library */}
-                      {library.length > 0 && (
-                        <div className="space-y-1.5 pt-2 border-t border-[#D6DDD8]">
-                          <span className="text-[11px] font-semibold text-[#1B5E20] uppercase tracking-wider flex items-center justify-between">
-                            <span className="flex items-center gap-1">
-                              <Sparkles className="w-3 h-3 text-[#B88A00]" />
-                              Saved Custom Library:
-                            </span>
-                            <span className="text-[10px] text-[#55645B] font-normal">
-                              ({library.length})
-                            </span>
-                          </span>
-                          <div className="space-y-1.5 max-h-36 overflow-y-auto apple-scrollbar pr-0.5">
-                            {library.map((item) => {
-                              const isSelected = leftLogo.type === "custom" && leftLogo.url === item.url;
-                              return (
-                                <div
-                                  key={item.id}
-                                  onClick={() =>
-                                    setLeftLogo({
-                                      type: "custom",
-                                      url: item.url,
-                                      alt: item.name,
-                                    })
-                                  }
-                                  className={cn(
-                                    "p-2 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all apple-press",
-                                    isSelected
-                                      ? "bg-[#DCEFDD] border-[#1B5E20] text-[#123F17] ring-1 ring-[#1B5E20]/20 font-semibold"
-                                      : "bg-white border-[#D6DDD8] hover:bg-[#F1F8F1] text-[#1F2A24]"
-                                  )}
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <div className="w-7 h-7 rounded-lg bg-white border border-[#D6DDD8] p-0.5 flex items-center justify-center shrink-0">
-                                      <img src={item.url} alt={item.name} className="w-full h-full object-contain" />
-                                    </div>
-                                    <span className="text-xs truncate">{item.name}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    {isSelected && (
-                                      <span className="text-[10px] bg-[#1B5E20] text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                                        <Check className="w-2.5 h-2.5" />
-                                        Active
-                                      </span>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={(e) => handleDeleteLibraryItem(e, item)}
-                                      className="p-1 text-[#55645B] hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                                      title="Remove from library"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
                     </div>
 
                     {/* File Upload Trigger */}
@@ -510,124 +488,110 @@ export function GlobalBrandingModal({
                       <div className="w-28 h-28 mx-auto rounded-2xl bg-white border border-[#D6DDD8] p-3 shadow-xs flex items-center justify-center overflow-hidden">
                         <AnimatePresence mode="wait">
                           <motion.div
-                            key={rightLogo.type === "preset" ? rightLogo.presetId : rightLogo.url || "none"}
+                            key={rightLogo.url || "none"}
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.9 }}
                             transition={{ duration: 0.15, ease: "easeOut" }}
                             className="w-20 h-20 flex items-center justify-center"
                           >
-                            {rightLogo.type === "preset" ? (
-                              rightLogo.presetId === "ched" ? (
-                                <ChedLogo className="w-20 h-20" />
-                              ) : rightLogo.presetId === "unifast" ? (
-                                <UniFastLogo className="w-20 h-20" />
-                              ) : rightLogo.presetId === "minsu" ? (
-                                <img src="/logo.png" alt="MinSU" className="w-20 h-20 object-contain drop-shadow-xs" />
-                              ) : (
-                                <EyeOff className="w-8 h-8 text-neutral-400" />
-                              )
-                            ) : rightLogo.url ? (
-                              <img src={rightLogo.url} alt="Custom" className="w-20 h-20 object-contain drop-shadow-xs" />
-                            ) : null}
+                            {rightLogo.url ? (
+                              <img src={rightLogo.url} alt={rightLogo.alt || "Custom"} className="w-20 h-20 object-contain drop-shadow-xs" />
+                            ) : (
+                              <EyeOff className="w-8 h-8 text-neutral-400" />
+                            )}
                           </motion.div>
                         </AnimatePresence>
                       </div>
 
-                      {/* Section 1: Official Statutory Presets */}
+                      {/* Institutional Logo Library Selection */}
                       <div className="space-y-1.5 pt-1">
-                        <span className="text-[11px] font-semibold text-[#55645B] uppercase tracking-wider block">
-                          Statutory Presets:
+                        <span className="text-[11px] font-semibold text-[#1B5E20] uppercase tracking-wider flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-[#B88A00]" />
+                            Institutional Logo Library:
+                          </span>
+                          <span className="text-[10px] text-[#55645B] font-normal">
+                            ({library.length})
+                          </span>
                         </span>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {PRESET_OPTIONS.map((opt) => {
-                            const isSelected = rightLogo.type === "preset" && rightLogo.presetId === opt.id;
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto apple-scrollbar pr-0.5">
+                          {/* Blank / None option */}
+                          <div
+                            onClick={() =>
+                              setRightLogo({
+                                type: "custom",
+                                url: "",
+                                alt: "None / Blank",
+                              })
+                            }
+                            className={cn(
+                              "p-2 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all apple-press",
+                              !rightLogo.url
+                                ? "bg-[#DCEFDD] border-[#1B5E20] text-[#123F17] ring-1 ring-[#1B5E20]/20 font-semibold"
+                                : "bg-white border-[#D6DDD8] hover:bg-[#F1F8F1] text-[#1F2A24]"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-7 h-7 rounded-lg bg-neutral-100 border border-[#D6DDD8] flex items-center justify-center shrink-0 text-neutral-400">
+                                <EyeOff className="w-3.5 h-3.5" />
+                              </div>
+                              <span className="text-xs truncate">None / Blank</span>
+                            </div>
+                            {!rightLogo.url && (
+                              <span className="text-[10px] bg-[#1B5E20] text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                                <Check className="w-2.5 h-2.5" />
+                                Active
+                              </span>
+                            )}
+                          </div>
+
+                          {library.map((item) => {
+                            const isSelected = rightLogo.url === item.url;
                             return (
-                              <button
-                                key={opt.id}
-                                type="button"
+                              <div
+                                key={item.id}
                                 onClick={() =>
                                   setRightLogo({
-                                    type: "preset",
-                                    presetId: opt.id,
-                                    alt: opt.label,
+                                    type: "custom",
+                                    url: item.url,
+                                    alt: item.name,
                                   })
                                 }
                                 className={cn(
-                                  "py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all apple-press text-center flex items-center justify-center gap-1",
+                                  "p-2 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all apple-press",
                                   isSelected
-                                    ? "bg-[#1B5E20] text-white border-[#1B5E20] shadow-xs"
-                                    : "bg-white text-[#1F2A24] border-[#D6DDD8] hover:bg-[#F1F8F1]"
+                                    ? "bg-[#DCEFDD] border-[#1B5E20] text-[#123F17] ring-1 ring-[#1B5E20]/20 font-semibold"
+                                    : "bg-white border-[#D6DDD8] hover:bg-[#F1F8F1] text-[#1F2A24]"
                                 )}
                               >
-                                {isSelected && <Check className="w-3 h-3 text-white" />}
-                                <span>{opt.label}</span>
-                              </button>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-7 h-7 rounded-lg bg-white border border-[#D6DDD8] p-0.5 flex items-center justify-center shrink-0">
+                                    <img src={item.url} alt={item.name} className="w-full h-full object-contain" />
+                                  </div>
+                                  <span className="text-xs truncate">{item.name}</span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {isSelected && (
+                                    <span className="text-[10px] bg-[#1B5E20] text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                                      <Check className="w-2.5 h-2.5" />
+                                      Active
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleDeleteLibraryItem(e, item)}
+                                    className="p-1 text-[#55645B] hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                    title="Remove from library"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
                             );
                           })}
                         </div>
                       </div>
-
-                      {/* Section 2: Institutional Logo Library */}
-                      {library.length > 0 && (
-                        <div className="space-y-1.5 pt-2 border-t border-[#D6DDD8]">
-                          <span className="text-[11px] font-semibold text-[#1B5E20] uppercase tracking-wider flex items-center justify-between">
-                            <span className="flex items-center gap-1">
-                              <Sparkles className="w-3 h-3 text-[#B88A00]" />
-                              Saved Custom Library:
-                            </span>
-                            <span className="text-[10px] text-[#55645B] font-normal">
-                              ({library.length})
-                            </span>
-                          </span>
-                          <div className="space-y-1.5 max-h-36 overflow-y-auto apple-scrollbar pr-0.5">
-                            {library.map((item) => {
-                              const isSelected = rightLogo.type === "custom" && rightLogo.url === item.url;
-                              return (
-                                <div
-                                  key={item.id}
-                                  onClick={() =>
-                                    setRightLogo({
-                                      type: "custom",
-                                      url: item.url,
-                                      alt: item.name,
-                                    })
-                                  }
-                                  className={cn(
-                                    "p-2 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all apple-press",
-                                    isSelected
-                                      ? "bg-[#DCEFDD] border-[#1B5E20] text-[#123F17] ring-1 ring-[#1B5E20]/20 font-semibold"
-                                      : "bg-white border-[#D6DDD8] hover:bg-[#F1F8F1] text-[#1F2A24]"
-                                  )}
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <div className="w-7 h-7 rounded-lg bg-white border border-[#D6DDD8] p-0.5 flex items-center justify-center shrink-0">
-                                      <img src={item.url} alt={item.name} className="w-full h-full object-contain" />
-                                    </div>
-                                    <span className="text-xs truncate">{item.name}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    {isSelected && (
-                                      <span className="text-[10px] bg-[#1B5E20] text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                                        <Check className="w-2.5 h-2.5" />
-                                        Active
-                                      </span>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={(e) => handleDeleteLibraryItem(e, item)}
-                                      className="p-1 text-[#55645B] hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                                      title="Remove from library"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
                     </div>
 
                     {/* File Upload Trigger */}
@@ -666,7 +630,7 @@ export function GlobalBrandingModal({
                 className="text-xs text-[#55645B] hover:text-[#1F2A24] apple-press"
               >
                 <RotateCcw className="w-3.5 h-3.5 mr-1" />
-                Reset to CHED & UniFAST
+                Reset to Default Seals
               </Button>
 
               <div className="flex items-center gap-2">

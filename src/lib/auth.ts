@@ -78,6 +78,8 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
             role: true,
             active: true,
             departmentId: true,
+            notifyAnnouncements: true,
+            notifyPush: true,
           },
         },
       },

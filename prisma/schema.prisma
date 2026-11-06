@@ -53,6 +53,9 @@ model User {
   applicantCalls ApplicantCall[]
   transmittals  Transmittal[]
   verificationRuns VerificationRun[]
+  announcements    Announcement[]
+  notifyAnnouncements Boolean       @default(true)
+  notifyPush          Boolean       @default(false)
 
   @@map("users")
 }
@@ -231,5 +234,76 @@ model LandingPageConfig {
   updatedById           String?
 
   @@map("landing_page_config")
+}
+
+model VerificationRun {
+  id                      String               @id @default(cuid())
+  runNumber               Int                  @default(autoincrement())
+  title                   String
+  chedFileName            String
+  registrarFileName       String
+  systemDataSource        String               @default("ACCEPTED_GRANTEES") // "ACCEPTED_GRANTEES" | "ALL_APPLICANTS"
+  totalChedRows           Int                  @default(0)
+  totalRegistrarRows      Int                  @default(0)
+  totalSystemRows         Int                  @default(0)
+  fullyVerifiedCount      Int                  @default(0)
+  needsEncodingCount      Int                  @default(0)
+  notEnrolledCount        Int                  @default(0)
+  systemDiscrepancyCount  Int                  @default(0)
+  possibleMatchCount      Int                  @default(0)
+  enrolledNonScholarCount Int                  @default(0)
+  createdById             String
+  createdBy               User                 @relation(fields: [createdById], references: [id])
+  createdAt               DateTime             @default(now())
+
+  results                 VerificationResult[]
+
+  @@index([createdById])
+  @@index([createdAt])
+  @@map("verification_runs")
+}
+
+model VerificationResult {
+  id                 String          @id @default(cuid())
+  runId              String
+  run                VerificationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  status             String          // "FULLY_VERIFIED" | "NEEDS_ENCODING" | "NOT_ENROLLED" | "SYSTEM_DISCREPANCY" | "POSSIBLE_MATCH" | "ENROLLED_NON_SCHOLAR"
+  studentIdNo        String?         // Registrar ID Number or System Student ID
+  lastName           String
+  firstName          String
+  middleName         String?
+  school             String
+  inChed             Boolean         @default(false)
+  inRegistrar        Boolean         @default(false)
+  inSystem           Boolean         @default(false)
+  confidenceScore    Float?          // e.g. 0.92 for 92% fuzzy match
+  matchDetails       Json?           // { candidateName: string, candidateId: string, matchedFields: string[] }
+  isManuallyResolved Boolean         @default(false)
+  resolvedStatus     String?
+  resolvedNotes      String?
+  createdAt          DateTime        @default(now())
+
+  @@index([runId])
+  @@index([status])
+  @@index([lastName, firstName])
+  @@map("verification_results")
+}
+
+model Announcement {
+  id             String   @id @default(cuid())
+  title          String
+  content        String
+  category       String   @default("GENERAL") // GENERAL | URGENT | DEADLINE | REQUIREMENTS | PAYROLL
+  isPinned       Boolean  @default(false)
+  targetAudience String   @default("ALL")     // ALL | STUDENTS | PUBLIC
+  authorId       String
+  author         User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isPinned, createdAt])
+  @@index([category])
+  @@index([authorId])
+  @@map("announcements")
 }
 

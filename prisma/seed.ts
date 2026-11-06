@@ -1,15 +1,171 @@
-import { PrismaClient, Role } from "@prisma/client";
+import { PrismaClient, Role, ApplicationStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 const prisma = new PrismaClient();
 
-async function main() {
-  console.log("Seeding MinSU DocTrack database...");
+// Deterministic mock datasets for realistic MinSU student generation
+const FIRST_NAMES_MALE = [
+  "Juan", "Jose", "Mark", "John Paul", "Joshua", "Christian", "Angelo", "Gabriel",
+  "Daniel", "Paolo", "Rafael", "Miguel", "Ethan", "Matthew", "Carlo", "Jeric",
+  "Arvin", "Kevin", "Kenneth", "Dominic", "Aldrin", "Reynaldo", "Jonathan",
+  "Emmanuel", "Anthony", "Vincent", "Francis", "Ronald", "Marvin", "Bryan",
+  "Patrick", "Neil", "Lester", "Dexter", "Justin", "Alfonso", "Carl", "Diego",
+  "Edgardo", "Fernando", "Gerard", "Harold", "Ian", "Jerome", "Kyle", "Lance",
+  "Marco", "Nathan", "Oliver", "Paul", "Quentin", "Renz", "Simon", "Tristan"
+];
 
-  // 1. Seed Initial Users
+const FIRST_NAMES_FEMALE = [
+  "Maria", "Angelica", "Christine", "Nicole", "Bea", "Camille", "Patricia", "Princess",
+  "Jasmine", "Joy", "Grace", "Dianne", "Alyssa", "Kathleen", "Rochelle", "Stephanie",
+  "Kimberly", "Clarisse", "Hannah", "Samantha", "Katrina", "Angela", "Michelle",
+  "Andrea", "Kristine", "Danica", "Rachelle", "Joanna", "Erika", "Bernadette",
+  "Abigail", "Mary Rose", "Charisse", "Lovely", "Vanessa", "Angel", "Bianca",
+  "Celine", "Denise", "Elena", "Faith", "Giselle", "Hazel", "Irene", "Judy",
+  "Karen", "Lorraine", "Mariel", "Nina", "Paula", "Queenie", "Rhea", "Sheryl", "Trisha"
+];
+
+const LAST_NAMES = [
+  "Dela Cruz", "Santos", "Garcia", "Reyes", "Ramos", "Mendoza", "Flores", "Morales",
+  "Palma", "Aquino", "Castro", "Bautista", "Villanueva", "Fernandez", "Cruz", "Lopez",
+  "Perez", "Sanchez", "Ramirez", "Torres", "Navarro", "Diaz", "Castillo", "Tolentino",
+  "Mercado", "Gutierrez", "Delos Santos", "Soriano", "Salvador", "Domingo", "Valenzuela",
+  "Hernandez", "Pascual", "Santiago", "Manalo", "Agustin", "Alcantara", "Balagtas",
+  "Corpuz", "David", "Espiritu", "Fajardo", "Gonzales", "Ignacio", "Jimenez", "Lim",
+  "Marquez", "Ocampo", "Padilla", "Quizon", "Rosario", "Tan", "Umali", "Zamora"
+];
+
+const MIDDLE_NAMES = [
+  "Panganiban", "Alcantara", "Manalo", "Dimatulac", "Macatangay", "Hernandez",
+  "Buenviaje", "Katigbak", "Malabanan", "Tolentino", "Recto", "Laurel", "Guico",
+  "Carandang", "Atienza", "Berberabe", "Chavez", "Perez", "Mercado", "Silva",
+  "Bautista", "Castillo", "Dizon", "Enriquez", "Guanzon", "Ilagan", "Javier", "Laxamana"
+];
+
+const CAMPUS_CONFIGS = [
+  {
+    campusName: "Main Campus (Victoria / Alcate)",
+    campusKey: "Main Campus (Alcate)",
+    idSuffix: "MC",
+    batches: [
+      { batchNumber: 1, studentCount: 35 },
+      { batchNumber: 2, studentCount: 350 },
+      { batchNumber: 3, studentCount: 1000 },
+    ],
+    programs: [
+      "Bachelor of Science in Information Technology",
+      "Bachelor of Science in Agriculture",
+      "Bachelor of Science in Agricultural and Biosystems Engineering",
+      "Bachelor of Science in Animal Science",
+      "Bachelor of Science in Forestry",
+      "Bachelor of Science in Environmental Science",
+    ],
+    towns: [
+      { town: "Victoria", zip: "5205" },
+      { town: "Naujan", zip: "5204" },
+      { town: "Socorro", zip: "5207" },
+      { town: "Pola", zip: "5206" },
+    ],
+  },
+  {
+    campusName: "Calapan City Campus",
+    campusKey: "Calapan City Campus",
+    idSuffix: "CC",
+    batches: [
+      { batchNumber: 4, studentCount: 35 },
+      { batchNumber: 5, studentCount: 350 },
+      { batchNumber: 6, studentCount: 1000 },
+    ],
+    programs: [
+      "Bachelor of Science in Information Technology",
+      "Bachelor of Science in Computer Science",
+      "Bachelor of Science in Criminology",
+      "Bachelor of Elementary Education",
+      "Bachelor of Secondary Education",
+      "Bachelor of Science in Hospitality Management",
+      "Bachelor of Science in Tourism Management",
+    ],
+    towns: [
+      { town: "Calapan City", zip: "5200" },
+      { town: "Baco", zip: "5201" },
+      { town: "San Teodoro", zip: "5202" },
+      { town: "Puerto Galera", zip: "5203" },
+      { town: "Naujan", zip: "5204" },
+    ],
+  },
+  {
+    campusName: "Bongabong Campus",
+    campusKey: "Bongabong Campus",
+    idSuffix: "BC",
+    batches: [
+      { batchNumber: 7, studentCount: 35 },
+      { batchNumber: 8, studentCount: 350 },
+      { batchNumber: 9, studentCount: 1000 },
+    ],
+    programs: [
+      "Bachelor of Science in Fisheries",
+      "Bachelor of Science in Information Technology",
+      "Bachelor of Science in Criminology",
+      "Bachelor of Elementary Education",
+      "Bachelor of Secondary Education",
+      "Bachelor of Science in Agriculture",
+    ],
+    towns: [
+      { town: "Bongabong", zip: "5211" },
+      { town: "Pinamalayan", zip: "5208" },
+      { town: "Gloria", zip: "5209" },
+      { town: "Bansud", zip: "5210" },
+      { town: "Roxas", zip: "5212" },
+      { town: "Mansalay", zip: "5213" },
+      { town: "Bulalacao", zip: "5214" },
+    ],
+  },
+];
+
+const BARANGAYS = [
+  "Poblacion", "Bagong Silang", "San Vicente", "Maligaya", "Mabini",
+  "San Isidro", "Santa Maria", "Santo Niño", "San Roque", "Concepcion",
+  "Lumangbayan", "Bayanan", "Ilaya", "Ibaba", "Aplaya", "Bukid"
+];
+
+const GWA_LIST = ["1.25", "1.40", "1.50", "1.65", "1.75", "1.85", "2.00", "2.15", "2.25"];
+const INCOMES = [8500, 10000, 12000, 14500, 16000, 18500, 20000, 22500, 24000];
+
+async function main() {
+  console.log("===============================================================================");
+  console.log("MinSU DocTrack: Database Refresh & 9-Batch Multi-Campus Seeding Pipeline");
+  console.log("===============================================================================\n");
+
+  // ---------------------------------------------------------------------------
+  // STEP 1: CLEAN REFRESH - TEARDOWN ALL HISTORICAL APPLICATION DATA
+  // ---------------------------------------------------------------------------
+  console.log("▶ [Step 1/5] Performing clean database refresh (teardown)...");
+
+  await prisma.verificationResult.deleteMany({});
+  await prisma.verificationRun.deleteMany({});
+  await prisma.comment.deleteMany({});
+  await prisma.statusHistory.deleteMany({});
+  await prisma.transmittal.deleteMany({});
+  await prisma.document.deleteMany({});
+  await prisma.application.deleteMany({});
+  await prisma.applicantCall.deleteMany({});
+  await prisma.notification.deleteMany({});
+  await prisma.auditLog.deleteMany({});
+  await prisma.announcement.deleteMany({});
+  await prisma.session.deleteMany({});
+  await prisma.user.deleteMany({});
+
+  console.log("  ✔ All existing application, verification, document, and user records purged.\n");
+
+  // ---------------------------------------------------------------------------
+  // STEP 2: SEED CORE ADMINISTRATIVE USERS
+  // ---------------------------------------------------------------------------
+  console.log("▶ [Step 2/5] Seeding core administrative accounts...");
+
+  // Pre-compute single bcrypt hash for performance
   const defaultPasswordHash = await bcrypt.hash("Password@123", 10);
 
-  const users = [
+  const coreUsers = [
     {
       name: "System Administrator",
       email: "admin@minsu.edu.ph",
@@ -34,24 +190,22 @@ async function main() {
       passwordHash: defaultPasswordHash,
       role: Role.ACCOUNTING,
     },
-    {
-      name: "Juan Dela Cruz (Student)",
-      email: "student@minsu.edu.ph",
-      passwordHash: defaultPasswordHash,
-      role: Role.STUDENT,
-    },
   ];
 
-  for (const user of users) {
-    await prisma.user.upsert({
-      where: { email: user.email },
-      update: {},
-      create: user,
-    });
+  for (const u of coreUsers) {
+    await prisma.user.create({ data: u });
   }
-  console.log("Users seeded successfully.");
 
-  // 2. Seed Annex Types 1-10 with placeholder form schemas
+  const staffUser = await prisma.user.findUnique({ where: { email: "staff@minsu.edu.ph" } });
+  if (!staffUser) throw new Error("Staff coordinator user creation failed");
+
+  console.log("  ✔ 4 core administrative users seeded successfully.\n");
+
+  // ---------------------------------------------------------------------------
+  // STEP 3: SEED ANNEX TYPES 1-10 DEFINITIONS
+  // ---------------------------------------------------------------------------
+  console.log("▶ [Step 3/5] Seeding Annex Types 1 to 10 schemas...");
+
   const annexes = [
     {
       number: 1,
@@ -60,7 +214,7 @@ async function main() {
       formSchema: {
         fields: [
           { id: "target_agency", label: "Concerned Government Agency", type: "text", required: true, placeholder: "e.g., CHED / UniFAST Regional Office" },
-          { id: "academic_year", label: "Academic Year & Semester", type: "text", required: true, placeholder: "e.g., A.Y. 2025-2026, 1st Semester" },
+          { id: "academic_year", label: "Academic Year & Semester", type: "text", required: true, placeholder: "e.g., A.Y. 2026-2027, 1st Semester" },
           { id: "transmittal_number", label: "Transmittal Reference No.", type: "text", required: true, placeholder: "e.g., MINSU-TDP-2026-001" },
           { id: "submission_date", label: "Date of Submission", type: "date", required: true },
           { id: "total_grant_amount", label: "Total Grant Amount (PHP)", type: "number", required: true, placeholder: "0.00" },
@@ -88,7 +242,7 @@ async function main() {
       creatorRoles: [Role.STAFF],
       formSchema: {
         fields: [
-          { id: "academic_period", label: "Academic Period", type: "text", required: true, placeholder: "e.g., 2nd Sem, A.Y. 2025-2026" },
+          { id: "academic_period", label: "Academic Period", type: "text", required: true, placeholder: "e.g., 1st Sem, A.Y. 2026-2027" },
           { id: "total_continuing_students", label: "Total Continuing Grantees", type: "number", required: true, placeholder: "100" },
           { id: "amount_per_grantee", label: "Stipend Amount Per Grantee (PHP)", type: "number", required: true, placeholder: "7500" },
           { id: "total_billing_amount", label: "Total Billing Request (PHP)", type: "number", required: true, placeholder: "750000" },
@@ -117,7 +271,7 @@ async function main() {
       formSchema: {
         fields: [
           { id: "certification_title", label: "Certification Title", type: "text", required: true, placeholder: "Masterlist of Qualified TDP Grantees" },
-          { id: "school_year", label: "School Year & Term", type: "text", required: true, placeholder: "A.Y. 2025-2026" },
+          { id: "school_year", label: "School Year & Term", type: "text", required: true, placeholder: "A.Y. 2026-2027" },
           { id: "certified_count", label: "Number of Verified Grantees", type: "number", required: true, placeholder: "150" },
           { id: "certifying_officer", label: "Certifying Staff / Coordinator", type: "text", required: true, placeholder: "Full Name of TDP Coordinator" },
           { id: "findings_summary", label: "Summary of Eligibility Review", type: "textarea", required: true },
@@ -175,7 +329,7 @@ async function main() {
       formSchema: {
         fields: [
           { id: "payroll_title", label: "Payroll Title", type: "text", required: true, placeholder: "TDP Stipend Payroll - Calapan Campus" },
-          { id: "payroll_period", label: "Coverage Period", type: "text", required: true, placeholder: "1st Semester A.Y. 2025-2026" },
+          { id: "payroll_period", label: "Coverage Period", type: "text", required: true, placeholder: "1st Semester A.Y. 2026-2027" },
           { id: "total_beneficiaries", label: "Total Student Beneficiaries", type: "number", required: true, placeholder: "120" },
           { id: "net_payroll_amount", label: "Net Payroll Total (PHP)", type: "number", required: true, placeholder: "900000" },
           { id: "disbursing_officer", label: "Designated Special Disbursing Officer", type: "text", required: true },
@@ -199,135 +353,15 @@ async function main() {
     },
   ];
 
-  for (const annex of annexes) {
+  for (const a of annexes) {
     await prisma.annexType.upsert({
-      where: { number: annex.number },
-      update: {
-        name: annex.name,
-        creatorRoles: annex.creatorRoles,
-        formSchema: annex.formSchema,
-      },
-      create: {
-        number: annex.number,
-        name: annex.name,
-        creatorRoles: annex.creatorRoles,
-        formSchema: annex.formSchema,
-      },
+      where: { number: a.number },
+      update: { name: a.name, creatorRoles: a.creatorRoles, formSchema: a.formSchema },
+      create: a,
     });
   }
 
-  // 3. Seed Sample Applicant Calls (Annex 2)
-  const staffUser = await prisma.user.findUnique({ where: { email: "staff@minsu.edu.ph" } });
-  if (staffUser) {
-    await prisma.applicantCall.upsert({
-      where: { id: "call-2026-sem1" },
-      update: {
-        batchNumber: 1,
-        startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-        deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      },
-      create: {
-        id: "call-2026-sem1",
-        title: "TDP Call for Applicants (Batch 1) - 1st Semester A.Y. 2026-2027",
-        description: "Official call for regular undergraduate applicants across all Mindoro State University campuses (Batch 1 Intake).",
-        batchNumber: 1,
-        startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Opened 7 days ago
-        deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-        formSchema: annexes[1].formSchema,
-        isActive: true,
-        createdById: staffUser.id,
-      },
-    });
-
-    await prisma.applicantCall.upsert({
-      where: { id: "call-2026-sem1-b2" },
-      update: {
-        batchNumber: 2,
-        startDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000),
-        deadline: new Date(Date.now() + 65 * 24 * 60 * 60 * 1000),
-      },
-      create: {
-        id: "call-2026-sem1-b2",
-        title: "TDP Call for Applicants (Batch 2) - 1st Semester A.Y. 2026-2027",
-        description: "Secondary intake window for regular undergraduate applicants across all Mindoro State University campuses (Batch 2 Intake).",
-        batchNumber: 2,
-        startDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000), // Upcoming in 35 days
-        deadline: new Date(Date.now() + 65 * 24 * 60 * 60 * 1000),
-        formSchema: annexes[1].formSchema,
-        isActive: true,
-        createdById: staffUser.id,
-      },
-    });
-
-    // 4. Seed Demo Documents
-    const annex3 = await prisma.annexType.findUnique({ where: { number: 3 } });
-    if (annex3) {
-      await prisma.document.upsert({
-        where: { id: "doc-demo-annex3" },
-        update: {},
-        create: {
-          id: "doc-demo-annex3",
-          annexTypeId: annex3.id,
-          title: "Annex 3: Continuing Billing Statement - 2nd Sem 2025-2026",
-          status: "SUBMITTED",
-          createdById: staffUser.id,
-          formData: {
-            academic_period: "2nd Semester, A.Y. 2025-2026",
-            total_continuing_students: 120,
-            amount_per_grantee: 7500,
-            total_billing_amount: 900000,
-            notes: "Endorsed for Director review and immediate submission to UniFAST.",
-          },
-          statusHistory: {
-            create: [
-              {
-                fromStatus: "DRAFT",
-                toStatus: "SUBMITTED",
-                actorId: staffUser.id,
-                comment: "Submitted to Campus Director for formal review.",
-              },
-            ],
-          },
-        },
-      });
-    }
-
-    const annex6 = await prisma.annexType.findUnique({ where: { number: 6 } });
-    const acctUser = await prisma.user.findUnique({ where: { email: "accounting@minsu.edu.ph" } });
-    if (annex6 && acctUser) {
-      await prisma.document.upsert({
-        where: { id: "doc-demo-annex6" },
-        update: {},
-        create: {
-          id: "doc-demo-annex6",
-          annexTypeId: annex6.id,
-          title: "Annex 6: Certificate of Fund Utilization (Q3 2026)",
-          status: "DRAFT",
-          createdById: acctUser.id,
-          formData: {
-            fund_source: "CHED-UniFAST Sub-allotment Advice 2026-04",
-            total_fund_received: 2500000,
-            total_fund_disbursed: 2450000,
-            unutilized_balance: 50000,
-            utilization_rate: 98.0,
-            accounting_remarks: "98% disbursement rate across Main and Satellite campuses.",
-          },
-          statusHistory: {
-            create: [
-              {
-                fromStatus: "DRAFT",
-                toStatus: "DRAFT",
-                actorId: acctUser.id,
-                comment: "Initial quarterly utilization statement created.",
-              },
-            ],
-          },
-        },
-      });
-    }
-  }
-
-  // 6. Seed Landing Page Configuration
+  // Seed Landing Page Configuration
   const defaultLandingSections = [
     {
       id: "sec-hero-1",
@@ -346,144 +380,9 @@ async function main() {
         secondaryCtaAction: "register",
       },
     },
-    {
-      id: "sec-announcement-1",
-      type: "ANNOUNCEMENT",
-      title: "Urgent Announcement Banner",
-      enabled: true,
-      content: {
-        badge: "ANNOUNCEMENT",
-        message:
-          "TDP Grant Annex 2 applicant call for 1st Semester A.Y. 2026–2027 is now actively accepting applications.",
-        linkText: "Submit Online",
-        linkUrl: "/?auth=register",
-        variant: "warning",
-      },
-    },
-    {
-      id: "sec-workflow-1",
-      type: "WORKFLOW",
-      title: "Annex Lifecycle & Process Flow",
-      enabled: true,
-      content: {
-        sectionTitle: "Official Annex Lifecycle",
-        sectionSubtitle:
-          "Comprehensive paperless tracking from initial electronic drafting to formal agency transmittal.",
-        cards: [
-          {
-            id: "card-1",
-            icon: "file-check",
-            title: "Annexes 1 to 10 Lifecycle",
-            description:
-              "Standardized electronic preparation, automated PDF generation, verification, and agency transmittal records.",
-            badge: "Phase 1–2",
-          },
-          {
-            id: "card-2",
-            icon: "clock",
-            title: "Executive Director Review",
-            description:
-              "Real-time review queue with one-click approval and revision feedback loop recorded in an immutable audit trail.",
-            badge: "Approval Engine",
-          },
-          {
-            id: "card-3",
-            icon: "graduation-cap",
-            title: "Student Portal (Annex 2)",
-            description:
-              "Online applicant submission with tracking code generation and self-service application status monitoring.",
-            badge: "Applicant Onboarding",
-          },
-        ],
-      },
-    },
-    {
-      id: "sec-stats-1",
-      type: "STATS",
-      title: "Program Milestones & Statistics",
-      enabled: true,
-      content: {
-        sectionTitle: "MinSU TDP Impact at a Glance",
-        sectionSubtitle:
-          "Transparency, speed, and accountability across all participating campuses.",
-        items: [
-          {
-            id: "stat-1",
-            value: "10",
-            label: "TDP Annex Types",
-            subtext: "100% Paperless electronic workflows",
-          },
-          {
-            id: "stat-2",
-            value: "< 24h",
-            label: "Approval Turnaround",
-            subtext: "Fast electronic endorsement velocity",
-          },
-          {
-            id: "stat-3",
-            value: "100%",
-            label: "Audit Traceability",
-            subtext: "Every action immutably logged",
-          },
-          {
-            id: "stat-4",
-            value: "7",
-            label: "MinSU Campuses",
-            subtext: "Unified across Oriental Mindoro",
-          },
-        ],
-      },
-    },
-    {
-      id: "sec-faq-1",
-      type: "FAQ",
-      title: "Applicant Guidelines & FAQ",
-      enabled: true,
-      content: {
-        sectionTitle: "Frequently Asked Questions",
-        sectionSubtitle:
-          "Everything you need to know about the Tulong Dunong Program application and review process.",
-        items: [
-          {
-            id: "faq-1",
-            question: "Who is eligible to apply through the Student Portal for Annex 2?",
-            answer:
-              "Enrolled undergraduate students of Mindoro State University who meet the scholarship guidelines of the Tulong Dunong Program (TDP) are eligible to register and submit an Annex 2 application.",
-          },
-          {
-            id: "faq-2",
-            question: "How do I check the status of my grant application?",
-            answer:
-              "Once submitted, you receive a unique tracking code. You can log into your student account to view the real-time status in 'My Applications' anytime.",
-          },
-          {
-            id: "faq-3",
-            question: "How are Annexes 1–10 processed by staff and directors?",
-            answer:
-              "Staff and Accounting prepare the annex forms electronically. The Campus Director reviews and approves them in a digital queue, after which transmittal links are archived for external oversight.",
-          },
-        ],
-      },
-    },
-    {
-      id: "sec-contact-1",
-      type: "CONTACT",
-      title: "Campus Directory & Office Info",
-      enabled: true,
-      content: {
-        sectionTitle: "TDP Assistance & Campus Directory",
-        sectionSubtitle:
-          "Have inquiries regarding your application or institutional requirements? Reach our coordinators.",
-        officeLocation:
-          "Mindoro State University - Bongabong Campus, Labasan, Bongabong, Oriental Mindoro",
-        officeHours: "Monday – Friday: 8:00 AM – 5:00 PM PHT",
-        email: "tdp.office@minsu.edu.ph",
-        hotline: "(043) 288-2026 / Local 104",
-      },
-    },
   ];
 
-  await (prisma as any).landingPageConfig.upsert({
+  await prisma.landingPageConfig.upsert({
     where: { id: "default" },
     update: {},
     create: {
@@ -494,14 +393,196 @@ async function main() {
       publishedAt: new Date(),
     },
   });
-  console.log("Landing page configuration seeded successfully.");
 
-  console.log("All 10 Annex types, sample documents, and active call seeded successfully.");
+  console.log("  ✔ Annex Types 1 to 10 and landing configuration seeded.\n");
+
+  // ---------------------------------------------------------------------------
+  // STEP 4: SEED 9 APPLICANT CALLS (ACROSS 3 CAMPUSES)
+  // ---------------------------------------------------------------------------
+  console.log("▶ [Step 4/5] Seeding 9 Applicant Calls for all campus cohorts...");
+
+  const now = new Date();
+  const startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+  const deadline = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days ahead
+
+  const callsMap = new Map<number, string>();
+
+  for (const campus of CAMPUS_CONFIGS) {
+    for (const batch of campus.batches) {
+      const callId = `call-batch-${batch.batchNumber}`;
+      callsMap.set(batch.batchNumber, callId);
+
+      await prisma.applicantCall.create({
+        data: {
+          id: callId,
+          title: `TDP Call for Applicants (Batch ${batch.batchNumber} - ${campus.campusName}) - A.Y. 2026-2027`,
+          description: `Official Tulong Dunong Program intake for qualified regular undergraduate students of ${campus.campusName} (Batch ${batch.batchNumber} Cohort - ${batch.studentCount} Grantees).`,
+          batchNumber: batch.batchNumber,
+          startDate,
+          deadline,
+          formSchema: annexes[1].formSchema,
+          isActive: true,
+          createdById: staffUser.id,
+        },
+      });
+    }
+  }
+
+  console.log("  ✔ 9 Applicant Calls created (Batches 1-9 across Main, Calapan, and Bongabong campuses).\n");
+
+  // ---------------------------------------------------------------------------
+  // STEP 5: HIGH-PERFORMANCE BULK SEEDING OF 4,155 STUDENTS & APPLICATIONS
+  // ---------------------------------------------------------------------------
+  console.log("▶ [Step 5/5] Generating and bulk-inserting 4,155 students and applications...");
+
+  const allStudentUsers: any[] = [];
+  const allApplications: any[] = [];
+
+  let overallGlobalIndex = 0;
+
+  for (const campus of CAMPUS_CONFIGS) {
+    let campusSequence = 1;
+
+    for (const batch of campus.batches) {
+      const callId = callsMap.get(batch.batchNumber)!;
+
+      for (let i = 0; i < batch.studentCount; i++) {
+        overallGlobalIndex++;
+        const isMale = overallGlobalIndex % 2 === 0;
+        const firstName = isMale
+          ? FIRST_NAMES_MALE[overallGlobalIndex % FIRST_NAMES_MALE.length]
+          : FIRST_NAMES_FEMALE[overallGlobalIndex % FIRST_NAMES_FEMALE.length];
+        const lastName = LAST_NAMES[(overallGlobalIndex + i) % LAST_NAMES.length];
+        const middleName = MIDDLE_NAMES[(overallGlobalIndex * 3 + i) % MIDDLE_NAMES.length];
+        const fullName = `${firstName} ${middleName} ${lastName}`;
+
+        const studentIdNum = `2024-${String(campusSequence).padStart(5, "0")}-${campus.idSuffix}`;
+        campusSequence++;
+
+        const userCuid = `usr_b${batch.batchNumber}_${String(i + 1).padStart(4, "0")}_${crypto.randomBytes(3).toString("hex")}`;
+        const appCuid = `app_b${batch.batchNumber}_${String(i + 1).padStart(4, "0")}_${crypto.randomBytes(3).toString("hex")}`;
+        const email = `student.b${batch.batchNumber}.${String(i + 1).padStart(4, "0")}@minsu.edu.ph`;
+
+        const degree = campus.programs[i % campus.programs.length];
+        const townObj = campus.towns[i % campus.towns.length];
+        const barangay = BARANGAYS[(i * 2 + overallGlobalIndex) % BARANGAYS.length];
+        const yearLevel = String((i % 4) + 1);
+        const gwa = GWA_LIST[i % GWA_LIST.length];
+        const income = INCOMES[i % INCOMES.length];
+        const contactNo = `0917${String(1000000 + (overallGlobalIndex % 8999999))}`;
+        const birthYear = 2003 + (i % 4);
+        const birthMonth = String((i % 12) + 1).padStart(2, "0");
+        const birthDay = String((i % 28) + 1).padStart(2, "0");
+        const birthdate = `${birthYear}-${birthMonth}-${birthDay}`;
+
+        const fatherFirstName = FIRST_NAMES_MALE[(i + 7) % FIRST_NAMES_MALE.length];
+        const motherFirstName = FIRST_NAMES_FEMALE[(i + 11) % FIRST_NAMES_FEMALE.length];
+        const motherMaidenName = LAST_NAMES[(i + 13) % LAST_NAMES.length];
+
+        const tdpAwardNo = `2026-TDP-4060-B${batch.batchNumber}-${String(i + 1).padStart(4, "0")}`;
+        const trackingCode = `MINSU-TDP-2026-B${batch.batchNumber}-${String(i + 1).padStart(4, "0")}`;
+
+        // Complete dual-key harmonized formData
+        const formData = {
+          student_id: studentIdNum,
+          student_id_number: studentIdNum,
+          last_name: lastName,
+          given_name: firstName,
+          middle_name: middleName,
+          ext_name: "",
+          gender: isMale ? "M" : "F",
+          birthdate,
+          course_degree: degree,
+          program_course: degree,
+          year_level: yearLevel,
+          street_barangay: barangay,
+          town_city: townObj.town,
+          province: "Oriental Mindoro",
+          zipcode: townObj.zip,
+          contact_number: contactNo,
+          email,
+          hei_uii: "4060",
+          hei_name: "Mindoro State University",
+          hei_campus: campus.campusKey,
+          campus: campus.campusKey,
+          father_last_name: lastName,
+          father_given_name: fatherFirstName,
+          father_middle_name: middleName,
+          father_contact_number: contactNo,
+          father_email: "",
+          mother_last_name: motherMaidenName,
+          mother_given_name: motherFirstName,
+          mother_middle_name: "",
+          mother_contact_number: contactNo,
+          mother_email: "",
+          parent_contact_number: contactNo,
+          parent_email: "",
+          latest_gwa: gwa,
+          family_monthly_income: income,
+          tdp_award_number: tdpAwardNo,
+        };
+
+        allStudentUsers.push({
+          id: userCuid,
+          name: fullName,
+          email,
+          passwordHash: defaultPasswordHash,
+          role: Role.STUDENT,
+          active: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        allApplications.push({
+          id: appCuid,
+          callId,
+          studentId: userCuid,
+          batchNumber: batch.batchNumber,
+          formData,
+          trackingCode,
+          status: ApplicationStatus.ACCEPTED,
+          submittedAt: new Date(),
+        });
+      }
+    }
+  }
+
+  console.log(`  ➔ Prepared ${allStudentUsers.length} student users and ${allApplications.length} applications.`);
+
+  // Insert in fast 500-item chunks
+  const CHUNK_SIZE = 500;
+  console.log("  ➔ Inserting users in bulk chunks...");
+  for (let i = 0; i < allStudentUsers.length; i += CHUNK_SIZE) {
+    const chunk = allStudentUsers.slice(i, i + CHUNK_SIZE);
+    await prisma.user.createMany({ data: chunk });
+  }
+
+  console.log("  ➔ Inserting applications in bulk chunks...");
+  for (let i = 0; i < allApplications.length; i += CHUNK_SIZE) {
+    const chunk = allApplications.slice(i, i + CHUNK_SIZE);
+    await prisma.application.createMany({ data: chunk });
+  }
+
+  console.log("\n===============================================================================");
+  console.log("DATABASE REFRESH & SEEDING COMPLETED SUCCESSFULLY! 🎉");
+  console.log("Summary of Seeded Batches (All status: ACCEPTED):");
+  console.log("  • Batch 1 (Main Campus):      35 students");
+  console.log("  • Batch 2 (Main Campus):     350 students");
+  console.log("  • Batch 3 (Main Campus):    1000 students");
+  console.log("  • Batch 4 (Calapan Campus):   35 students");
+  console.log("  • Batch 5 (Calapan Campus):  350 students");
+  console.log("  • Batch 6 (Calapan Campus): 1000 students");
+  console.log("  • Batch 7 (Bongabong Campus): 35 students");
+  console.log("  • Batch 8 (Bongabong Campus):350 students");
+  console.log("  • Batch 9 (Bongabong Campus):1000 students");
+  console.log("  ──────────────────────────────────────────");
+  console.log(`  TOTAL:                      ${allApplications.length} students`);
+  console.log("===============================================================================");
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("❌ Seeding failed with error:", e);
     process.exit(1);
   })
   .finally(async () => {

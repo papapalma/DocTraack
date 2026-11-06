@@ -14,9 +14,7 @@ import {
   AlertCircle,
   EyeOff,
   Building2,
-  FileCheck,
 } from "lucide-react";
-import { ChedLogo, UniFastLogo } from "./ched-unifast-logos";
 import { Button } from "@/components/ui/button";
 import {
   LogoConfig,
@@ -36,13 +34,6 @@ interface AnnexLogoProps {
   onLogoChange?: (newConfig: LogoConfig) => void;
 }
 
-const PRESET_OPTIONS: { id: LogoPresetId; label: string; description: string }[] = [
-  { id: "ched", label: "CHED Official", description: "Commission on Higher Education Seal" },
-  { id: "unifast", label: "UniFAST Official", description: "Tertiary Education Subsidy Seal" },
-  { id: "minsu", label: "MinSU University", description: "Mindoro State University Crest" },
-  { id: "none", label: "None / Hide", description: "Leave header space blank" },
-];
-
 // Shared in-memory cache to prevent multiple concurrent requests for global branding
 let cachedBranding: HeaderLogosConfig | null = null;
 let cachedBrandingPromise: Promise<HeaderLogosConfig> | null = null;
@@ -60,8 +51,8 @@ export async function fetchGlobalBrandingCached(): Promise<HeaderLogosConfig> {
       .catch((err) => {
         console.error("Failed to fetch global branding:", err);
         return {
-          leftLogo: { type: "preset", presetId: "ched", alt: "CHED Logo" },
-          rightLogo: { type: "preset", presetId: "unifast", alt: "UniFAST Logo" },
+          leftLogo: { type: "custom", url: "/api/media/logo/logo-1793718455151-d1b4dffbe4e2.png", alt: "Institutional Left Seal" },
+          rightLogo: { type: "custom", url: "/api/media/logo/logo-1793718328666-3e70a8323e95.png", alt: "Institutional Right Seal" },
         };
       })
       .finally(() => {
@@ -96,61 +87,40 @@ export function AnnexLogo({
     }
   }, [config, position]);
 
-  // Resolved effective config: Explicit Document Override > Global Institutional Default > Statutory Fallback
-  const effectivePreset: LogoPresetId = defaultPreset || (position === "left" ? "ched" : "unifast");
+  // Resolved effective config: Explicit Document Override > Global Institutional Default > Uploaded Fallback
   const currentConfig: LogoConfig = config || globalDefault || {
-    type: "preset",
-    presetId: effectivePreset,
-    alt: position === "left" ? "CHED Logo" : "UniFAST Logo",
+    type: "custom",
+    url: position === "left"
+      ? "/api/media/logo/logo-1793718455151-d1b4dffbe4e2.png"
+      : "/api/media/logo/logo-1793718328666-3e70a8323e95.png",
+    alt: position === "left" ? "Institutional Left Seal" : "Institutional Right Seal",
   };
 
-  // Render the logo graphic based on config
+  // Render the logo graphic based on config (Custom uploaded streamed URL or clean fallback)
   const renderGraphic = () => {
-    if (currentConfig.type === "preset") {
-      switch (currentConfig.presetId) {
-        case "ched":
-          return <ChedLogo className={cn("object-contain", className)} />;
-        case "unifast":
-          return <UniFastLogo className={cn("object-contain", className)} />;
-        case "minsu":
-          return (
-            <div className={cn("relative flex items-center justify-center", className)}>
-              <img
-                src="/logo.png"
-                alt="MinSU Logo"
-                className="w-full h-full object-contain drop-shadow-xs"
-              />
-            </div>
-          );
-        case "none":
-          return <div className={cn("opacity-0 pointer-events-none", className)} />;
-        default:
-          return position === "left" ? (
-            <ChedLogo className={cn("object-contain", className)} />
-          ) : (
-            <UniFastLogo className={cn("object-contain", className)} />
-          );
-      }
+    if (currentConfig.presetId === "none" || (currentConfig.type === "custom" && currentConfig.url === "")) {
+      return <div className={cn("opacity-0 pointer-events-none", className)} />;
     }
 
-    // Custom uploaded streamed URL
-    if (currentConfig.url) {
-      return (
-        <div className={cn("relative flex items-center justify-center", className)}>
-          <img
-            src={currentConfig.url}
-            alt={currentConfig.alt || "Custom Annex Logo"}
-            className="w-full h-full object-contain drop-shadow-xs"
-          />
-        </div>
-      );
-    }
+    const imageUrl =
+      currentConfig.url ||
+      (currentConfig.presetId === "minsu"
+        ? "/logo.png"
+        : position === "left"
+        ? "/api/media/logo/logo-1793718455151-d1b4dffbe4e2.png"
+        : "/api/media/logo/logo-1793718328666-3e70a8323e95.png");
 
-    // Statutory Fallback
-    return position === "left" ? (
-      <ChedLogo className={cn("object-contain", className)} />
-    ) : (
-      <UniFastLogo className={cn("object-contain", className)} />
+    return (
+      <div className={cn("relative flex items-center justify-center", className)}>
+        <img
+          src={imageUrl}
+          alt={currentConfig.alt || "Annex Logo"}
+          className="w-full h-full object-contain drop-shadow-xs"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = "/logo.png";
+          }}
+        />
+      </div>
     );
   };
 
@@ -186,7 +156,7 @@ export function AnnexLogo({
         <AnnexLogoEditorModal
           position={position}
           currentConfig={currentConfig}
-          defaultPreset={effectivePreset}
+          defaultPreset={defaultPreset}
           documentId={documentId}
           onClose={() => setIsModalOpen(false)}
           onSave={(newConfig) => {
@@ -204,7 +174,7 @@ export function AnnexLogo({
 interface AnnexLogoEditorModalProps {
   position: "left" | "right";
   currentConfig: LogoConfig;
-  defaultPreset: LogoPresetId;
+  defaultPreset?: LogoPresetId;
   documentId?: string;
   onClose: () => void;
   onSave: (config: LogoConfig) => void;
@@ -225,14 +195,8 @@ export function AnnexLogoEditorModal({
   const [globalDefaults, setGlobalDefaults] = useState<HeaderLogosConfig | null>(null);
   const [loadingLibrary, setLoadingLibrary] = useState<boolean>(true);
 
-  const [activeTab, setActiveTab] = useState<"library" | "preset" | "upload">(() => {
-    if (currentConfig.type === "preset") return "preset";
-    return "library";
-  });
+  const [activeTab, setActiveTab] = useState<"library" | "upload">("library");
 
-  const [selectedPreset, setSelectedPreset] = useState<LogoPresetId>(
-    currentConfig.type === "preset" ? currentConfig.presetId || defaultPreset : defaultPreset
-  );
   const [selectedLibraryUrl, setSelectedLibraryUrl] = useState<string>(
     currentConfig.type === "custom" ? currentConfig.url || "" : ""
   );
@@ -360,7 +324,11 @@ export function AnnexLogoEditorModal({
     if (activeTab === "library") {
       const match = library.find((i) => i.url === selectedLibraryUrl);
       if (!match && !selectedLibraryUrl) {
-        setUploadError("Please select a logo from the Institutional Library.");
+        onSave({
+          type: "custom",
+          url: "",
+          alt: "None",
+        });
         return;
       }
       onSave({
@@ -368,15 +336,9 @@ export function AnnexLogoEditorModal({
         url: selectedLibraryUrl,
         alt: match?.name || "Institutional Logo",
       });
-    } else if (activeTab === "preset") {
-      onSave({
-        type: "preset",
-        presetId: selectedPreset,
-        alt: PRESET_OPTIONS.find((p) => p.id === selectedPreset)?.label || "Logo",
-      });
     } else {
       if (!customUrl) {
-        setUploadError("Please upload an image or choose a preset.");
+        setUploadError("Please upload an image or choose a logo from the library.");
         return;
       }
       onSave({
@@ -394,13 +356,15 @@ export function AnnexLogoEditorModal({
         ? globalDefaults?.leftLogo
         : globalDefaults?.rightLogo;
 
-    if (defaultLogo) {
+    if (defaultLogo && defaultLogo.url) {
       onSave(defaultLogo);
     } else {
       onSave({
-        type: "preset",
-        presetId: defaultPreset,
-        alt: defaultPreset === "ched" ? "CHED Logo" : "UniFAST Logo",
+        type: "custom",
+        url: position === "left"
+          ? "/api/media/logo/logo-1793718455151-d1b4dffbe4e2.png"
+          : "/api/media/logo/logo-1793718328666-3e70a8323e95.png",
+        alt: position === "left" ? "Institutional Left Seal" : "Institutional Right Seal",
       });
     }
   };
@@ -449,7 +413,7 @@ export function AnnexLogoEditorModal({
                 Customize {position} Header Logo
               </h2>
               <p className="text-xs text-[#DCEFDD] truncate">
-                Select from Institutional Library or statutory presets
+                Select from Institutional Library or upload a new seal
               </p>
             </div>
           </div>
@@ -462,9 +426,9 @@ export function AnnexLogoEditorModal({
           </button>
         </div>
 
-        {/* Apple Segmented 3-Tab Switcher */}
+        {/* Apple Segmented 2-Tab Switcher */}
         <div className="p-3 sm:p-4 pb-0 bg-[#F6F8F6] border-b border-[#D6DDD8] shrink-0">
-          <div className="grid grid-cols-3 p-1 bg-neutral-200/80 rounded-2xl text-xs font-semibold">
+          <div className="grid grid-cols-2 p-1 bg-neutral-200/80 rounded-2xl text-xs font-semibold">
             <button
               type="button"
               onClick={() => setActiveTab("library")}
@@ -476,20 +440,7 @@ export function AnnexLogoEditorModal({
               )}
             >
               <Building2 className="w-3.5 h-3.5 text-[#1B5E20] shrink-0" />
-              <span className="truncate">Saved Library</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("preset")}
-              className={cn(
-                "py-1.5 px-2 rounded-xl transition-all apple-press flex items-center justify-center gap-1.5 text-center truncate",
-                activeTab === "preset"
-                  ? "bg-white text-[#123F17] shadow-xs font-bold"
-                  : "text-[#55645B] hover:text-[#1F2A24]"
-              )}
-            >
-              <FileCheck className="w-3.5 h-3.5 text-[#B88A00] shrink-0" />
-              <span className="truncate">Statutory</span>
+              <span className="truncate">Saved Library ({library.length})</span>
             </button>
             <button
               type="button"
@@ -547,6 +498,37 @@ export function AnnexLogoEditorModal({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* None / Blank option */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedLibraryUrl("");
+                      setCustomUrl("");
+                      setAltText("None");
+                    }}
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-2xl border text-left transition-all apple-press relative",
+                      !selectedLibraryUrl
+                        ? "border-[#1B5E20] bg-[#DCEFDD]/80 ring-2 ring-[#1B5E20]/20 shadow-xs font-bold"
+                        : "border-[#D6DDD8] bg-white hover:bg-[#F6F8F6] text-[#1F2A24]"
+                    )}
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-neutral-100 border border-[#D6DDD8] flex items-center justify-center shrink-0 text-neutral-400">
+                      <EyeOff className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs text-[#1F2A24] truncate">None / Blank</div>
+                      <div className="text-[10px] text-[#55645B] truncate mt-0.5">
+                        Leave header space empty
+                      </div>
+                    </div>
+                    {!selectedLibraryUrl && (
+                      <div className="w-5 h-5 rounded-full bg-[#1B5E20] text-white flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3" />
+                      </div>
+                    )}
+                  </button>
+
                   {library.map((item) => {
                     const isSelected = selectedLibraryUrl === item.url;
                     return (
@@ -593,62 +575,7 @@ export function AnnexLogoEditorModal({
             </div>
           )}
 
-          {/* TAB 2: STATUTORY PRESETS */}
-          {activeTab === "preset" && (
-            <div className="space-y-3">
-              <label className="text-xs font-bold text-[#1F2A24] uppercase tracking-wider block">
-                Official Statutory Seals
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                {PRESET_OPTIONS.map((opt) => {
-                  const isSelected = selectedPreset === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setSelectedPreset(opt.id)}
-                      className={cn(
-                        "flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all apple-press relative",
-                        isSelected
-                          ? "border-[#1B5E20] bg-[#DCEFDD]/70 ring-2 ring-[#1B5E20]/20 shadow-xs"
-                          : "border-[#D6DDD8] bg-white hover:bg-[#F6F8F6]"
-                      )}
-                    >
-                      {isSelected && (
-                        <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#1B5E20] text-white flex items-center justify-center">
-                          <Check className="w-2.5 h-2.5" />
-                        </div>
-                      )}
-
-                      <div className="w-14 h-14 flex items-center justify-center mb-2">
-                        {opt.id === "ched" && <ChedLogo className="w-12 h-12" />}
-                        {opt.id === "unifast" && <UniFastLogo className="w-12 h-12" />}
-                        {opt.id === "minsu" && (
-                          <img
-                            src="/logo.png"
-                            alt="MinSU"
-                            className="w-12 h-12 object-contain"
-                          />
-                        )}
-                        {opt.id === "none" && (
-                          <div className="w-10 h-10 rounded-full border-2 border-dashed border-neutral-300 flex items-center justify-center text-neutral-400">
-                            <EyeOff className="w-4 h-4" />
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="text-xs font-bold text-[#1F2A24]">{opt.label}</div>
-                      <div className="text-[10px] text-[#55645B] leading-tight mt-0.5">
-                        {opt.description}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: FILE UPLOAD */}
+          {/* TAB 2: FILE UPLOAD */}
           {activeTab === "upload" && (
             <div className="space-y-4">
               <div>
@@ -745,9 +672,9 @@ export function AnnexLogoEditorModal({
               <div className="text-xs font-bold text-[#1F2A24]">Preview in Document Header:</div>
               <div className="text-[10px] text-[#55645B]">
                 {activeTab === "library"
-                  ? "Custom Institutional Seal"
-                  : activeTab === "preset"
-                  ? `Statutory Preset (${selectedPreset.toUpperCase()})`
+                  ? selectedLibraryUrl
+                    ? "Institutional Seal"
+                    : "None / Blank"
                   : "Direct Upload"}
               </div>
             </div>
@@ -755,16 +682,6 @@ export function AnnexLogoEditorModal({
               {activeTab === "library" ? (
                 selectedLibraryUrl ? (
                   <img src={selectedLibraryUrl} alt="Library Logo" className="w-12 h-12 object-contain" />
-                ) : (
-                  <ImageIcon className="w-5 h-5 text-neutral-300" />
-                )
-              ) : activeTab === "preset" ? (
-                selectedPreset === "ched" ? (
-                  <ChedLogo className="w-12 h-12" />
-                ) : selectedPreset === "unifast" ? (
-                  <UniFastLogo className="w-12 h-12" />
-                ) : selectedPreset === "minsu" ? (
-                  <img src="/logo.png" alt="MinSU" className="w-12 h-12 object-contain" />
                 ) : (
                   <EyeOff className="w-5 h-5 text-neutral-400" />
                 )

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { DownloadProvider } from "@/components/providers/download-provider";
 
 export const metadata: Metadata = {
   title: "MinSU DocTrack | TDP Annex Management System",
@@ -22,7 +23,9 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col antialiased">
-        {children}
+        <DownloadProvider>
+          {children}
+        </DownloadProvider>
       </body>
     </html>
   );

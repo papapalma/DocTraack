@@ -225,3 +225,16 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* Apple-style Animated Download Trigger Micro-Interactions */
+[data-download-loading="true"] {
+  position: relative;
+  cursor: wait !important;
+  opacity: 0.85;
+  transition: opacity 160ms var(--apple-spring), transform 160ms var(--apple-spring);
+}
+
+[data-download-loading="true"] svg {
+  animation: spin 1s linear infinite;
+}
+
+

@@ -109,7 +109,7 @@ export default function MyApplicationsPage() {
                     <th className="py-3.5 px-4">TDP Call Program</th>
                     <th className="py-3.5 px-4">Tracking Reference</th>
                     <th className="py-3.5 px-4">Date Submitted</th>
-                    <th className="py-3.5 px-4">Verification Status</th>
+                    <th className="py-3.5 px-4 text-right">Verification Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#D6DDD8]">
@@ -136,7 +136,7 @@ export default function MyApplicationsPage() {
                           year: "numeric",
                         })}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 text-right">
                         {getStatusBadge(app.status)}
                       </td>
                     </tr>

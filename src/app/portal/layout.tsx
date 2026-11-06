@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, SessionProvider } from "@/components/providers/session-provider";
 import { Button } from "@/components/ui/button";
-import { GraduationCap, LogOut, Megaphone, FileText, User } from "lucide-react";
+import { GraduationCap, LogOut, Megaphone, FileText, User, Bell, BellRing } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PortalSkeleton } from "@/components/ui/skeleton";
 import { LogoutModal } from "@/components/auth/logout-modal";
@@ -17,7 +17,9 @@ function StudentNav() {
   const pathname = usePathname();
   const navLinks = [
     { label: "Active Calls", href: "/portal", icon: Megaphone },
+    { label: "Announcements", href: "/portal/announcements", icon: BellRing },
     { label: "My Applications", href: "/portal/applications", icon: FileText },
+    { label: "Profile", href: "/portal/profile", icon: User },
   ];
 
   return (
@@ -109,6 +111,15 @@ function StudentPortalContent({
 
         {/* User Info & Logout */}
         <div className="flex items-center gap-2 sm:gap-3">
+          <Link
+            href="/portal/announcements"
+            className="relative p-2 text-white/90 hover:text-white hover:bg-white/10 active:scale-90 rounded-full transition-all duration-150"
+            title="Announcements & Notifications"
+          >
+            <Bell className="w-4 h-4" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#F2B705] rounded-full ring-2 ring-[#1B5E20]" />
+          </Link>
+
           <div className="hidden sm:flex items-center gap-2 text-xs text-white/90">
             <User className="w-4 h-4 text-[#F2B705]" />
             <span className="font-semibold">{user.name}</span>

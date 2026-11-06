@@ -21,6 +21,13 @@ export function isStudent(role: Role): boolean {
 }
 
 /**
+ * Check if a role can create, edit, delete, or pin announcements
+ */
+export function canManageAnnouncements(role: Role): boolean {
+  return role === "STAFF" || role === "DIRECTOR" || role === "SYSTEM_ADMIN";
+}
+
+/**
  * Check if a role can create a given annex number
  * Annex 1, 2, 3, 4, 5, 10: STAFF
  * Annex 6, 7, 8, 9: STAFF and ACCOUNTING

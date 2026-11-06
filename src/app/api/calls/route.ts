@@ -5,11 +5,15 @@ import { logAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const user = await getCurrentUser();
+    const { searchParams } = new URL(req.url);
+    const includeAll = searchParams.get("all") === "true" || user?.role === "STAFF";
+
     const now = new Date();
     const calls = await prisma.applicantCall.findMany({
-      where: { isActive: true },
+      where: includeAll ? undefined : { isActive: true },
       include: {
         _count: { select: { applications: true } },
       },
@@ -23,7 +27,9 @@ export async function GET() {
       const start = new Date(call.startDate);
       const end = new Date(call.deadline);
       let windowStatus: "UPCOMING" | "OPEN" | "CLOSED" = "OPEN";
-      if (now < start) {
+      if (!call.isActive) {
+        windowStatus = "CLOSED";
+      } else if (now < start) {
         windowStatus = "UPCOMING";
       } else if (now > end) {
         windowStatus = "CLOSED";
@@ -32,7 +38,7 @@ export async function GET() {
       return {
         ...call,
         windowStatus,
-        isCurrentlyOpen: windowStatus === "OPEN",
+        isCurrentlyOpen: call.isActive && windowStatus === "OPEN",
       };
     });
 

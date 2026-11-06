@@ -31,6 +31,7 @@ import {
   Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useDownload } from "@/components/providers/download-provider";
 
 interface AuditLogActor {
   id: string;
@@ -66,6 +67,7 @@ interface PaginationMeta {
 
 export default function AuditLogsPage() {
   const { user, isLoading: sessionLoading } = useSession();
+  const { downloadBlob } = useDownload();
 
   // State
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
@@ -193,13 +195,10 @@ export default function AuditLogsPage() {
 
       const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      downloadBlob({
+        blob,
+        filename: `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`,
+      });
     } catch (e) {
       console.error("Export CSV error:", e);
     }
@@ -223,13 +222,10 @@ export default function AuditLogsPage() {
       const blob = new Blob([JSON.stringify(exportLogs, null, 2)], {
         type: "application/json",
       });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `audit-logs-${new Date().toISOString().slice(0, 10)}.json`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      downloadBlob({
+        blob,
+        filename: `audit-logs-${new Date().toISOString().slice(0, 10)}.json`,
+      });
     } catch (e) {
       console.error("Export JSON error:", e);
     }

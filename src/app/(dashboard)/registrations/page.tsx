@@ -25,7 +25,9 @@ import {
   GraduationCap,
   MapPin,
   Calendar,
+  Award,
 } from "lucide-react";
+import { BatchSelectorDropdown } from "@/components/documents/batch-selector-dropdown";
 
 export default function RegistrationsValidationPage() {
   const { user } = useSession();
@@ -33,7 +35,19 @@ export default function RegistrationsValidationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"ALL" | "SUBMITTED" | "ACCEPTED" | "REJECTED">("SUBMITTED");
-  const [batchFilter, setBatchFilter] = useState<"ALL" | "1" | "2">("ALL");
+  const [batchFilter, setBatchFilter] = useState<string>("ALL");
+
+  // Distinct available batches in registrations
+  const availableBatchNumbers = useMemo(() => {
+    const set = new Set<number>();
+    applications.forEach((app) => {
+      if (app.batchNumber) set.add(Number(app.batchNumber));
+    });
+    if (set.size === 0) {
+      return [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [applications]);
 
   // Selected student for detail inspection
   const [selectedApp, setSelectedApp] = useState<any | null>(null);
@@ -48,7 +62,7 @@ export default function RegistrationsValidationPage() {
   const [compileModalOpen, setCompileModalOpen] = useState(false);
   const [compileAgency, setCompileAgency] = useState("Commission on Higher Education (CHED) / UniFAST");
   const [compileAY, setCompileAY] = useState("A.Y. 2026-2027, 1st Semester");
-  const [compileBatch, setCompileBatch] = useState<string>("1");
+  const [compileBatches, setCompileBatches] = useState<number[]>([1]);
   const [compileRemarks, setCompileRemarks] = useState("Official batch submission of validated student grantees for executive endorsement.");
   const [isCompiling, setIsCompiling] = useState(false);
   const [compileSuccess, setCompileSuccess] = useState<string | null>(null);
@@ -147,6 +161,11 @@ export default function RegistrationsValidationPage() {
 
   // Handle Compile into Annex 1 Document
   const handleCompileAnnex1 = async () => {
+    if (compileBatches.length === 0) {
+      alert("Please select at least one batch to compile.");
+      return;
+    }
+
     setIsCompiling(true);
     setCompileSuccess(null);
 
@@ -155,7 +174,8 @@ export default function RegistrationsValidationPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          batchNumber: compileBatch,
+          batchNumbers: compileBatches,
+          batchNumber: compileBatches.join(", "),
           targetAgency: compileAgency,
           academicYear: compileAY,
           remarks: compileRemarks,
@@ -218,6 +238,19 @@ export default function RegistrationsValidationPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {(user?.role === "STAFF" || user?.role === "DIRECTOR") && (
+            <Link href="/certificate-editor">
+              <Button
+                variant="outline"
+                size="sm"
+                className="font-semibold apple-press text-[#1B5E20] border-[#1B5E20]/30 hover:bg-[#F1F8F1] shadow-xs"
+              >
+                <Award className="w-4 h-4 mr-1.5 text-[#B88A00]" />
+                Certificate Designer
+              </Button>
+            </Link>
+          )}
+
           {/* Export Excel Button */}
           <a href="/api/annex-1/export-excel" download>
             <Button variant="outline" size="sm" className="font-semibold border-[#1B5E20] text-[#1B5E20] hover:bg-[#F1F8F1]">
@@ -342,11 +375,11 @@ export default function RegistrationsValidationPage() {
               </div>
 
               {/* Batch Filter Segment */}
-              <div className="inline-flex p-1 bg-white rounded-xl border border-[#D6DDD8] text-xs font-semibold gap-1">
+              <div className="flex items-center gap-1 p-1 bg-white rounded-xl border border-[#D6DDD8] text-xs font-semibold overflow-x-auto max-w-full">
                 <button
                   type="button"
                   onClick={() => setBatchFilter("ALL")}
-                  className={`apple-press px-2.5 py-1 rounded-lg transition-all ${
+                  className={`apple-press px-2.5 py-1 rounded-lg transition-all whitespace-nowrap shrink-0 ${
                     batchFilter === "ALL"
                       ? "bg-[#1B5E20] text-white shadow-xs font-bold"
                       : "text-[#55645B] hover:text-[#1F2A24]"
@@ -354,28 +387,20 @@ export default function RegistrationsValidationPage() {
                 >
                   All Batches
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setBatchFilter("1")}
-                  className={`apple-press px-2.5 py-1 rounded-lg transition-all ${
-                    batchFilter === "1"
-                      ? "bg-[#1B5E20] text-white shadow-xs font-bold"
-                      : "text-[#55645B] hover:text-[#1F2A24]"
-                  }`}
-                >
-                  Batch 1
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBatchFilter("2")}
-                  className={`apple-press px-2.5 py-1 rounded-lg transition-all ${
-                    batchFilter === "2"
-                      ? "bg-[#1B5E20] text-white shadow-xs font-bold"
-                      : "text-[#55645B] hover:text-[#1F2A24]"
-                  }`}
-                >
-                  Batch 2
-                </button>
+                {availableBatchNumbers.map((bNum) => (
+                  <button
+                    key={bNum}
+                    type="button"
+                    onClick={() => setBatchFilter(String(bNum))}
+                    className={`apple-press px-2.5 py-1 rounded-lg transition-all whitespace-nowrap shrink-0 ${
+                      batchFilter === String(bNum)
+                        ? "bg-[#1B5E20] text-white shadow-xs font-bold"
+                        : "text-[#55645B] hover:text-[#1F2A24]"
+                    }`}
+                  >
+                    Batch {bNum}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -809,22 +834,18 @@ export default function RegistrationsValidationPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <Label htmlFor="c-batch" required className="text-xs font-semibold">
-                  TDP Intake Batch to Compile
+                  TDP Intake Batch(es) to Compile (Select 1, 2, or 3)
                 </Label>
-                <select
-                  id="c-batch"
-                  value={compileBatch}
-                  onChange={(e) => setCompileBatch(e.target.value)}
-                  className="w-full rounded-lg border border-[#D6DDD8] bg-white p-2.5 text-xs font-semibold focus:ring-2 focus:ring-[#1B5E20]"
-                >
-                  <option value="1">Batch 1 Grantees (Annex 1 - Batch 1 Submission)</option>
-                  <option value="2">Batch 2 Grantees (Annex 1 - Batch 2 Submission)</option>
-                  <option value="ALL">All Validated Grantees (Combined)</option>
-                </select>
+                <BatchSelectorDropdown
+                  selectedBatches={compileBatches}
+                  onBatchesChange={setCompileBatches}
+                  maxBatches={3}
+                  placeholder="Choose 1 to 3 batches to combine..."
+                />
                 <p className="text-[11px] text-[#55645B]">
-                  Only accepted scholars matching this batch will be compiled into this submission package.
+                  Combine 1, 2, or 3 verified intake batches into this official Annex 1 submission package.
                 </p>
               </div>
 

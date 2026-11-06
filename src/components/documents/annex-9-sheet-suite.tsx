@@ -6,6 +6,9 @@ import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
 import { Annex9FormData, Annex9GranteePayroll, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
+import { BatchSelectorDropdown } from "./batch-selector-dropdown";
+import { useDownload } from "@/components/providers/download-provider";
+import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
 import {
   FileSpreadsheet,
   Printer,
@@ -24,6 +27,7 @@ import {
   Search,
   DollarSign,
   DownloadCloud,
+  Check,
 } from "lucide-react";
 
 interface Annex9SheetSuiteProps {
@@ -44,6 +48,7 @@ export function Annex9SheetSuite({
   onSaved,
 }: Annex9SheetSuiteProps) {
   const router = useRouter();
+  const { downloadBlob } = useDownload();
 
   // Mode: "workspace" or "sheet" (Official Canvas)
   const [viewMode, setViewMode] = useState<"workspace" | "sheet">("workspace");
@@ -64,110 +69,32 @@ export function Annex9SheetSuite({
 
   // Default initial values
   const defaultData: Annex9FormData = useMemo(() => {
-    if (initialData) return initialData;
+    if (initialData) {
+      const cfg = getMinsuCampusConfig(initialData.campus);
+      return {
+        ...initialData,
+        campus: initialData.campus || cfg.key,
+        heiName: initialData.heiName || cfg.heiName,
+        heiAddress: initialData.heiAddress || cfg.heiAddress,
+        stipendTier: initialData.stipendTier || "7500",
+        stipendAmountPerScholar: initialData.stipendAmountPerScholar || 7500,
+      };
+    }
 
-    const initialGrantees: Annex9GranteePayroll[] = [
-      {
-        id: "g-1",
-        seqNo: 1,
-        tdpAwardNo: "TDP-2023-IVB-00101",
-        studentIdNo: "21-0492",
-        lastName: "DELA CRUZ",
-        givenName: "JUAN",
-        middleInitial: "P.",
-        degreeProgram: "BS Information Technology",
-        yearLevel: "3",
-        firstSemAmount: 7500,
-        firstSemDateReceived: "2024-03-25",
-        firstSemSignature: "J. Dela Cruz",
-        secondSemAmount: 0,
-        secondSemDateReceived: "",
-        secondSemSignature: "",
-      },
-      {
-        id: "g-2",
-        seqNo: 2,
-        tdpAwardNo: "TDP-2023-IVB-00102",
-        studentIdNo: "21-0493",
-        lastName: "SANTOS",
-        givenName: "MARIA",
-        middleInitial: "C.",
-        degreeProgram: "BS Agriculture",
-        yearLevel: "3",
-        firstSemAmount: 7500,
-        firstSemDateReceived: "2024-03-25",
-        firstSemSignature: "M. Santos",
-        secondSemAmount: 0,
-        secondSemDateReceived: "",
-        secondSemSignature: "",
-      },
-      {
-        id: "g-3",
-        seqNo: 3,
-        tdpAwardNo: "TDP-2023-IVB-00103",
-        studentIdNo: "22-1084",
-        lastName: "REYES",
-        givenName: "CARLO",
-        middleInitial: "M.",
-        degreeProgram: "BS Hospitality Management",
-        yearLevel: "2",
-        firstSemAmount: 7500,
-        firstSemDateReceived: "2024-03-25",
-        firstSemSignature: "C. Reyes",
-        secondSemAmount: 0,
-        secondSemDateReceived: "",
-        secondSemSignature: "",
-      },
-      {
-        id: "g-4",
-        seqNo: 4,
-        tdpAwardNo: "TDP-2023-IVB-00104",
-        studentIdNo: "22-1085",
-        lastName: "ALVAREZ",
-        givenName: "ANGELICA",
-        middleInitial: "R.",
-        degreeProgram: "Bachelor of Secondary Education",
-        yearLevel: "2",
-        firstSemAmount: 7500,
-        firstSemDateReceived: "2024-03-25",
-        firstSemSignature: "A. Alvarez",
-        secondSemAmount: 0,
-        secondSemDateReceived: "",
-        secondSemSignature: "",
-      },
-      {
-        id: "g-5",
-        seqNo: 5,
-        tdpAwardNo: "TDP-2023-IVB-00105",
-        studentIdNo: "20-0019",
-        lastName: "GARCIA",
-        givenName: "MARK",
-        middleInitial: "D.",
-        degreeProgram: "BS Criminology",
-        yearLevel: "4",
-        firstSemAmount: 7500,
-        firstSemDateReceived: "2024-03-25",
-        firstSemSignature: "M. Garcia",
-        secondSemAmount: 0,
-        secondSemDateReceived: "",
-        secondSemSignature: "",
-      },
-    ];
-
-    const firstSemTotal = initialGrantees.reduce((acc, g) => acc + (Number(g.firstSemAmount) || 0), 0);
-    const secondSemTotal = initialGrantees.reduce((acc, g) => acc + (Number(g.secondSemAmount) || 0), 0);
-
+    const defaultCampus = MINSU_CAMPUSES[2]; // Bongabong Campus
     return {
-      academicYear: "2023-2024",
+      academicYear: "2024-2025",
       activeSemester: "1",
-      campus: "Bongabong Campus",
+      campus: defaultCampus.key,
       payrollDate: "March 28, 2024",
-      heiName: "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS",
-      heiAddress: "Labasan, Bongabong, Oriental Mindoro",
-      grantees: initialGrantees,
-      firstSemTotalAmount: firstSemTotal,
-      secondSemTotalAmount: secondSemTotal,
-      grandTotalAmount: firstSemTotal + secondSemTotal,
+      heiName: defaultCampus.heiName,
+      heiAddress: defaultCampus.heiAddress,
+      stipendTier: "7500",
+      stipendAmountPerScholar: 7500,
+      grantees: [],
+      firstSemTotalAmount: 0,
+      secondSemTotalAmount: 0,
+      grandTotalAmount: 0,
       signatories: {
         tesFocalPerson: {
           name: "DR. ARNEIL G. PEREZ",
@@ -190,13 +117,92 @@ export function Annex9SheetSuite({
   }, [initialData]);
 
   const [formData, setFormData] = useState<Annex9FormData>(defaultData);
-  const [docTitle] = useState(
-    documentTitle ||
-      `Annex 9: TDP-TES Stipend Disbursement Payroll - ${defaultData.academicYear} (${defaultData.activeSemester === "1" ? "1st Sem" : "2nd Sem"})`
-  );
+
+  // Sync initialData if updated asynchronously
+  useEffect(() => {
+    if (initialData) {
+      const cfg = getMinsuCampusConfig(initialData.campus);
+      setFormData({
+        ...initialData,
+        campus: initialData.campus || cfg.key,
+        heiName: initialData.heiName || cfg.heiName,
+        heiAddress: initialData.heiAddress || cfg.heiAddress,
+        stipendTier: initialData.stipendTier || "7500",
+        stipendAmountPerScholar: initialData.stipendAmountPerScholar || 7500,
+      });
+    }
+  }, [initialData]);
+
+  const currentTitle = useMemo(() => {
+    if (documentTitle) return documentTitle;
+    return `Annex 9: TDP-TES Stipend Disbursement Payroll - ${formData.academicYear} (${formData.activeSemester === "1" ? "1st Sem" : "2nd Sem"}) - ${formData.campus}`;
+  }, [documentTitle, formData.academicYear, formData.activeSemester, formData.campus]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Custom stipend input value state for "custom" tier
+  const [customStipendInput, setCustomStipendInput] = useState<string>(
+    String(formData.stipendAmountPerScholar || 7500)
+  );
+
+  // Auto-switch campus and synchronize HEI name, address, and scholar rows
+  const handleCampusChange = (newCampusKey: string) => {
+    const config = getMinsuCampusConfig(newCampusKey);
+    const updatedGrantees = formData.grantees.map((g) => ({
+      ...g,
+      campus: config.key,
+    }));
+
+    setFormData((prev) => ({
+      ...prev,
+      campus: config.key,
+      heiName: config.heiName,
+      heiAddress: config.heiAddress,
+      grantees: updatedGrantees,
+    }));
+
+    setImportMessage(`Campus switched to "${config.label}". HEI Name, address, and scholar records synchronized.`);
+    setTimeout(() => setImportMessage(null), 3500);
+  };
+
+  // Reallocate stipends across active semester & custom/tier amount
+  const applyStipendAndSemester = (
+    newSemester: "1" | "2",
+    newAmount: number,
+    tier: "7500" | "10000" | "custom"
+  ) => {
+    const isFirstSem = newSemester === "1";
+    const updatedGrantees = formData.grantees.map((g) => ({
+      ...g,
+      firstSemAmount: isFirstSem ? newAmount : 0,
+      firstSemDateReceived: isFirstSem ? (g.firstSemDateReceived || formData.payrollDate) : "",
+      secondSemAmount: !isFirstSem ? newAmount : 0,
+      secondSemDateReceived: !isFirstSem ? (g.secondSemDateReceived || formData.payrollDate) : "",
+    }));
+
+    const indexed = updatedGrantees.map((g, idx) => ({ ...g, seqNo: idx + 1 }));
+    const firstSemTotalAmount = indexed.reduce((acc, g) => acc + (Number(g.firstSemAmount) || 0), 0);
+    const secondSemTotalAmount = indexed.reduce((acc, g) => acc + (Number(g.secondSemAmount) || 0), 0);
+    const grandTotalAmount = firstSemTotalAmount + secondSemTotalAmount;
+
+    setFormData((prev) => ({
+      ...prev,
+      activeSemester: newSemester,
+      stipendTier: tier,
+      stipendAmountPerScholar: newAmount,
+      grantees: indexed,
+      firstSemTotalAmount,
+      secondSemTotalAmount,
+      grandTotalAmount,
+    }));
+
+    setImportMessage(
+      `Updated active semester to ${newSemester === "1" ? "1st" : "2nd"} Semester with ₱${newAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} stipend for ${indexed.length} scholars.`
+    );
+    setTimeout(() => setImportMessage(null), 3500);
+  };
 
   const handleLeftLogoChange = (newConfig: LogoConfig) => {
     setFormData((prev) => ({
@@ -239,20 +245,24 @@ export function Annex9SheetSuite({
   const handleAddRow = () => {
     const nextSeq = formData.grantees.length + 1;
     const isFirstSem = formData.activeSemester === "1";
+    const stipend = formData.stipendAmountPerScholar || 7500;
+    const ayPrefix = formData.academicYear ? formData.academicYear.split("-")[0] : "2024";
     const newGrantee: Annex9GranteePayroll = {
       id: `g-${Date.now()}-${nextSeq}`,
       seqNo: nextSeq,
-      tdpAwardNo: `TDP-2023-IVB-${String(nextSeq).padStart(5, "0")}`,
+      batchNumber: "1",
+      campus: formData.campus,
+      tdpAwardNo: `TDP-${ayPrefix}-IVB-${String(nextSeq).padStart(5, "0")}`,
       studentIdNo: "",
       lastName: "",
       givenName: "",
       middleInitial: "",
       degreeProgram: "",
       yearLevel: "1",
-      firstSemAmount: isFirstSem ? 7500 : 0,
+      firstSemAmount: isFirstSem ? stipend : 0,
       firstSemDateReceived: isFirstSem ? formData.payrollDate : "",
       firstSemSignature: "",
-      secondSemAmount: !isFirstSem ? 7500 : 0,
+      secondSemAmount: !isFirstSem ? stipend : 0,
       secondSemDateReceived: !isFirstSem ? formData.payrollDate : "",
       secondSemSignature: "",
     };
@@ -292,21 +302,114 @@ export function Annex9SheetSuite({
     updateGranteesAndTotals(updated);
   };
 
-  // Bulk set all 7500 on active semester
+  // Bulk set stipend on active semester
   const handleBulkSetStipend = () => {
     const isFirstSem = formData.activeSemester === "1";
+    const stipend = formData.stipendAmountPerScholar || 7500;
     const updated = formData.grantees.map((g) => ({
       ...g,
-      [isFirstSem ? "firstSemAmount" : "secondSemAmount"]: 7500,
+      [isFirstSem ? "firstSemAmount" : "secondSemAmount"]: stipend,
       [isFirstSem ? "firstSemDateReceived" : "secondSemDateReceived"]:
         g[isFirstSem ? "firstSemDateReceived" : "secondSemDateReceived"] || formData.payrollDate,
     }));
     updateGranteesAndTotals(updated);
-    setImportMessage(`Set ₱7,500.00 stipend for all ${formData.grantees.length} scholars on ${isFirstSem ? "1st" : "2nd"} Semester.`);
+    setImportMessage(
+      `Set ₱${stipend.toLocaleString(undefined, { minimumFractionDigits: 2 })} stipend for all ${formData.grantees.length} scholars on ${isFirstSem ? "1st" : "2nd"} Semester.`
+    );
     setTimeout(() => setImportMessage(null), 3500);
   };
 
-  // 1-Click Import from Annex 3 / Annex 4 Billings
+  // Batches currently in payroll
+  const alreadyInjectedBatches = useMemo(() => {
+    const list = formData.grantees
+      .map((g) => String(g.batchNumber || "").trim())
+      .filter(Boolean);
+    return Array.from(new Set(list));
+  }, [formData.grantees]);
+
+  const [selectedBatchesToInject, setSelectedBatchesToInject] = useState<number[]>([1]);
+
+  // Inject scholars from selected batches with campus parameter
+  const handleImportBatches = async (batchesToInject: number[]) => {
+    setIsImporting(true);
+    setImportMessage(null);
+    if (batchesToInject.length === 0) {
+      setIsImporting(false);
+      return;
+    }
+
+    // Check if already injected
+    const alreadyPresent = batchesToInject.filter((b) => alreadyInjectedBatches.includes(String(b)));
+    if (alreadyPresent.length > 0) {
+      setImportMessage(`Batch ${alreadyPresent.join(", ")} has already been injected into this payroll.`);
+      setIsImporting(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/annex-3/compile?batches=${batchesToInject.join(",")}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.candidates && data.candidates.length > 0) {
+          const firstCandidateCampus = data.candidates[0]?.campus;
+          const campusCfg = getMinsuCampusConfig(firstCandidateCampus);
+
+          const startIndex = formData.grantees.length;
+          const isFirstSem = formData.activeSemester === "1";
+          const stipend = formData.stipendAmountPerScholar || 7500;
+          const ayPrefix = formData.academicYear ? formData.academicYear.split("-")[0] : "2024";
+
+          const newEntries: Annex9GranteePayroll[] = data.candidates.map((c: any, index: number) => ({
+            id: `imported-${Date.now()}-${index + 1}`,
+            seqNo: startIndex + index + 1,
+            batchNumber: String(c.tdpBatch || batchesToInject[0] || "1"),
+            campus: getMinsuCampusConfig(c.campus).label,
+            tdpAwardNo: c.tdpAwardNumber || `TDP-${ayPrefix}-IVB-${String(startIndex + index + 1).padStart(5, "0")}`,
+            studentIdNo: c.studentNumber || "",
+            lastName: c.lastName || "",
+            givenName: c.givenName || "",
+            middleInitial: c.middleInitial || "",
+            degreeProgram: c.degreeProgram || "BS Information Technology",
+            yearLevel: c.yearLevel || "1",
+            firstSemAmount: isFirstSem ? stipend : 0,
+            firstSemDateReceived: isFirstSem ? formData.payrollDate : "",
+            firstSemSignature: "",
+            secondSemAmount: !isFirstSem ? stipend : 0,
+            secondSemDateReceived: !isFirstSem ? formData.payrollDate : "",
+            secondSemSignature: "",
+          }));
+
+          if (formData.grantees.length === 0 && campusCfg) {
+            setFormData((prev) => ({
+              ...prev,
+              campus: campusCfg.label,
+              heiName: campusCfg.heiName,
+              heiAddress: campusCfg.heiAddress,
+            }));
+          }
+
+          updateGranteesAndTotals([...formData.grantees, ...newEntries]);
+          setSelectedBatchesToInject([]);
+          setImportMessage(
+            `Successfully imported ${newEntries.length} scholars from Batch ${batchesToInject.join(", ")} into payroll.`
+          );
+        } else {
+          setImportMessage(
+            `No verified candidates found for Batch ${batchesToInject.join(", ")}.`
+          );
+        }
+      } else {
+        setImportMessage("Failed to fetch grantee data for selected batches.");
+      }
+    } catch {
+      setImportMessage("Connection error while importing batches.");
+    } finally {
+      setIsImporting(false);
+      setTimeout(() => setImportMessage(null), 4000);
+    }
+  };
+
+  // 1-Click Import from Annex 3 / Annex 4 Billings fallback
   const handleImportFromBillings = async () => {
     setIsImporting(true);
     setImportMessage(null);
@@ -388,7 +491,7 @@ export function Annex9SheetSuite({
     try {
       if (mode === "create") {
         const payload = {
-          title: docTitle,
+          title: currentTitle,
           annexTypeId: annexTypeId,
           formData: formData,
           status: submitDirectly ? "SUBMITTED" : "DRAFT",
@@ -411,6 +514,7 @@ export function Annex9SheetSuite({
         else router.push(`/documents/${createdDoc.id}`);
       } else {
         const payload = {
+          title: currentTitle,
           formData: formData,
           status: submitDirectly ? "SUBMITTED" : undefined,
         };
@@ -449,14 +553,10 @@ export function Annex9SheetSuite({
       if (!res.ok) throw new Error("Failed to generate Excel file");
 
       const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Annex_9_TDP_Payroll_${formData.academicYear}_Sem${formData.activeSemester}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
+      downloadBlob({
+        blob,
+        filename: `Annex_9_TDP_Payroll_${formData.academicYear}_Sem${formData.activeSemester}.xlsx`,
+      });
     } catch (err) {
       console.error(err);
       alert("Failed to export Excel file. Please try again.");
@@ -715,7 +815,7 @@ export function Annex9SheetSuite({
                     className="apple-press text-xs border-minsu-green-700/80 text-minsu-green-700 hover:bg-minsu-green-50 shadow-xs"
                   >
                     <DollarSign className="w-3.5 h-3.5 mr-1" />
-                    Set All ₱7,500 ({formData.activeSemester === "1" ? "1st Sem" : "2nd Sem"})
+                    Set All ₱{(formData.stipendAmountPerScholar || 7500).toLocaleString()} ({formData.activeSemester === "1" ? "1st Sem" : "2nd Sem"})
                   </Button>
                   <Button
                     type="button"
@@ -729,13 +829,122 @@ export function Annex9SheetSuite({
                 </div>
               </div>
 
+              {/* Masterlist Scope Banner with Quick Rate Controls */}
+              <div className="bg-gradient-to-r from-minsu-green-50 via-emerald-50 to-teal-50/60 border border-minsu-green-200/90 rounded-2xl p-4 apple-shadow flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-minsu-green-700 text-white font-bold text-[11px] shadow-2xs">
+                    <Building className="w-3.5 h-3.5" />
+                    {formData.campus}
+                  </span>
+                  <span className="font-semibold text-ink font-mono text-xs">
+                    AY {formData.academicYear}
+                  </span>
+                  <span className="text-line-dark text-neutral-300">•</span>
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
+                    formData.activeSemester === "1"
+                      ? "bg-emerald-100 text-emerald-900 border-emerald-300"
+                      : "bg-blue-100 text-blue-900 border-blue-300"
+                  }`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                    {formData.activeSemester === "1" ? "1st Semester Active" : "2nd Semester Active"}
+                    {" — ₱"}{(formData.stipendAmountPerScholar || 7500).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-line-dark text-neutral-300">•</span>
+                  <span className="text-ink-muted text-[11px]">
+                    {formData.grantees.length} Beneficiaries on Roll
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 self-stretch md:self-auto justify-end">
+                  <span className="text-[11px] font-semibold text-ink-muted">Quick Rate:</span>
+                  <div className="inline-flex rounded-lg border border-line bg-white p-0.5 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => applyStipendAndSemester(formData.activeSemester, 7500, "7500")}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${
+                        formData.stipendTier === "7500"
+                          ? "bg-minsu-green-700 text-white shadow-2xs"
+                          : "text-ink hover:bg-neutral-100"
+                      }`}
+                    >
+                      ₱7,500
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyStipendAndSemester(formData.activeSemester, 10000, "10000")}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${
+                        formData.stipendTier === "10000"
+                          ? "bg-minsu-green-700 text-white shadow-2xs"
+                          : "text-ink hover:bg-neutral-100"
+                      }`}
+                    >
+                      ₱10,000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const amt = Number(customStipendInput) || 7500;
+                        applyStipendAndSemester(formData.activeSemester, amt, "custom");
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${
+                        formData.stipendTier === "custom"
+                          ? "bg-minsu-green-700 text-white shadow-2xs"
+                          : "text-ink hover:bg-neutral-100"
+                      }`}
+                    >
+                      Custom
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Batch Injection Dropdown Card */}
+              <div className="bg-white rounded-2xl border border-line p-4 apple-shadow flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-minsu-green-700" />
+                    <h4 className="text-xs font-bold text-minsu-green-900 uppercase tracking-wider">
+                      Inject Payroll Beneficiaries by Batch (Filtered to {formData.campus})
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-ink-muted">
+                    Populate stipend payroll directly from verified intake cohorts. Batches already on this payroll are guarded against duplicate addition.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  <div className="w-full md:w-80">
+                    <BatchSelectorDropdown
+                      selectedBatches={selectedBatchesToInject}
+                      onBatchesChange={setSelectedBatchesToInject}
+                      alreadyInjectedBatches={alreadyInjectedBatches}
+                      onInject={handleImportBatches}
+                      allowDirectAction={true}
+                      maxBatches={3}
+                      placeholder="Choose batch(es) to inject..."
+                    />
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleImportBatches(selectedBatchesToInject)}
+                    disabled={selectedBatchesToInject.length === 0 || isImporting}
+                    className="h-[42px] px-4 font-bold bg-minsu-green-700 hover:bg-minsu-green-600 text-white shadow-xs shrink-0 apple-press"
+                  >
+                    <Sparkles className={`w-4 h-4 mr-1.5 text-minsu-gold-400 ${isImporting ? "animate-spin" : ""}`} />
+                    {isImporting ? "Injecting..." : `Inject (${selectedBatchesToInject.length})`}
+                  </Button>
+                </div>
+              </div>
+
               {/* Editable Master Table */}
               <div className="bg-white rounded-2xl border border-line/80 shadow-xs overflow-hidden">
                 <div className="overflow-x-auto apple-scrollbar">
-                  <table className="w-full min-w-[1650px] text-xs text-left border-collapse">
+                  <table className="w-full min-w-[1780px] text-xs text-left border-collapse">
                     <thead className="bg-neutral-50/80 backdrop-blur-xs border-b border-line text-ink-muted text-[11px] font-semibold uppercase tracking-wider select-none">
                       <tr>
                         <th className="py-3 px-2 w-12 text-center">#</th>
+                        <th className="py-3 px-1.5 w-16 text-center">Batch</th>
+                        <th className="py-3 px-2 w-28 text-center">Campus</th>
                         <th className="py-3 px-2.5 w-40 min-w-[155px]">TDP Award No.</th>
                         <th className="py-3 px-2.5 w-32 min-w-[125px]">Student ID</th>
                         <th className="py-3 px-2.5 w-36 min-w-[140px]">Last Name</th>
@@ -744,13 +953,51 @@ export function Annex9SheetSuite({
                         <th className="py-3 px-2.5 min-w-[180px]">Degree Program</th>
                         <th className="py-3 px-1 w-14 text-center">Yr</th>
                         {/* Semester 1 */}
-                        <th className="py-3 px-2.5 w-36 min-w-[140px] text-right bg-emerald-50/50 text-emerald-800 border-l border-emerald-100">1st Sem (₱)</th>
-                        <th className="py-3 px-2.5 w-36 min-w-[140px] bg-emerald-50/50 text-emerald-800">1st Sem Date</th>
-                        <th className="py-3 px-2.5 w-32 min-w-[125px] bg-emerald-50/50 text-emerald-800 border-r border-emerald-100">1st Sem Sign</th>
+                        <th
+                          className={`py-3 px-2.5 w-36 min-w-[140px] text-right border-l ${
+                            formData.activeSemester === "1"
+                              ? "bg-emerald-100 text-emerald-950 font-bold border-emerald-400 border-l-2"
+                              : "bg-emerald-50/40 text-emerald-800/80 border-emerald-100"
+                          }`}
+                        >
+                          <div className="flex flex-col items-end">
+                            {formData.activeSemester === "1" && (
+                              <span className="text-[9px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-200/60 px-1.5 py-0.5 rounded-full mb-0.5">
+                                ● Active Payout
+                              </span>
+                            )}
+                            <span>1st Sem (₱)</span>
+                          </div>
+                        </th>
+                        <th className={`py-3 px-2.5 w-36 min-w-[140px] ${formData.activeSemester === "1" ? "bg-emerald-100 text-emerald-950 font-bold" : "bg-emerald-50/40 text-emerald-800/80"}`}>
+                          1st Sem Date
+                        </th>
+                        <th className={`py-3 px-2.5 w-32 min-w-[125px] border-r ${formData.activeSemester === "1" ? "bg-emerald-100 text-emerald-950 font-bold border-r-2 border-emerald-400" : "bg-emerald-50/40 text-emerald-800/80 border-emerald-100"}`}>
+                          1st Sem Sign
+                        </th>
                         {/* Semester 2 */}
-                        <th className="py-3 px-2.5 w-36 min-w-[140px] text-right bg-blue-50/50 text-blue-800 border-l border-blue-100">2nd Sem (₱)</th>
-                        <th className="py-3 px-2.5 w-36 min-w-[140px] bg-blue-50/50 text-blue-800">2nd Sem Date</th>
-                        <th className="py-3 px-2.5 w-32 min-w-[125px] bg-blue-50/50 text-blue-800 border-r border-blue-100">2nd Sem Sign</th>
+                        <th
+                          className={`py-3 px-2.5 w-36 min-w-[140px] text-right border-l ${
+                            formData.activeSemester === "2"
+                              ? "bg-blue-100 text-blue-950 font-bold border-blue-400 border-l-2"
+                              : "bg-blue-50/40 text-blue-800/80 border-blue-100"
+                          }`}
+                        >
+                          <div className="flex flex-col items-end">
+                            {formData.activeSemester === "2" && (
+                              <span className="text-[9px] font-extrabold uppercase tracking-wider text-blue-700 bg-blue-200/60 px-1.5 py-0.5 rounded-full mb-0.5">
+                                ● Active Payout
+                              </span>
+                            )}
+                            <span>2nd Sem (₱)</span>
+                          </div>
+                        </th>
+                        <th className={`py-3 px-2.5 w-36 min-w-[140px] ${formData.activeSemester === "2" ? "bg-blue-100 text-blue-950 font-bold" : "bg-blue-50/40 text-blue-800/80"}`}>
+                          2nd Sem Date
+                        </th>
+                        <th className={`py-3 px-2.5 w-32 min-w-[125px] border-r ${formData.activeSemester === "2" ? "bg-blue-100 text-blue-950 font-bold border-r-2 border-blue-400" : "bg-blue-50/40 text-blue-800/80 border-blue-100"}`}>
+                          2nd Sem Sign
+                        </th>
                         <th className="py-3 px-2 w-14 text-center">Action</th>
                       </tr>
                     </thead>
@@ -758,6 +1005,21 @@ export function Annex9SheetSuite({
                       {filteredGrantees.map((g, idx) => (
                         <tr key={g.id} className="group hover:bg-neutral-50/60 transition-colors duration-150">
                           <td className="py-2 px-2 text-center text-ink-muted/80 font-mono text-[11px]">{idx + 1}</td>
+                          <td className="py-1.5 px-1 text-center">
+                            <input
+                              type="text"
+                              value={g.batchNumber || "1"}
+                              onChange={(e) => handleGranteeChange(g.id, "batchNumber", e.target.value)}
+                              className="w-12 text-center py-1.5 px-1 text-xs font-bold font-mono rounded-lg border border-transparent hover:border-line/70 focus:border-minsu-green-700 bg-minsu-green-100/60 hover:bg-white focus:bg-white focus:ring-1 focus:ring-minsu-green-700 text-minsu-green-900 outline-none"
+                              title="Staff can override batch for this scholar (e.g. change to Batch 5)"
+                              placeholder="1"
+                            />
+                          </td>
+                          <td className="py-1.5 px-1.5 text-center">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-neutral-100 text-ink-muted border border-line truncate max-w-[110px]" title={g.campus || formData.campus}>
+                              {(g.campus || formData.campus).replace("Campus", "").replace("-", "").trim()}
+                            </span>
+                          </td>
                           <td className="py-1.5 px-2">
                             <input
                               type="text"
@@ -904,7 +1166,7 @@ export function Annex9SheetSuite({
                             <FileSpreadsheet className="w-8 h-8 mx-auto mb-2 text-neutral-300" />
                             <p className="font-medium text-sm">No grantee payroll records found</p>
                             <p className="text-xs text-ink-muted/80 mt-0.5">
-                              {searchTerm ? "Try adjusting your search criteria." : "Click 'Add Scholar Row' or 'Import from Billings' to populate."}
+                              {searchTerm ? "Try adjusting your search criteria." : "Select verified intake batch(es) above to inject payroll beneficiaries, or click 'Add Scholar Row'."}
                             </p>
                           </td>
                         </tr>
@@ -937,67 +1199,200 @@ export function Annex9SheetSuite({
 
           {/* TAB 2: Academic & Campus Parameters */}
           {workspaceTab === "parameters" && (
-            <div className="bg-white p-6 rounded-xl border border-line shadow-sm space-y-4">
-              <h3 className="text-sm font-bold text-ink">Academic Parameters & Campus Setting</h3>
+            <div className="bg-white p-6 rounded-2xl border border-line shadow-sm space-y-6">
+              <div>
+                <h3 className="text-sm font-bold text-ink">Academic Parameters & Campus Setting</h3>
+                <p className="text-xs text-ink-muted mt-0.5">
+                  Configure official campus, active semester payout tier, and HEI identification. Changes automatically synchronize throughout the payroll and sheet canvas.
+                </p>
+              </div>
+
+              {/* Stipend Rate Selector: 7500, 10000, Custom */}
+              <div className="p-4 rounded-xl border border-line bg-page/70 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <label className="block text-ink font-bold text-xs">
+                      Stipend Amount Per Scholar (PHP)
+                    </label>
+                    <p className="text-[11px] text-ink-muted">
+                      Select standard TDP tier or specify custom allocation. Switching reallocates stipends for all scholars on active semester.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-line shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomStipendInput("7500");
+                        applyStipendAndSemester(formData.activeSemester, 7500, "7500");
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                        formData.stipendTier === "7500"
+                          ? "bg-minsu-green-700 text-white shadow-2xs"
+                          : "text-ink hover:bg-neutral-100"
+                      }`}
+                    >
+                      {formData.stipendTier === "7500" && <Check className="w-3.5 h-3.5" />}
+                      ₱7,500
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomStipendInput("10000");
+                        applyStipendAndSemester(formData.activeSemester, 10000, "10000");
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                        formData.stipendTier === "10000"
+                          ? "bg-minsu-green-700 text-white shadow-2xs"
+                          : "text-ink hover:bg-neutral-100"
+                      }`}
+                    >
+                      {formData.stipendTier === "10000" && <Check className="w-3.5 h-3.5" />}
+                      ₱10,000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const amt = Number(customStipendInput) || 7500;
+                        applyStipendAndSemester(formData.activeSemester, amt, "custom");
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                        formData.stipendTier === "custom"
+                          ? "bg-minsu-green-700 text-white shadow-2xs"
+                          : "text-ink hover:bg-neutral-100"
+                      }`}
+                    >
+                      {formData.stipendTier === "custom" && <Check className="w-3.5 h-3.5" />}
+                      Custom
+                    </button>
+                  </div>
+                </div>
+
+                {formData.stipendTier === "custom" && (
+                  <div className="flex items-center gap-3 pt-3 border-t border-line/60">
+                    <label className="text-xs font-bold text-ink">Enter Custom Stipend Amount:</label>
+                    <div className="relative w-48">
+                      <span className="absolute left-3 top-2 text-xs font-mono font-bold text-ink-muted">₱</span>
+                      <input
+                        type="number"
+                        step="100"
+                        value={customStipendInput}
+                        onChange={(e) => {
+                          setCustomStipendInput(e.target.value);
+                          const val = Number(e.target.value) || 0;
+                          applyStipendAndSemester(formData.activeSemester, val, "custom");
+                        }}
+                        className="w-full pl-7 pr-3 py-1.5 text-xs font-mono font-bold rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700 bg-white"
+                        placeholder="e.g. 15000"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                 <div>
-                  <label className="block text-ink-muted mb-1 font-medium">Academic Year</label>
+                  <label className="block text-ink-muted mb-1 font-semibold">Academic Year</label>
                   <input
                     type="text"
                     value={formData.academicYear}
                     onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
-                    className="w-full p-2 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700 font-mono"
-                    placeholder="2023-2024"
+                    className="w-full p-2.5 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700 font-mono font-bold text-ink"
+                    placeholder="2024-2025"
                   />
+                  <p className="text-[11px] text-ink-muted mt-1">
+                    Affects official title, statement headers, and generated award numbers.
+                  </p>
                 </div>
+
                 <div>
-                  <label className="block text-ink-muted mb-1 font-medium">Active Semester Focus</label>
+                  <label className="block text-ink-muted mb-1 font-semibold">Active Semester Focus</label>
                   <select
                     value={formData.activeSemester}
-                    onChange={(e) => setFormData({ ...formData, activeSemester: e.target.value as "1" | "2" })}
-                    className="w-full p-2 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700 bg-white font-medium"
+                    onChange={(e) =>
+                      applyStipendAndSemester(
+                        e.target.value as "1" | "2",
+                        formData.stipendAmountPerScholar || 7500,
+                        formData.stipendTier || "7500"
+                      )
+                    }
+                    className="w-full p-2.5 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700 bg-white font-bold text-ink"
                   >
                     <option value="1">1st Semester (Default Payout Focus)</option>
                     <option value="2">2nd Semester (Default Payout Focus)</option>
                   </select>
+                  <p className="text-[11px] text-ink-muted mt-1">
+                    Switches stipend payout columns and masterlist highlights dynamically.
+                  </p>
                 </div>
+
                 <div>
-                  <label className="block text-ink-muted mb-1 font-medium">Campus Designation</label>
-                  <input
-                    type="text"
+                  <label className="block text-ink-muted mb-1 font-semibold">Designated Campus</label>
+                  <select
                     value={formData.campus}
-                    onChange={(e) => setFormData({ ...formData, campus: e.target.value })}
-                    className="w-full p-2 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700"
-                    placeholder="Main Campus - Victoria"
-                  />
+                    onChange={(e) => handleCampusChange(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700 bg-white font-bold text-ink"
+                  >
+                    {MINSU_CAMPUSES.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label} ({c.heiName})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-ink-muted mt-1">
+                    Auto-synchronizes official HEI Name, address, and scholar campus tags.
+                  </p>
                 </div>
+
                 <div>
-                  <label className="block text-ink-muted mb-1 font-medium">Payroll / Disbursement Date</label>
+                  <label className="block text-ink-muted mb-1 font-semibold">Payroll / Disbursement Date</label>
                   <input
                     type="text"
                     value={formData.payrollDate}
                     onChange={(e) => setFormData({ ...formData, payrollDate: e.target.value })}
-                    className="w-full p-2 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700"
+                    className="w-full p-2.5 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700"
                     placeholder="March 28, 2024"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-ink-muted mb-1 font-medium">HEI Official Name</label>
+                  <label className="block text-ink-muted mb-1 font-semibold">HEI Official Name</label>
                   <input
                     type="text"
                     value={formData.heiName}
                     onChange={(e) => setFormData({ ...formData, heiName: e.target.value })}
-                    className="w-full p-2 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700 font-semibold"
+                    className="w-full p-2.5 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700 font-semibold"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-ink-muted mb-1 font-medium">HEI Address</label>
+                  <label className="block text-ink-muted mb-1 font-semibold">HEI Address</label>
                   <input
                     type="text"
                     value={formData.heiAddress}
                     onChange={(e) => setFormData({ ...formData, heiAddress: e.target.value })}
-                    className="w-full p-2 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700"
+                    className="w-full p-2.5 rounded-lg border border-line focus:ring-2 focus:ring-minsu-green-700"
                   />
+                </div>
+              </div>
+
+              {/* Live Parameter Summary Card */}
+              <div className="p-4 rounded-xl border border-minsu-green-200 bg-minsu-green-50/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                <div className="space-y-1">
+                  <div className="font-bold text-minsu-green-950 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-minsu-green-700" />
+                    <span>Synchronized Target: {formData.heiName}</span>
+                  </div>
+                  <div className="text-minsu-green-800 text-[11px]">
+                    {formData.heiAddress} • AY {formData.academicYear} • {formData.activeSemester === "1" ? "1st" : "2nd"} Semester Focus
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-xs font-mono font-bold text-minsu-green-900">
+                    ₱{(formData.stipendAmountPerScholar || 7500).toLocaleString(undefined, { minimumFractionDigits: 2 })} / scholar
+                  </div>
+                  <div className="text-[10px] text-minsu-green-700 font-medium">
+                    {formData.grantees.length} scholars on roll
+                  </div>
                 </div>
               </div>
             </div>
@@ -1336,6 +1731,8 @@ export function Annex9SheetSuite({
         annexNumber={9}
         orientation={printOrientation}
         onOrientationChange={setPrintOrientation}
+        excelExportUrl={documentId ? `/api/annex-9/export-excel?documentId=${documentId}` : undefined}
+        excelExportLabel="Download Excel (.xlsx)"
         previewContent={
           <div className="text-black text-xs space-y-3">
             <div className="p-4 border border-dashed border-neutral-300 rounded bg-[#F1F8F1]">
