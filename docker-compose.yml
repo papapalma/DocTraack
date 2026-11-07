@@ -9,15 +9,15 @@ services:
     container_name: minsu_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 5mdb02f6
-      POSTGRES_DB: db_TDP
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-5mdb02f6}
+      POSTGRES_DB: ${POSTGRES_DB:-db_TDP}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d db_TDP" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-db_TDP}" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -36,7 +36,8 @@ services:
       target: migrator
     restart: "no"
     environment:
-      DATABASE_URL: postgresql://postgres:5mdb02f6@db:5432/db_TDP?schema=public
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-5mdb02f6}@db:5432/${POSTGRES_DB:-db_TDP}?schema=public}
+      FORCE_SEED: ${FORCE_SEED:-false}
     depends_on:
       db:
         condition: service_healthy
@@ -54,11 +55,11 @@ services:
       target: runner
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://postgres:5mdb02f6@db:5432/db_TDP?schema=public
-      SESSION_SECRET: minsu_doctrack_secure_session_secret_2026
-      NEXT_PUBLIC_APP_NAME: MinSU DocTrack
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-5mdb02f6}@db:5432/${POSTGRES_DB:-db_TDP}?schema=public}
+      SESSION_SECRET: ${SESSION_SECRET:-minsu_doctrack_secure_session_secret_2026}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-MinSU DocTrack}
       NODE_ENV: production
       PORT: 3000
     depends_on:
@@ -67,15 +68,21 @@ services:
       db-init:
         condition: service_completed_successfully
     volumes:
-      - uploads_data:/app/public/uploads
+      - storage_data:/app/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks:
       - minsu_network
 
 volumes:
   db_data:
     name: minsu_db_data
-  uploads_data:
-    name: minsu_uploads_data
+  storage_data:
+    name: minsu_storage_data
 
 networks:
   minsu_network:

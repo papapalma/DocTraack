@@ -4,6 +4,7 @@
 .gitnexus
 .agents
 .claude
+.gemini
 
 # Dependencies and build caches
 node_modules
@@ -30,6 +31,7 @@ dist
 *.pem
 .vscode
 .idea
+.docker-temp
 
 # Documentation & Markdown
 *.md

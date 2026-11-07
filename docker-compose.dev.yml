@@ -12,9 +12,9 @@ services:
       target: deps
     command: sh -c "npx prisma generate && npm run dev"
     environment:
-      DATABASE_URL: postgresql://postgres:5mdb02f6@db:5432/db_TDP?schema=public
-      SESSION_SECRET: minsu_doctrack_secure_session_secret_2026
-      NEXT_PUBLIC_APP_NAME: MinSU DocTrack
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-5mdb02f6}@db:5432/${POSTGRES_DB:-db_TDP}?schema=public}
+      SESSION_SECRET: ${SESSION_SECRET:-minsu_doctrack_secure_session_secret_2026}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-MinSU DocTrack}
       NODE_ENV: development
       HOSTNAME: "0.0.0.0"
       PORT: "3000"
@@ -22,4 +22,3 @@ services:
       - .:/app
       - /app/node_modules
       - /app/.next
-      - uploads_data:/app/public/uploads
