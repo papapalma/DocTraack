@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-The Component Diagram shows the software components, provided interfaces, and required dependencies within the administrative subsystem.
+The Component Diagram shows the software components, provided interfaces, and required dependencies within the administrative subsystem, covering user governance, 2FA management, audit log forensics, Landing Page CMS, branding, and rate limiting controls.
 
 ---
 
@@ -24,61 +24,76 @@ flowchart LR
     subgraph PRESENTATION["Presentation Layer"]
         UsersUI["<<component>><br/>Users Management View"]:::compStyle
         AuditUI["<<component>><br/>Audit Log Explorer View"]:::compStyle
-        CMSUI["<<component>><br/>Landing Page Editor View"]:::compStyle
+        CMSUI["<<component>><br/>Landing Page CMS View"]:::compStyle
+        BrandingUI["<<component>><br/>Branding & Logos View"]:::compStyle
+        AnnounceUI["<<component>><br/>System Announcements View"]:::compStyle
     end
 
     subgraph SECURITY["Security Layer"]
         RBACFilter["<<component>><br/>Admin RBAC Guard"]:::compStyle
         BcryptModule["<<component>><br/>Bcrypt Password Hasher"]:::compStyle
+        RateLimiter["<<component>><br/>Anti-Brute-Force Rate Limiter"]:::compStyle
     end
 
     subgraph BUSINESS["Admin Domain Services"]
         UserService["<<component>><br/>User Account Service"]:::compStyle
-        AuditService["<<component>><br/>Audit Logging Service"]:::compStyle
-        CMSService["<<component>><br/>CMS Publishing Service"]:::compStyle
+        AuditService["<<component>><br/>Audit Forensics Service"]:::compStyle
+        CMSService["<<component>><br/>Landing CMS Publishing Service"]:::compStyle
+        BrandingService["<<component>><br/>Institutional Branding Service"]:::compStyle
+        AnnounceService["<<component>><br/>Announcement Service"]:::compStyle
     end
 
     subgraph DATA["Data Access"]
-        PrismaClient["<<component>><br/>Prisma ORM Adapter"]:::dataComp
+        PrismaClient["<<component>><br/>Prisma ORM Client"]:::dataComp
+        DiskStorage["<<component>><br/>Local Disk Volume (/uploads)"]:::dataComp
     end
 
     %% Interfaces
-    IAdminAuth(["IAdminAuth"]):::ifaceStyle
-    IUserCRUD(["IUserCRUD"]):::ifaceStyle
-    IAuditLog(["IAuditLog"]):::ifaceStyle
-    ICMSPublish(["ICMSPublish"]):::ifaceStyle
-    IPassword(["IPasswordHash"]):::ifaceStyle
+    IAdminAuth(["IAdminAuthGuard"]):::ifaceStyle
+    IUserCRUD(["IUserOperations"]):::ifaceStyle
+    IAuditLog(["IAuditForensics"]):::ifaceStyle
+    ICMSPublish(["ICMSPublishing"]):::ifaceStyle
+    IBranding(["IBrandingOperations"]):::ifaceStyle
+    IRateLimit(["IRateLimitControls"]):::ifaceStyle
     IData(["IDataAccess"]):::ifaceStyle
 
-    %% Connections
+    %% Presentation to Security
     UsersUI --> IAdminAuth
-    UsersUI --> IUserCRUD
-    AuditUI --> IAuditLog
-    CMSUI --> ICMSPublish
+    AuditUI --> IAdminAuth
+    CMSUI --> IAdminAuth
+    BrandingUI --> IAdminAuth
 
-    RBACFilter -- provides --> IAdminAuth
-    UserService -- provides --> IUserCRUD
-    AuditService -- provides --> IAuditLog
-    CMSService -- provides --> ICMSPublish
-    BcryptModule -- provides --> IPassword
+    IAdminAuth --> RBACFilter
+    RBACFilter --> UserService
+    RBACFilter --> AuditService
+    RBACFilter --> CMSService
+    RBACFilter --> BrandingService
+    RBACFilter --> RateLimiter
 
-    UserService --> IPassword
-    UserService --> IAuditLog
+    %% Services to Interfaces
+    UserService --> IUserCRUD
+    AuditService --> IAuditLog
+    CMSService --> ICMSPublish
+    BrandingService --> IBranding
+    RateLimiter --> IRateLimit
+
+    UserService --> BcryptModule
     UserService --> IData
     AuditService --> IData
     CMSService --> IData
-    CMSService --> IAuditLog
+    BrandingService --> IData
+    AnnounceService --> IData
 
-    PrismaClient -- provides --> IData
+    IData --> PrismaClient
+    BrandingService --> DiskStorage
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Comp["<<component>><br/>Software Subsystem"]:::compStyle
-        L_Iface(["(Iface): Interface Contract"]):::ifaceStyle
-        L_Data["<<component>><br/>Persistence Adapter"]:::dataComp
-        L_Comp -- "depends on" --> L_Iface
-        L_Data -- "provides" --> L_Iface
+        L_Comp["[Component Box]: Software Module"]:::compStyle
+        L_Iface(["(Round Pin): Provided Interface"]):::ifaceStyle
+        L_Data["[Gold Box]: Data Store / Storage"]:::dataComp
+        L_Comp --> L_Iface --> L_Data
     end
 ```
 
@@ -86,80 +101,19 @@ flowchart LR
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | Technical Role | MinSU Architecture Mapping |
+| Visual Symbol | Syntax / Style | UML Component Meaning | MinSU Implementation |
 |---|---|---|---|
-| `<<component>>` Box | `fill:#FFFFFF, stroke:#1B5E20` | Architectural subsystem or service module | Views, Controllers, Auth Services, Document Engines |
-| `([Interface Circle])` | `fill:#DCEFDD, stroke:#123F17` | Provided / Required Interface Contract | `IAuthSession`, `IRBACGuard`, `IDocumentWorkflow`, `IDataAccess` |
-| 🟨 Data Component | `fill:#FFF1C2, stroke:#F2B705` | Persistence & Storage adapter component | Prisma ORM Client, Local Storage Volume, Google Drive Client |
-| `-->` Solid Arrow | Dependency / Consumer | Module calls or requires the interface | View components requiring workflow and auth interfaces |
-| `-- provides -->` | Realization / Provider | Module implements or provides the interface | Service layer realizing database or workflow contracts |
-| Boundary Subgraph | `subgraph LAYER` | Architectural tier / layer grouping | Presentation, Security, Domain Logic, and Persistence Layers |
-
+| `[Component]` | `["<<component>>\nName"]` | Autonomous modular unit with internal logic | User Account Service, CMS Service, Rate Limiter |
+| `(Interface)` | `(["IName"])` | Formal contract or API boundary | `IUserOperations`, `IAuditForensics`, `ICMSPublishing` |
+| `Solid Arrow` | `-->` | Direct dependency or invocation | Views invoke domain operations through guarded interfaces |
+| `Data Component` | Gold Tone `#FFF1C2` | Persistence or storage component | Prisma client and uploaded logo storage volume |
 
 ---
 
-## 4. PlantUML Component Diagram
+## 4. Component Responsibilities
 
-```plantuml
-@startuml
-skinparam componentStyle uml2
-skinparam backgroundColor #FFFFFF
-skinparam componentBackgroundColor #F1F8F1
-skinparam componentBorderColor #1B5E20
-skinparam interfaceBackgroundColor #DCEFDD
-
-package "Admin Views" {
-  [Users View] as UsersUI
-  [Audit Log View] as AuditUI
-  [CMS Editor View] as CMSUI
-}
-
-package "Security Module" {
-  [Admin RBAC Guard] as RBAC
-  [Bcrypt Hasher] as Crypto
-  interface "IAdminGuard" as IGuard
-  interface "IHasher" as IHash
-}
-
-package "Admin Services" {
-  [User Account Service] as UserSvc
-  [Audit Service] as AuditSvc
-  [CMS Service] as CMSSvc
-  interface "IUserOps" as IUser
-  interface "IAuditOps" as IAudit
-  interface "ICMSOps" as ICMS
-}
-
-package "Persistence" {
-  [Prisma DB Adapter] as Prisma
-  interface "IDBAccess" as IDB
-}
-
-RBAC - IGuard
-Crypto - IHash
-UserSvc - IUser
-AuditSvc - IAudit
-CMSSvc - ICMS
-Prisma - IDB
-
-UsersUI ..> IGuard
-UsersUI ..> IUser
-AuditUI ..> IAudit
-CMSUI ..> ICMS
-
-UserSvc ..> IHash
-UserSvc ..> IAudit
-UserSvc ..> IDB
-CMSSvc ..> IDB
-AuditSvc ..> IDB
-
-@enduml
-```
-
----
-
-## 5. Component Rules
-
-- The `Admin RBAC Guard` checks that the user role equals `SYSTEM_ADMIN` before routing to business services.
-- The `User Account Service` depends on `Bcrypt Hasher` for credential encryption.
-- All mutating admin operations invoke `Audit Logging Service`.
+- **Users Management View (`UsersUI`)**: Renders active accounts, role assignment modals, and 2FA reset tools.
+- **Audit Forensics Service (`AuditService`)**: Ingests chronological security logs and streams forensic CSV exports.
+- **Landing CMS Publishing Service (`CMSService`)**: Manages draft and published landing sections with split-screen live preview.
+- **Institutional Branding Service (`BrandingService`)**: Validates SVG/PNG logo uploads and updates global headers.
+- **Anti-Brute-Force Rate Limiter (`RateLimiter`)**: Tracks failed IP attempts and allows global override toggling.

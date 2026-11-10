@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-The Deployment Diagram shows where software artifacts run on hardware and container nodes. It shows ports, runtimes, and storage volumes.
+The Deployment Diagram shows where software artifacts run on hardware and container nodes. It shows ports, runtimes, container configurations, and persistent storage volumes.
 
 ---
 
@@ -25,57 +25,52 @@ flowchart TB
 
     subgraph CLIENT_DEVICE["<<device>> Client Workstation / Mobile Phone"]
         subgraph WEB_BROWSER["<<executionEnvironment>> Web Browser (Chrome / Safari / Firefox)"]
-            SPA_ARTIFACT["<<artifact>><br/>React Client Bundle<br/>(HTML5 / CSS3 / ES2024)"]:::artifactStyle
+            SPA_ARTIFACT["<<artifact>><br/>React Server / Client Bundle<br/>(Tailwind / Radix / ES2024)"]:::artifactStyle
         end
     end
 
-    subgraph DOCKER_HOST["<<device>> University Application Server (Ubuntu Linux 24.04 LTS)"]
+    subgraph DOCKER_HOST["<<device>> University Application Server (Ubuntu Linux / Host OS)"]
         subgraph DOCKER_ENGINE["<<executionEnvironment>> Docker Engine & Compose"]
 
-            subgraph REVERSE_PROXY_CONTAINER["<<node>> Container: reverse-proxy"]
-                NGINX_RUNTIME["<<executionEnvironment>> Nginx 1.25 Alpine"]:::runtimeNode
-                NGINX_CONF["<<artifact>> nginx.conf"]:::artifactStyle
+            subgraph NEXTJS_CONTAINER["<<node>> Container: app (minsu_app)"]
+                NODE_RUNTIME["<<executionEnvironment>> Node.js 20/24 Standalone Runner"]:::runtimeNode
+                SERVER_ARTIFACT["<<artifact>> Next.js Standalone Build (.next/standalone)"]:::artifactStyle
+                PRISMA_CLIENT["<<artifact>> Prisma 6 Client Engine"]:::artifactStyle
+                EXCEL_ARTIFACT["<<artifact>> ExcelJS & Docx Generator Engines"]:::artifactStyle
             end
 
-            subgraph NEXTJS_CONTAINER["<<node>> Container: web-application"]
-                NODE_RUNTIME["<<executionEnvironment>> Node.js 20 LTS Runtime"]:::runtimeNode
-                CHROMIUM_BIN["<<executionEnvironment>> Headless Chromium (Puppeteer)"]:::runtimeNode
-                SERVER_ARTIFACT["<<artifact>> Next.js Standalone Server (.next/standalone)"]:::artifactStyle
-                PRISMA_CLIENT["<<artifact>> @prisma/client Engine (.prisma/client)"]:::artifactStyle
+            subgraph DB_INIT_CONTAINER["<<node>> Ephemeral Container: db-init"]
+                MIGRATE_RUNTIME["<<executionEnvironment>> Prisma DB Push & Seed Script"]:::runtimeNode
             end
 
-            subgraph POSTGRES_CONTAINER["<<node>> Container: postgres-database"]
-                PG_ENGINE["<<executionEnvironment>> PostgreSQL 16 Alpine Server"]:::dbNode
-                DATA_DIR["<<artifact>> /var/lib/postgresql/data (WAL & Tables)"]:::artifactStyle
+            subgraph POSTGRES_CONTAINER["<<node>> Container: postgres (minsu_postgres)"]
+                PG_ENGINE["<<executionEnvironment>> PostgreSQL 16 Alpine Server (Port 5432)"]:::dbNode
+                DATA_DIR["<<artifact>> /var/lib/postgresql/data"]:::artifactStyle
             end
 
         end
 
-        subgraph PERSISTENT_VOLUMES["<<storage>> Host Mounted Storage"]
-            UPLOADS_VOL["Volume: ./uploads<br/>(Signed PDF Scans)"]:::deviceNode
-            PG_DATA_VOL["Volume: pgdata<br/>(PostgreSQL DB Files)"]:::deviceNode
+        subgraph PERSISTENT_VOLUMES["<<storage>> Docker Named Volumes"]
+            PG_DATA_VOL["Volume: minsu_db_data<br/>(PostgreSQL Relational DB Files)"]:::deviceNode
+            UPLOADS_VOL["Volume: minsu_uploads_data<br/>(Scans, Logos & Landing Media)"]:::deviceNode
         end
     end
 
     %% Network Connections
-    SPA_ARTIFACT -->|HTTPS (TLS 1.3) / Port 443| NGINX_RUNTIME
-    NGINX_RUNTIME -->|HTTP / Port 3000| SERVER_ARTIFACT
-    SERVER_ARTIFACT --> CHROMIUM_BIN
-    SERVER_ARTIFACT --> PRISMA_CLIENT
-    PRISMA_CLIENT -->|TCP / Port 5432 (Internal Network)| PG_ENGINE
-    PG_ENGINE --> DATA_DIR
-    DATA_DIR -.->|bind mount| PG_DATA_VOL
-    SERVER_ARTIFACT -.->|read / write file stream| UPLOADS_VOL
+    WEB_BROWSER -->|HTTPS / Port 443 -> 3000| NEXTJS_CONTAINER
+    DB_INIT_CONTAINER -->|Prisma Schema Push / Port 5432| POSTGRES_CONTAINER
+    NEXTJS_CONTAINER -->|TCP Connection Pool / Port 5432| POSTGRES_CONTAINER
+    NEXTJS_CONTAINER -->|Read / Write Storage| UPLOADS_VOL
+    POSTGRES_CONTAINER -->|Persistent Disk Mount| PG_DATA_VOL
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Dev["<<device>> Physical / Virtual Server"]:::deviceNode
-        L_Env["<<executionEnvironment>> Runtime Engine"]:::runtimeNode
-        L_Art["<<artifact>> Software Executable / Bundle"]:::artifactStyle
-        L_Db["<<executionEnvironment>> PostgreSQL Database"]:::dbNode
-        L_Art -->|Network Protocol & Port| L_Env
-        L_Env -.->|File Mount / Binding| L_Dev
+        L_Device["<<device>>: Physical/Virtual Host"]:::deviceNode
+        L_Node["<<node>>: Docker Container Instance"]:::dockerNode
+        L_Runtime["<<executionEnvironment>>: Runtime Engine"]:::runtimeNode
+        L_Artifact["<<artifact>>: Software Deployment Package"]:::artifactStyle
+        L_Device --> L_Node
     end
 ```
 
@@ -83,15 +78,13 @@ flowchart TB
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | UML Deployment Role | MinSU Infrastructure Context |
-|---|---|---|---|
-| `<<device>>` Box | `fill:#F6F8F6, stroke:#1B5E20` | Physical hardware or operating system host | Client Workstation, Ubuntu Linux Server |
-| `<<node>>` Container | `fill:#F1F8F1, stroke:#164D1C` | Isolated containerized execution node | Docker containers: `reverse-proxy`, `web-application`, `postgres-database` |
-| `<<executionEnvironment>>` | `fill:#FFFFFF, stroke:#2E7D32` | Application runtime or software engine | Node.js 20 LTS, Nginx 1.25 Alpine, Headless Chromium |
-| `<<artifact>>` | `fill:#DCEFDD, stroke:#1B5E20` | Packaged deployable binary or file | Next.js standalone build, Prisma engine, `nginx.conf` |
-| 🟨 Database Engine | `fill:#FFF1C2, stroke:#F2B705` | Relational database runtime | PostgreSQL 16 Alpine Server |
-| `-->` Solid Arrow | Network Communication Link | Transport protocol and network port | Port 443 (HTTPS), Port 3000 (Internal HTTP), Port 5432 (Internal TCP) |
-| `-.->` Dashed Arrow | Storage Mount / Stream | Host volume bind mount or disk I/O | `./uploads` (Signed PDF scans) and `pgdata` (PostgreSQL WAL files) |
+| Visual Symbol | UML Deployment Concept | MinSU System Implementation |
+|---|---|---|
+| `<<device>>` | Hardware or Virtual Host | Client browser device, Docker Host server |
+| `<<node>>` | Execution Node | Docker containers: `app`, `postgres`, `db-init` |
+| `<<executionEnvironment>>` | Software Runtime | Node.js standalone runtime, PostgreSQL 16 Alpine |
+| `<<artifact>>` | Compiled Binary or Package | Next.js standalone bundle, Prisma 6 client, ExcelJS exporter |
+| `<<storage>>` | Persistent Storage Volume | `minsu_db_data`, `minsu_uploads_data` |
 
 ---
 
@@ -99,59 +92,38 @@ flowchart TB
 
 ```plantuml
 @startuml
-skinparam roundcorner 8
-skinparam BoxPadding 10
-skinparam defaultFontName Arial
-skinparam nodeBackgroundColor #F1F8F1
+skinparam nodeBackgroundColor #F6F8F6
 skinparam nodeBorderColor #1B5E20
-skinparam artifactBackgroundColor #DCEFDD
 
-node "Client Device" <<device>> as client {
-  node "Modern Browser" <<executionEnvironment>> {
-    artifact "React Client Bundle" <<artifact>> as clientBundle
-  }
+node "Client Device" as Client {
+  artifact "Browser Web Bundle" as Bundle
 }
 
-node "MinSU Server Host (Ubuntu 24.04)" <<device>> as server {
-  node "Docker Host Engine" <<executionEnvironment>> {
-    node "reverse-proxy (Nginx)" <<node>> as proxy {
-      artifact "nginx.conf" <<artifact>>
+node "MinSU Application Server" as Server {
+  node "Docker Host" {
+    node "minsu_app Container" as App {
+      artifact "Next.js Standalone Runner"
+      artifact "Prisma 6 Client"
+      artifact "ExcelJS Exporter"
     }
-    
-    node "web-app (Next.js 15+)" <<node>> as webapp {
-      node "Node.js 20 LTS" <<executionEnvironment>> {
-        artifact "Standalone Server Bundle" <<artifact>> as serverBundle
-        artifact "Prisma Client Engine" <<artifact>> as prismaEngine
-      }
-      node "Headless Chromium" <<executionEnvironment>> as chromium
+
+    node "db-init Ephemeral Container" as DBInit {
+      artifact "Prisma DB Push & Seed"
     }
-    
-    node "db (PostgreSQL 16)" <<node>> as dbContainer {
-      node "PostgreSQL 16 Engine" <<executionEnvironment>> as pgEngine
+
+    node "minsu_postgres Container" as Postgres {
+      artifact "PostgreSQL 16 Engine"
     }
   }
-  
-  database "Storage: /uploads" as uploadStorage
-  database "Storage: pgdata" as pgStorage
+
+  storage "minsu_db_data Volume" as DBVol
+  storage "minsu_uploads_data Volume" as UploadVol
 }
 
-clientBundle --> proxy : "HTTPS (TLS 1.3) : 443"
-proxy --> serverBundle : "HTTP : 3000"
-serverBundle --> chromium : "DevTools Protocol"
-serverBundle --> prismaEngine : "Internal Function Call"
-prismaEngine --> pgEngine : "TCP : 5432"
-serverBundle ..> uploadStorage : "File I/O"
-pgEngine ..> pgStorage : "File I/O"
-
+Client --> App : HTTP Port 3000
+DBInit --> Postgres : Port 5432
+App --> Postgres : TCP Connection Pool
+App --> UploadVol : File I/O
+Postgres --> DBVol : Data Persistence
 @enduml
 ```
-
----
-
-## 5. Node Specifications
-
-- **Client Device**: Runs modern web browsers. Receives static assets and executes React components.
-- **reverse-proxy**: Terminates TLS encryption and directs incoming web traffic to container port 3000.
-- **web-app**: Executes server components, route handlers, Puppeteer PDF jobs, and Prisma queries.
-- **db**: Houses user credentials, document metadata, audit records, and notification models.
-- **Storage Volumes**: Preserves signed physical scans and database files on host storage.

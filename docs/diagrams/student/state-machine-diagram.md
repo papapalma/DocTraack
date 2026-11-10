@@ -2,14 +2,14 @@
 
 > **Role:** `STUDENT`  
 > **Diagram Type:** State Machine Diagram  
-> **Entity:** `Application`  
+> **Entity:** `Application` & `Registration`  
 > **Standard:** UML 2.5 State Machine Specification
 
 ---
 
 ## 1. Purpose
 
-The State Machine Diagram shows the evaluation states of a student's scholarship application, from initial submission to final acceptance or rejection.
+The State Machine Diagram shows the complete lifecycle of a student's scholarship application and registration profile. It details the progression from initial online submission, staff evaluation, binary eligibility decisions, and permanent identity locking under RA 10173.
 
 ---
 
@@ -17,26 +17,30 @@ The State Machine Diagram shows the evaluation states of a student's scholarship
 
 ```mermaid
 stateDiagram-v2
-    [*] --> SUBMITTED : submitOnline() [form valid & files uploaded]
+    [*] --> DRAFT : startApplication() [active call open]
+    DRAFT --> SUBMITTED : submitOnline() [form valid & files uploaded]
 
-    SUBMITTED --> UNDER_REVIEW : beginEvaluation() [staff opens student documents]
+    SUBMITTED --> UNDER_REVIEW : beginEvaluation() [staff opens student records]
 
-    UNDER_REVIEW --> ACCEPTED : acceptGrantee() [meets GPA & indigency criteria]
-    UNDER_REVIEW --> REJECTED : rejectApplication() [fails eligibility or missing proofs]
+    state check_eligibility <<choice>>
+    UNDER_REVIEW --> check_eligibility : evaluateCriteria()
 
-    ACCEPTED --> [*]
+    check_eligibility --> ACCEPTED : [Meets TDP Criteria? -- Yes]
+    check_eligibility --> REJECTED : [Meets TDP Criteria? -- No]
+
+    ACCEPTED --> PROFILE_LOCKED : lockIdentity() [RA 10173 permanent lock]
+    PROFILE_LOCKED --> [*]
     REJECTED --> [*]
 
     %% ─── 📌 VISUAL LEGEND ───
-    note right of SystemInitialized
+    note right of UNDER_REVIEW
         <b>📌 DIAGRAM LEGEND</b>
         ● [*] : Initial / Terminal Boundary
         [StateName] : Active Lifecycle Status
+        <<choice>> : Binary Decision (Yes / No)
         --> : Trigger Event Transition
-        [guard] : Mandatory Guard Rule
-        -- : Orthogonal Region Split
+        [guard] : Mandatory Guard Condition
     end note
-
 ```
 
 ---
@@ -45,29 +49,31 @@ stateDiagram-v2
 
 | Visual Symbol / Syntax | UML State Machine Concept | Technical Meaning | MinSU Document & Student Lifecycle |
 |---|---|---|---|
-| `● [*]` | Initial State Node | Point of entry into a lifecycle region | Annex creation begins or student application submitted |
-| `◎ [*]` | Terminal State Node | Final conclusion of lifecycle | Document permanently archived or student awarded/disqualified |
-| `state "Name"` | Composite State | Container holding nested sub-states | Draft, Submitted, Approved, Returned, Under Review |
-| `-->` | Transition Arrow | Movement from one state to another triggered by an event | Director Opens, Author Re-edits, 1-Click Approve |
-| `[guardCondition]` | Transition Guard | Boolean condition that must evaluate to TRUE | `[zeroVariance]`, `[directorSignatureVerified]`, `[scannedPdfAttached]` |
-| `--` | Concurrent Regions | Orthogonal regions running in parallel | Document Lifecycle runs concurrently with Student Application Lifecycle |
-
+| `● [*]` | Initial State Node | Point of entry into application lifecycle | Student initiates dynamic application form |
+| `◎ [*]` | Terminal State Node | Final conclusion of application lifecycle | Record locked as active scholar or archived upon rejection |
+| `state Name` | Core State | Active lifecycle state in database | `DRAFT`, `SUBMITTED`, `UNDER_REVIEW`, `ACCEPTED`, `PROFILE_LOCKED` |
+| `<<choice>>` | Choice Pseudostate | Dynamic runtime branch evaluating conditions | Binary branch evaluating student qualifications (`Yes` / `No`) |
+| `-->` | Transition Arrow | State change triggered by event or action | Student submits, coordinator evaluates, system locks identity |
+| `[guardCondition]` | Transition Guard | Boolean condition that must evaluate to TRUE | `[form valid]`, `[Meets TDP Criteria? -- Yes]`, `[RA 10173 lock]` |
 
 ---
 
 ## 4. State Definitions & Transitions
 
-| State | Student Portal Display | Description & Staff Permissions |
-|---|---|---|
-| `SUBMITTED` | "Application Received" (Blue) | Application stored in database. Staff has not opened review modal. |
-| `UNDER_REVIEW` | "Evaluation in Progress" (Gold) | Staff coordinator is verifying attached grades and COR files. |
-| `ACCEPTED` | "Congratulations! Qualified Grantee" (Green) | Grantee approved for inclusion in official Annex 1 master roster. |
-| `REJECTED` | "Application Unsuccessful" (Red) | Student does not meet academic or socio-economic criteria. Feedback provided. |
+| State | Portal Visual Badge | Allowed Actions & Trigger | Next State |
+|---|---|---|---|
+| `DRAFT` | "In Progress" (Gray) | Student edits demographics, uploads proofs, or saves draft. | `SUBMITTED` |
+| `SUBMITTED` | "Application Received" (Blue) | System assigns tracking code (`TDP-YYYY-XXXX`). Staff queued. | `UNDER_REVIEW` |
+| `UNDER_REVIEW` | "Under Evaluation" (Gold) | Coordinator verifies grades, COR, and runs 3-way verification. | `check_eligibility` |
+| `check_eligibility` | N/A (Choice Diamond) | Coordinator determines if student satisfies academic and indigency standards. | `ACCEPTED` (Yes) / `REJECTED` (No) |
+| `ACCEPTED` | "Official Grantee" (Green) | Included in Annex 1 masterlist and Annex 10 Notice of Awards. | `PROFILE_LOCKED` |
+| `PROFILE_LOCKED` | "Verified Scholar" (Dark Green) | Student ID and Name permanently locked from editing; GWA editable. | Terminal `[*]` |
+| `REJECTED` | "Application Unsuccessful" (Red) | Feedback comments provided; student notified via portal inquiry. | Terminal `[*]` |
 
 ---
 
-## 5. STE Rules Applied
+## 5. Technical Specifications & Integrity Rules
 
-- State names use past participles (for example, `Submitted`, `Accepted`).
-- Transitions have event labels and guard conditions.
-- Each terminal state connects cleanly to a final node.
+- **Binary Decision Strictness**: The evaluation choice pseudostate branches strictly into `[Meets TDP Criteria? -- Yes]` and `[Meets TDP Criteria? -- No]`.
+- **Identity Lock Automation**: Moving to `ACCEPTED` triggers `ProfileLockController`, setting `identityLocked = true` on the student registration record.
+- **Audit Logging**: Every transition between states executes `logAudit()` with actor ID, timestamp, and previous/new state values.

@@ -1,14 +1,14 @@
 # Accounting Officer — System Architecture Diagram
 
-> **Role:** `ACCOUNTING`  
+> **Role:** `ACCOUNTING_OFFICER`  
 > **Diagram Type:** System Architecture Diagram  
-> **Focus:** Financial Subsystem, Bank Reconciliations, and Disbursement Audits
+> **Focus:** Financial Subsystem, Zero-Variance Balancing, ExcelJS Exports & Bank Reconciliations
 
 ---
 
 ## 1. Purpose
 
-The System Architecture Diagram shows the financial subsystem used by the Accounting Officer to compile Annexes 6, 7, 8, and 9, verify LandBank account debits, and enforce zero-variance reconciliation.
+The System Architecture Diagram shows the multi-tier architecture used by the Accounting Officer, including financial ledger views, edge authorization, zero-variance math engines, native ExcelJS workbook generators, and PostgreSQL storage.
 
 ---
 
@@ -24,24 +24,26 @@ flowchart TB
     classDef bankStyle fill:#F6F8F6,stroke:#55645B,stroke-width:2px,stroke-dasharray: 5 5,color:#1F2A24;
 
     subgraph CLIENT_TIER["Accounting Client Tier"]
-        AccountingBrowser["Accounting Officer<br/>(Desktop Browser /documents)"]:::clientStyle
+        AccountingBrowser["Accounting Officer Workstation<br/>• /documents (Annexes 6, 7, 8, 9)<br/>• Real-Time Ledger Tables<br/>• Zero-Variance Status Pill"]:::clientStyle
     end
 
     subgraph EDGE_TIER["Edge Security & Routing"]
-        NginxProxy["Reverse Proxy / Nginx"]:::edgeStyle
-        AccountingRBAC["Accounting Guard<br/>(Verifies role in [ACCOUNTING, STAFF])"]:::edgeStyle
+        NginxProxy["Reverse Proxy / Nginx<br/>(TLS 1.3 Termination & Port 443)"]:::edgeStyle
+        AccountingRBAC["Accounting RBAC Guard<br/>(Verifies role == ACCOUNTING_OFFICER)"]:::edgeStyle
     end
 
     subgraph APP_TIER["Financial Subsystem Layer"]
-        PayrollCompiler["Beneficiary Payroll Compiler<br/>(Annex 9 Stipend Aggregator)"]:::appStyle
+        PayrollCompiler["Beneficiary Payroll Compiler<br/>(Annex 9 Stipend Tier Aggregator)"]:::appStyle
         FundUtilizationEngine["Fund Utilization Engine<br/>(Annex 6 Allocation Reconciliation)"]:::appStyle
         DebitRegisterEngine["Advice to Debit Engine<br/>(Annex 7 ADA Account Verification)"]:::appStyle
         ChecksRegisterEngine["Checks Issued Manager<br/>(Annex 8 Check Serial Registry)"]:::appStyle
-        CurrencyValidator["Currency & Math Validator<br/>(PHP ₱#,##0.00 Precision Engine)"]:::appStyle
+        ZeroVarianceEngine["Zero-Variance Engine<br/>(0.00 PHP Balance Assertion)"]:::appStyle
+        ExcelExportEngine["Native ExcelJS Exporter<br/>(Multi-Tab Workbooks & Formulas)"]:::appStyle
     end
 
     subgraph DATA_TIER["Data Persistence Tier"]
-        PostgresDB[("PostgreSQL Database<br/>(documents, annex_types, status_history)")]:::dataStyle
+        PostgresDB[("PostgreSQL Database<br/>(documents, status_history, audit_log)")]:::dataStyle
+        UploadsStorage[("Local Disk Storage Volume<br/>(/uploads/scans/financial/)")]:::dataStyle
     end
 
     subgraph EXTERNAL_TIER["External Financial Institutions"]
@@ -56,30 +58,25 @@ flowchart TB
     AccountingRBAC --> DebitRegisterEngine
     AccountingRBAC --> ChecksRegisterEngine
 
-    PayrollCompiler --> CurrencyValidator
-    FundUtilizationEngine --> CurrencyValidator
-    DebitRegisterEngine --> CurrencyValidator
-    ChecksRegisterEngine --> CurrencyValidator
+    PayrollCompiler --> ZeroVarianceEngine
+    FundUtilizationEngine --> ZeroVarianceEngine
+    DebitRegisterEngine --> ZeroVarianceEngine
+    ChecksRegisterEngine --> ZeroVarianceEngine
 
-    PayrollCompiler --> PostgresDB
-    FundUtilizationEngine --> PostgresDB
-    DebitRegisterEngine --> PostgresDB
-    ChecksRegisterEngine --> PostgresDB
-
-    LandBank -.->|Monthly Bank Vouchers| AccountingBrowser
+    ZeroVarianceEngine --> ExcelExportEngine
+    ExcelExportEngine --> PostgresDB
+    ZeroVarianceEngine --> PostgresDB
+    ZeroVarianceEngine --> UploadsStorage
+    DebitRegisterEngine -.-> LandBank
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Client["Client Tier Actor / UI"]:::clientStyle
-        L_Edge["Edge / Gateway Tier"]:::edgeStyle
-        L_App["Application Tier Service"]:::appStyle
-        L_Data[("Data Tier Persistence")]:::dataStyle
-        L_Ext["External Stakeholder"]:::extStyle
-        L_Client -->|Network Protocol| L_Edge
-        L_Edge --> L_App
-        L_App --> L_Data
-        L_App -.->|External Sync| L_Ext
+        L_Client["[Green Box]: Client Presentation"]:::clientStyle
+        L_Edge["[Gold Box]: Gateway & RBAC"]:::edgeStyle
+        L_App["[White Box]: Financial Logic"]:::appStyle
+        L_Data[("[(Cylinder)]: Relational / Disk Store")]:::dataStyle
+        L_Client --> L_Edge --> L_App --> L_Data
     end
 ```
 
@@ -87,21 +84,18 @@ flowchart TB
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | Architectural Tier | MinSU System Implementation |
+| Visual Symbol | Syntax / Style | Tier Concept | MinSU Implementation |
 |---|---|---|---|
-| 🟩 Soft Green Box | `fill:#F1F8F1, stroke:#1B5E20` | Client Presentation Tier | Browser clients for Student, Staff, Director, Accounting, and Admin |
-| 🟨 Gold Box | `fill:#FFF1C2, stroke:#F2B705` | Edge & Security Gateway Tier | Nginx TLS termination reverse-proxy and Next.js edge RBAC middleware |
-| ⬜ White Box | `fill:#FFFFFF, stroke:#1B5E20` | Core Application Tier | Next.js Server Components, Document Engine, Auth Controller, PDF Compiler |
-| 🟩 Dark Green Cylinder | `fill:#DCEFDD, stroke:#123F17` | Persistent Data Tier | PostgreSQL 16 relational database (Port 5432) and local storage volumes |
-| ◻️ Dashed Border Box | `stroke-dasharray: 5 5` | External Stakeholder / Boundary | CHED/UniFAST regional office and external Google Drive transmittal archive |
-| `-->` Solid Arrow | Network & Internal Call | Synchronous HTTPS, WSS, HTTP (port 3000), or TCP (port 5432) |
-| `-.->` Dashed Arrow | Out-of-Band Integration | Physical courier shipment or external cloud drive URL synchronization |
-
+| Client Tier | `#F1F8F1` Box | User Workstation Presentation | Next.js browser views for financial management |
+| Edge Tier | `#FFF1C2` Box | Gateway & Authorization | Reverse proxy and `AccountingRBAC` validator |
+| Application Tier | `#FFFFFF` Box | Financial Domain Logic | Zero-variance math engine, ExcelJS exporter |
+| Persistence Tier | Cylinder Shape | Relational & Disk Storage | PostgreSQL database and mounted scans volume |
 
 ---
 
-## 4. Architecture Rules
+## 4. Tier Responsibilities
 
-- Access to financial Annex creation endpoints is restricted to `ACCOUNTING` and authorized `STAFF`.
-- The `Currency & Math Validator` guarantees that line items balance to zero variance against grant allocations.
-- All monetary records require two decimal digits of precision in Philippine Peso (`₱#,##0.00`).
+- **Client Tier**: Renders currency fields in Philippine Peso (`₱#,##0.00`) and highlights unbalanced rows in red.
+- **Edge Tier**: Restricts financial annex authoring strictly to `ACCOUNTING_OFFICER` sessions.
+- **Application Tier**: Calculates allocation sums, validates zero-variance equality, and streams multi-tab Excel workbooks.
+- **Persistence Tier**: Records immutable financial audit records and stores wet-signed scanned copies.

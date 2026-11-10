@@ -1,7 +1,7 @@
 # Activity Diagram: MinSU DocTrack Whole System
 
 ## 1. Description
-This activity diagram models the end-to-end institutional workflow for the Tulong Dunong Program (TDP) across an entire academic semester. It traces actions, decisions, and handoffs through five swimlanes representing the Student Applicant, Staff Coordinator, Campus Director, Accounting Officer, and CHED Agency.
+This activity diagram models the end-to-end institutional workflow for the Tulong Dunong Program (TDP) across an entire academic semester. It traces actions, decisions, and handoffs through five swimlanes representing the Student Applicant, Staff Coordinator, Campus Director, Accounting Officer, and CHED Agency, incorporating student validation, 3-way verification, executive approval, and multi-tab Excel export.
 
 ## 2. ASD-STE100 Technical Specifications
 - Organize parallel and sequential actions into explicit actor swimlanes.
@@ -20,9 +20,12 @@ graph TD
 
     subgraph Lane_Staff ["Staff Coordinator"]
         A1["Publish Annex 2 Scholarship Call<br/>(Set slot quota & cutoff date)"]
-        A4["Review Submitted Student Applications"]
-        A5["Compile Verified Students into Annex 2 Masterlist"]
-        A6["Submit Annex 2 to Executive Queue"]
+        A4["Validate Student Registrations in Queue<br/>(Mark ACCEPTED or REJECTED)"]
+        A4_Verify["Execute 3-Way Tripartite Verification<br/>(Upload CHED & Registrar CSVs)"]
+        D_Verify{"Discrepancies Found?"}
+        A4_Resolve["Manually Resolve Discrepancy<br/>(CONFIRM / DISMISS)"]
+        A5["Compile Verified Grantees into Annex 4 Billing"]
+        A6["Submit Annex 4 to Executive Queue"]
         A12["Scan Wet-Signed Physical Document"]
         A13["Upload Scanned PDF & Sync Google Drive"]
         A14["Package Transmittal & Record Courier Details"]
@@ -32,20 +35,22 @@ graph TD
         A2["Browse Call on Public Portal"]
         A3["Submit Application Form & Proof Scans"]
         A3_Receipt["Receive Tracking Code & Printable Receipt"]
+        A3_Lock["Profile Identity Locked per RA 10173<br/>(GWA and contacts remain editable)"]
     end
 
     subgraph Lane_Director ["Campus Director"]
         A7["Open Executive Review Queue"]
-        D1{"Approve Annex?"}
+        D1{"Does Director Approve Annex?"}
         A8["Stamp Endorsement & Digital Signature"]
         A9["Return Document with Revision Notes"]
     end
 
     subgraph Lane_Accounting ["Accounting Officer"]
         A10["Prepare Annex 9 Payroll & Annex 6 Utilization"]
-        D2{"Check Variance == 0.00?"}
+        D2{"Is Variance == 0.00 PHP?"}
         A11["Submit Balanced Financial Ledgers"]
         A10_Fix["Adjust Ledger Discrepancy"]
+        A10_Excel["Export Multi-Tab Excel (.xlsx) Ledgers"]
     end
 
     subgraph Lane_Agency ["CHED / External Agency"]
@@ -58,70 +63,48 @@ graph TD
     A2 --> A3
     A3 --> A3_Receipt
     A3_Receipt --> A4
-    A4 --> A5
+    A4 --> A3_Lock
+    A3_Lock --> A4_Verify
+    A4_Verify --> D_Verify
+    D_Verify -->|Yes| A4_Resolve
+    A4_Resolve --> A5
+    D_Verify -->|No| A5
     A5 --> A6
     A6 --> A7
     A7 --> D1
-
-    D1 -->|No: Needs Changes| A9
+    D1 -->|Yes| A8
+    D1 -->|No| A9
     A9 --> A5
-
-    D1 -->|Yes: Approved| A8
-    A8 --> A10
-
-    A10 --> D2
-    D2 -->|No: Discrepancy| A10_Fix
-    A10_Fix --> A10
-
-    D2 -->|Yes: Balanced| A11
-    A11 --> A12
+    A8 --> A12
     A12 --> A13
     A13 --> A14
     A14 --> A15
     A15 --> A16
-
-    A16 --> EndNode([End: Semester Cycle Complete & Archived])
+    A16 --> A10
+    A10 --> D2
+    D2 -->|Yes| A11
+    D2 -->|No| A10_Fix
+    A10_Fix --> A10
+    A11 --> A10_Excel
+    A10_Excel --> EndNode([End: Semester Grant Disbursed & Liquidated])
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Start(["([Pill]): Start / End Node"]):::legStart
-        L_Act["[Rectangle]: Operational Action"]:::legAct
-        L_Dec{"{Diamond}: Guard Decision"}:::legDec
-        L_App["Approved / Balanced Flow"]:::legApp
-        L_Ret["Returned / Variance Fix"]:::legRet
-        L_Start -.-> L_Act -.-> L_Dec
-        L_Dec -.->|Condition Met| L_App
-        L_Dec -.->|Discrepancy| L_Ret
+        L_Action["[Process Step]: System Activity"]
+        L_Decision{"{Decision Node}: Conditional Guard"}
+        L_Terminal([Start / End Boundary])
+        L_Action --> L_Decision
     end
-    classDef legStart fill:#123F17,stroke:#1B5E20,color:#fff;
-    classDef legAct fill:#F1F8F1,stroke:#1B5E20,color:#1F2A24;
-    classDef legDec fill:#FFF1C2,stroke:#B88A00,color:#1F2A24;
-    classDef legApp fill:#DCEFDD,stroke:#1B5E20,color:#123F17;
-    classDef legRet fill:#FEE2E2,stroke:#DC2626,color:#991B1B;
 ```
 
 ---
 
 ## 4. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Node Type | Technical Role | MinSU Domain Meaning |
-|---|---|---|---|
-| `([Pill Shape])` | `([Start / End])` | Initial or terminal workflow boundary | Academic semester opening & final archive closure |
-| `[Rectangle]` | `["Action"]` | Operational process or staff task | Compiling Annex 2, verifying credentials, uploading signed scans |
-| `{Diamond}` | `{"Decision"}` | Mutually exclusive condition / guard | "Approve Annex?" (Director) or "Variance == 0.00?" (Accounting) |
-| `──▶` | Solid Line `-->` | Sequential flow transition | Standard forward progression between steps |
-| `-->\|Label\|` | Guarded Branch | Conditional execution branch | "Yes: Approved", "No: Needs Changes", "Discrepancy" |
-| 🔲 Subgraph | `subgraph Lane_Role` | Departmental Swimlane Boundary | Segregates duties between Student, Staff, Director, Accounting, and CHED |
-| 🟢 Green Box | `#DCEFDD` / `#1B5E20` | MinSU Approval & Success State | Campus Director endorsement and balanced account records |
-| 🟡 Gold Box | `#FFF1C2` / `#B88A00` | Review & Verification Gate | Executive evaluation queue and conditional checks |
-| 🔴 Red / Rose Box | `#FEE2E2` / `#DC2626` | Revision & Discrepancy Alert | Document returned for revisions or ledger discrepancy adjustment |
-
----
-
-## 5. Workflow Stages & Hand-offs
-1. **Intake Phase**: The staff coordinator publishes the TDP call. Prospective students register, upload required documents, and receive tracking codes.
-2. **Operational Compilation Phase**: The staff coordinator verifies enrollment and grade certificates, compiles the Annex 2 masterlist, and sends it to the executive queue.
-3. **Executive Endorsement Phase**: The campus director evaluates the compiled masterlist. If revisions are required, the director returns the record with comments; otherwise, the director stamps approval.
-4. **Financial Reconciliation Phase**: The accounting officer compiles the Annex 9 payroll and Annex 6 fund utilization. The system enforces zero variance against government grants before permitting submission.
-5. **Transmittal & Dispatch Phase**: The staff coordinator uploads wet-signed physical scans, binds external agency tracking numbers, and transmits the package to CHED.
+| Visual Symbol | UML Activity Concept | MinSU Domain Meaning |
+|---|---|---|
+| `([Pill Shape])` | Initial / Final Node | Semester cycle starts or fund disbursement concludes |
+| `[Rectangle]` | Action State | Publish call, validate registrations, run 3-way match, export Excel |
+| `{Diamond}` | Decision / Guard | Discrepancy check, Director approval decision, zero-variance test |
+| `Swimlanes` | Partition Boundaries | Segregates actions by Student, Staff, Director, Accounting, and CHED |

@@ -22,26 +22,31 @@ flowchart TD
     classDef typeStyle fill:#DCEFDD,stroke:#123F17,stroke-width:1.5px,color:#123F17;
 
     subgraph APP_PACKAGE["Package: src/app (Routing & Boundary Layer)"]
-        AUTH_ROUTING["app/(auth)"]:::pkgStyle
-        DASHBOARD_ROUTING["app/(dashboard)"]:::pkgStyle
-        PORTAL_ROUTING["app/portal"]:::pkgStyle
-        API_ROUTING["app/api"]:::pkgStyle
+        AUTH_ROUTING["app/(auth) & 2FA"]:::pkgStyle
+        DASHBOARD_ROUTING["app/(dashboard) (Admin, Review, Verification, Certs)"]:::pkgStyle
+        PORTAL_ROUTING["app/portal (Student Apply & Profile)"]:::pkgStyle
+        API_ROUTING["app/api (Exports, Documents, Verification, CMS)"]:::pkgStyle
     end
 
     subgraph COMPONENTS_PACKAGE["Package: src/components (Presentation Layer)"]
-        UI_COMPONENTS["components/ui (Primitives)"]:::pkgStyle
-        DOC_COMPONENTS["components/documents (Forms & Tables)"]:::pkgStyle
+        UI_COMPONENTS["components/ui (Radix Primitives)"]:::pkgStyle
+        DOC_COMPONENTS["components/documents (Forms, Canvas & Tables)"]:::pkgStyle
         REVIEW_COMPONENTS["components/review (Queue Modals)"]:::pkgStyle
-        PORTAL_COMPONENTS["components/portal (Student Apply)"]:::pkgStyle
+        VERIFY_COMPONENTS["components/verification (CSV Match & Discrepancies)"]:::pkgStyle
+        CERT_COMPONENTS["components/certificate (Designer Canvas & Signees)"]:::pkgStyle
+        ANNOUNCE_COMPONENTS["components/announcements (Feed & Ticker)"]:::pkgStyle
+        CMS_COMPONENTS["components/landing (Split-Screen CMS Editor)"]:::pkgStyle
     end
 
     subgraph LIB_PACKAGE["Package: src/lib (Domain Logic & Infrastructure)"]
         PRISMA_CLIENT["lib/prisma.ts"]:::libStyle
-        AUTH_LIB["lib/auth.ts (Tokens & Crypto)"]:::libStyle
+        AUTH_LIB["lib/auth.ts (Sessions & TOTP 2FA)"]:::libStyle
         RBAC_LIB["lib/rbac.ts (Role Verification)"]:::libStyle
+        RATE_LIMIT_LIB["lib/rate-limit.ts (Anti-Brute-Force)"]:::libStyle
+        VERIFY_LIB["lib/verification.ts (Fuzzy Match & Tripartite)"]:::libStyle
         AUDIT_LIB["lib/audit.ts (Action Logger)"]:::libStyle
-        PDF_LIB["lib/pdf.ts (Puppeteer Bridge)"]:::libStyle
-        VALIDATION_LIB["lib/validation.ts (Zod Schemas)"]:::libStyle
+        EXCEL_LIB["lib/excel.ts (ExcelJS Multi-Tab Workbooks)"]:::libStyle
+        VALIDATION_LIB["lib/validation.ts (Input Schemas)"]:::libStyle
     end
 
     subgraph TYPES_PACKAGE["Package: src/types (Contract Layer)"]
@@ -49,7 +54,7 @@ flowchart TD
     end
 
     subgraph PRISMA_SCHEMA["Package: prisma (Database Layer)"]
-        SCHEMA_DEF["prisma/schema.prisma"]:::typeStyle
+        SCHEMA_DEF["prisma/schema.prisma (10 PostgreSQL Models)"]:::typeStyle
     end
 
     %% Dependency Arrows
@@ -60,17 +65,16 @@ flowchart TD
     COMPONENTS_PACKAGE --> LIB_PACKAGE
     COMPONENTS_PACKAGE --> TYPES_PACKAGE
 
-    LIB_PACKAGE --> TYPES_PACKAGE
     LIB_PACKAGE --> PRISMA_SCHEMA
+    LIB_PACKAGE --> TYPES_PACKAGE
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_App["subgraph: Routing & UI Package"]:::pkgStyle
-        L_Lib["subgraph: Domain Services & Utils"]:::libStyle
-        L_Type["subgraph: Pure TypeScript Contracts"]:::typeStyle
-        L_App -->|imports / depends on| L_Lib
-        L_Lib -->|implements types| L_Type
+        L_Pkg["[Package]: Namespace Folder"]:::pkgStyle
+        L_Lib["[Library Package]: Core Infrastructure"]:::libStyle
+        L_Type["[Contract Package]: Type Schemas"]:::typeStyle
+        L_Pkg --> L_Lib
     end
 ```
 
@@ -78,12 +82,11 @@ flowchart TD
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | UML Package Concept | MinSU DocTrack Codebase Structure |
-|---|---|---|---|
-| 🟩 Green Folder | `fill:#F1F8F1, stroke:#1B5E20` | Presentation & Routing Package | Next.js App Router (`src/app`) & React components (`src/components`) |
-| 🟨 Gold Folder | `fill:#FFF1C2, stroke:#F2B705` | Core Business & Lib Services | Prisma singleton, crypto auth, RBAC guards, PDF compiler (`src/lib`) |
-| 🟩 Dark Green Box | `fill:#DCEFDD, stroke:#123F17` | Contract & Persistence Schema | Strictly typed schemas (`src/types`) and ORM definition (`prisma/`) |
-| `-->` Solid Arrow | Downward Package Dependency | Upstream module imports or depends on downstream services (strictly unidirectional) |
+| Visual Symbol | UML Package Concept | MinSU System Implementation |
+|---|---|---|
+| `Package` | Architectural Namespace | `src/app`, `src/components`, `src/lib`, `src/types`, `prisma` |
+| `-->` | Directed Dependency | Consumer imports definitions from producer package |
+| `Acyclic Rule` | Layered Architecture | `src/app` depends on `src/lib`, but `src/lib` never imports from `src/app` |
 
 ---
 
@@ -91,61 +94,45 @@ flowchart TD
 
 ```plantuml
 @startuml
-skinparam packageStyle folder
-skinparam backgroundColor #FFFFFF
-skinparam packageBackgroundColor #F1F8F1
+skinparam packageBackgroundColor #F6F8F6
 skinparam packageBorderColor #1B5E20
 
-package "src/app (Route Layer)" as App {
-  package "(auth)" as AuthRoute
-  package "(dashboard)" as DashRoute
-  package "portal" as PortalRoute
-  package "api" as ApiRoute
+package "src/app (Routing Layer)" {
+  [app/(auth)]
+  [app/(dashboard)]
+  [app/portal]
+  [app/api]
 }
 
-package "src/components (UI Layer)" as Components {
-  package "ui" as UI
-  package "documents" as DocViews
-  package "review" as ReviewViews
-  package "portal" as PortalViews
+package "src/components (Presentation Layer)" {
+  [components/ui]
+  [components/documents]
+  [components/verification]
+  [components/certificate]
+  [components/announcements]
+  [components/landing]
 }
 
-package "src/lib (Domain & Utilities)" as Lib {
-  [auth.ts] as AuthLib
-  [rbac.ts] as RBACLib
-  [prisma.ts] as PrismaLib
-  [audit.ts] as AuditLib
-  [pdf.ts] as PdfLib
-  [validation.ts] as ValidationLib
+package "src/lib (Infrastructure & Domain Layer)" {
+  [lib/prisma.ts]
+  [lib/auth.ts (2FA & TOTP)]
+  [lib/verification.ts]
+  [lib/excel.ts]
+  [lib/rate-limit.ts]
+  [lib/audit.ts]
 }
 
-package "src/types (Contracts)" as Types {
-  [auth.d.ts]
-  [documents.d.ts]
-  [annex.d.ts]
+package "src/types (Contracts Layer)" {
+  [types/*.ts]
 }
 
-package "prisma (Database Model)" as DB {
+package "prisma (Data Schema)" {
   [schema.prisma]
 }
 
-App ..> Components : <<import>>
-App ..> Lib : <<use>>
-App ..> Types : <<import>>
-
-Components ..> Lib : <<use>>
-Components ..> Types : <<import>>
-
-Lib ..> Types : <<import>>
-Lib ..> DB : <<generate>>
-
+"src/app (Routing Layer)" ..> "src/components (Presentation Layer)"
+"src/app (Routing Layer)" ..> "src/lib (Infrastructure & Domain Layer)"
+"src/components (Presentation Layer)" ..> "src/lib (Infrastructure & Domain Layer)"
+"src/lib (Infrastructure & Domain Layer)" ..> "prisma (Data Schema)"
 @enduml
 ```
-
----
-
-## 5. Package Principles
-
-- Dependencies flow in one downward direction: `app -> components -> lib -> types -> prisma`.
-- No circular dependencies exist across packages.
-- The `types` package contains pure TypeScript contracts without runtime dependencies.

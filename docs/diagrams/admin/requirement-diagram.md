@@ -2,13 +2,13 @@
 
 > **Role:** `SYSTEM_ADMIN`  
 > **Diagram Type:** Requirement Diagram (SysML)  
-> **Focus:** Security, Role Provisioning, and Governance Requirements
+> **Focus:** Security, Role Provisioning, 2FA, Rate Limiting, and CMS Governance
 
 ---
 
 ## 1. Purpose
 
-The Requirement Diagram maps administrative requirements to the architecture components that satisfy them and the test cases that verify them.
+The Requirement Diagram maps administrative security and governance requirements to the system architecture blocks that satisfy them and the automated tests that verify them.
 
 ---
 
@@ -19,41 +19,55 @@ requirementDiagram
 
     requirement REQ_ADM_01 {
         id: REQ-ADM-01
-        text: The system must enforce strict Role-Based Access Control (RBAC) at edge middleware.
-        risk: High
+        text: The system shall enforce strict Role-Based Access Control at edge middleware boundaries.
+        risk: Critical
         verifymethod: Test
     }
 
     requirement REQ_ADM_02 {
         id: REQ-ADM-02
-        text: Every mutating administrative action must produce an immutable audit log entry.
-        risk: Medium
+        text: All mutating operations across all roles shall write an immutable append-only audit log entry.
+        risk: High
         verifymethod: Test
     }
 
     requirement REQ_ADM_03 {
         id: REQ-ADM-03
-        text: User passwords must be hashed using bcrypt with minimum 10 salt rounds before storage.
-        risk: High
-        verifymethod: Inspection
+        text: The system shall support Microsoft Authenticator 2FA with administrative secret reset capabilities.
+        risk: Critical
+        verifymethod: Test
     }
 
     requirement REQ_ADM_04 {
         id: REQ-ADM-04
-        text: Landing page CMS updates must support draft staging before live publication.
-        risk: Low
+        text: The system shall provide a split-screen Landing Page CMS with live preview and draft staging.
+        risk: Medium
         verifymethod: Demonstration
+    }
+
+    requirement REQ_ADM_05 {
+        id: REQ-ADM-05
+        text: The system shall enforce anti-brute-force rate limiting with global administrative override controls.
+        risk: High
+        verifymethod: Test
+    }
+
+    requirement REQ_ADM_06 {
+        id: REQ-ADM-06
+        text: The system shall sanitize uploaded logos and enforce CSP script-blocking headers on served SVGs.
+        risk: High
+        verifymethod: Test
     }
 
     element RBACGuard {
         type: block
     }
 
-    element AuditService {
+    element AuditForensicsService {
         type: block
     }
 
-    element AuthCrypto {
+    element TwoFactorAdminModule {
         type: block
     }
 
@@ -61,61 +75,40 @@ requirementDiagram
         type: block
     }
 
-    element TestRBACRejection {
-        type: testCase
+    element RateLimiterModule {
+        type: block
     }
 
-    element TestAuditImmutability {
-        type: testCase
+    element MediaSanitizerModule {
+        type: block
     }
 
-    element TestPasswordHashing {
-        type: testCase
-    }
-
-    element TestDraftPublishWorkflow {
-        type: testCase
-    }
-
-    %% Satisfy Relations
     RBACGuard - satisfies -> REQ_ADM_01
-    AuditService - satisfies -> REQ_ADM_02
-    AuthCrypto - satisfies -> REQ_ADM_03
+    AuditForensicsService - satisfies -> REQ_ADM_02
+    TwoFactorAdminModule - satisfies -> REQ_ADM_03
     LandingConfigEditor - satisfies -> REQ_ADM_04
-
-    %% Verify Relations
-    TestRBACRejection - verifies -> REQ_ADM_01
-    TestAuditImmutability - verifies -> REQ_ADM_02
-    TestPasswordHashing - verifies -> REQ_ADM_03
-    TestDraftPublishWorkflow - verifies -> REQ_ADM_04
-
-    %% ─── 📌 VISUAL LEGEND ───
-    element legend_guide {
-        type: "LEGEND: -contains-> Hierarchy | -satisfies-> Software Block | -verifies-> Test Suite"
-    }
+    RateLimiterModule - satisfies -> REQ_ADM_05
+    MediaSanitizerModule - satisfies -> REQ_ADM_06
 ```
 
 ---
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol / Relationship | SysML Syntax | Engineering Purpose | MinSU Implementation Mapping |
+| Visual Symbol / Syntax | SysML Concept | Technical Function | MinSU Domain Meaning |
 |---|---|---|---|
-| `requirement req_id` | Requirement Block | Formal system specification with risk level & verify method | `REQ-SEC-01`, `REQ-AUD-01`, `REQ-FIN-01`, `REQ-DIR-01` |
-| `element name { type: block }` | Architecture Block | Implementation software module fulfilling the requirement | `src/lib/rbac.ts`, `src/lib/audit.ts`, `src/lib/validation.ts` |
-| `element name { type: testCase }` | Test Case Block | Automated test suite ensuring requirement compliance | Unit & E2E role tests, zero-variance math test suite |
-| `- contains ->` | Hierarchy Containment | Decomposes high-level goal into specific domain requirements | Root requirement decomposes into security, audit, finance, and SLA |
-| `- satisfies ->` | Satisfaction Link | Proves a software block implements the requirement | Architectural blocks satisfying regulatory and functional constraints |
-| `- verifies ->` | Verification Link | Proves a test suite validates the requirement | Automated test suites ensuring requirement verification |
-
+| `requirement NAME` | Requirement Block | Declares functional or regulatory constraint | `REQ-ADM-01` (RBAC Edge Guard), `REQ-ADM-03` (2FA Module) |
+| `element NAME` | Architecture Element | Block or component satisfying requirement | `RBACGuard`, `RateLimiterModule`, `MediaSanitizerModule` |
+| `- satisfies ->` | Satisfy Relationship | Traceability link from component to requirement | Component satisfies explicit business specification |
+| `verifymethod` | Verification Attribute | Method of verifying compliance | `Test` (`npm run test:all`), `Demonstration` |
 
 ---
 
-## 4. Requirements Traceability Matrix
+## 4. Requirements Traceability
 
-| Requirement ID | Statement | Satisfying Element | Verification Test Case |
-|---|---|---|---|
-| `REQ-ADM-01` | Edge middleware enforces role boundaries. | `src/middleware.ts` (`RBACGuard`) | `TestRBACRejection` |
-| `REQ-ADM-02` | Every mutation produces an immutable log. | `src/lib/audit.ts` (`AuditService`) | `TestAuditImmutability` |
-| `REQ-ADM-03` | Passwords hashed with bcrypt (>= 10 rounds). | `src/lib/auth.ts` (`AuthCrypto`) | `TestPasswordHashing` |
-| `REQ-ADM-04` | CMS supports draft staging before publish. | `src/app/(dashboard)/landing-editor` | `TestDraftPublishWorkflow` |
+- **`REQ-ADM-01`**: Satisfied by `RBACGuard` in `src/middleware.ts`, tested across all role boundary redirection scenarios.
+- **`REQ-ADM-02`**: Satisfied by `AuditForensicsService` (`src/lib/audit.ts`), verifying append-only PostgreSQL storage.
+- **`REQ-ADM-03`**: Satisfied by `TwoFactorAdminModule` (`/api/users/[id]`), permitting TOTP secret reset upon administrator validation.
+- **`REQ-ADM-04`**: Satisfied by `LandingConfigEditor` (`/landing-editor`), providing synchronized split-screen editing.
+- **`REQ-ADM-05`**: Satisfied by `RateLimiterModule` (`src/lib/rate-limit.ts`), responding with HTTP 429 when thresholds are exceeded.
+- **`REQ-ADM-06`**: Satisfied by `MediaSanitizerModule` (`/api/branding/logo/upload`), verifying `path.basename` sanitization and CSP headers.

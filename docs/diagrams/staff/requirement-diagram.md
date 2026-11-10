@@ -2,13 +2,13 @@
 
 > **Role:** `STAFF`  
 > **Diagram Type:** Requirement Diagram (SysML)  
-> **Focus:** Annex Preparation, Call Configuration, and Transmittal Registry
+> **Focus:** Verification Engine, Registration Validation, Certificate Designer, and Transmittal Registry
 
 ---
 
 ## 1. Purpose
 
-The Requirement Diagram maps Staff operational requirements to architecture components that satisfy them and test cases that verify them.
+The Requirement Diagram maps Staff Coordinator functional and regulatory requirements to the software architecture components that satisfy them and the automated tests that verify them.
 
 ---
 
@@ -19,103 +19,96 @@ requirementDiagram
 
     requirement REQ_STF_01 {
         id: REQ-STF-01
-        text: The system must allow Staff to create and modify Annexes 1 through 10.
+        text: The system shall provide an intake validation queue with permanent RA 10173 identity locks.
         risk: High
         verifymethod: Test
     }
 
     requirement REQ_STF_02 {
         id: REQ-STF-02
-        text: The system must validate and store wet-signed PDF scans up to 15 megabytes.
-        risk: Medium
+        text: The system shall execute 3-way cross-matching between CHED, Registrar, and System datasets.
+        risk: Critical
         verifymethod: Test
     }
 
     requirement REQ_STF_03 {
         id: REQ-STF-03
-        text: The system must provide a form builder for creating dynamic applicant call schemas.
+        text: The system shall provide a manual resolution workflow for student discrepancy records.
         risk: High
-        verifymethod: Demonstration
+        verifymethod: Test
     }
 
     requirement REQ_STF_04 {
         id: REQ-STF-04
-        text: The system must catalog all dispatched external packages in the Outgoing Registry.
-        risk: Low
+        text: The system shall provide a visual Certificate Designer with dynamic token citation formatting.
+        risk: Medium
+        verifymethod: Demonstration
+    }
+
+    requirement REQ_STF_05 {
+        id: REQ-STF-05
+        text: The system shall stream multi-tab ExcelJS workbooks for Annex 4 and Annex 5 statements.
+        risk: High
         verifymethod: Test
     }
 
-    element AnnexFormEngine {
+    requirement REQ_STF_06 {
+        id: REQ-STF-06
+        text: The system shall catalog all dispatched transmittals with courier tracking and Google Drive links.
+        risk: Low
+        verifymethod: Inspection
+    }
+
+    element StudentValidationQueue {
         type: block
     }
 
-    element ScanUploadValidator {
+    element TripartiteVerificationEngine {
         type: block
     }
 
-    element DynamicCallBuilder {
+    element DiscrepancyResolver {
         type: block
     }
 
-    element OutgoingRegistryManager {
+    element CertificateDesigner {
         type: block
     }
 
-    element TestAnnexFormValidation {
-        type: testCase
+    element ExcelJSExporter {
+        type: block
     }
 
-    element TestPdfUploadLimit {
-        type: testCase
+    element OutgoingTransmittalRegistry {
+        type: block
     }
 
-    element TestDynamicFormBuilder {
-        type: testCase
-    }
-
-    element TestTransmittalCataloging {
-        type: testCase
-    }
-
-    %% Satisfy Relations
-    AnnexFormEngine - satisfies -> REQ_STF_01
-    ScanUploadValidator - satisfies -> REQ_STF_02
-    DynamicCallBuilder - satisfies -> REQ_STF_03
-    OutgoingRegistryManager - satisfies -> REQ_STF_04
-
-    %% Verify Relations
-    TestAnnexFormValidation - verifies -> REQ_STF_01
-    TestPdfUploadLimit - verifies -> REQ_STF_02
-    TestDynamicFormBuilder - verifies -> REQ_STF_03
-    TestTransmittalCataloging - verifies -> REQ_STF_04
-
-    %% ─── 📌 VISUAL LEGEND ───
-    element legend_guide {
-        type: "LEGEND: -contains-> Hierarchy | -satisfies-> Software Block | -verifies-> Test Suite"
-    }
+    StudentValidationQueue - satisfies -> REQ_STF_01
+    TripartiteVerificationEngine - satisfies -> REQ_STF_02
+    DiscrepancyResolver - satisfies -> REQ_STF_03
+    CertificateDesigner - satisfies -> REQ_STF_04
+    ExcelJSExporter - satisfies -> REQ_STF_05
+    OutgoingTransmittalRegistry - satisfies -> REQ_STF_06
 ```
 
 ---
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol / Relationship | SysML Syntax | Engineering Purpose | MinSU Implementation Mapping |
+| Visual Symbol / Syntax | SysML Concept | Technical Function | MinSU Domain Meaning |
 |---|---|---|---|
-| `requirement req_id` | Requirement Block | Formal system specification with risk level & verify method | `REQ-SEC-01`, `REQ-AUD-01`, `REQ-FIN-01`, `REQ-DIR-01` |
-| `element name { type: block }` | Architecture Block | Implementation software module fulfilling the requirement | `src/lib/rbac.ts`, `src/lib/audit.ts`, `src/lib/validation.ts` |
-| `element name { type: testCase }` | Test Case Block | Automated test suite ensuring requirement compliance | Unit & E2E role tests, zero-variance math test suite |
-| `- contains ->` | Hierarchy Containment | Decomposes high-level goal into specific domain requirements | Root requirement decomposes into security, audit, finance, and SLA |
-| `- satisfies ->` | Satisfaction Link | Proves a software block implements the requirement | Architectural blocks satisfying regulatory and functional constraints |
-| `- verifies ->` | Verification Link | Proves a test suite validates the requirement | Automated test suites ensuring requirement verification |
-
+| `requirement NAME` | Requirement Block | Declares functional or regulatory constraint | `REQ-STF-01` (Student Intake Validation) |
+| `element NAME` | Architecture Element | Block or component satisfying requirement | `TripartiteVerificationEngine`, `CertificateDesigner` |
+| `- satisfies ->` | Satisfy Relationship | Traceability link from component to requirement | Component satisfies explicit business specification |
+| `verifymethod` | Verification Attribute | Method of verifying compliance | `Test` (`npm run test:all`), `Demonstration`, `Inspection` |
 
 ---
 
-## 4. Requirements Traceability Matrix
+## 4. Requirements Traceability
 
-| Requirement ID | Statement | Satisfying Element | Verification Test Case |
-|---|---|---|---|
-| `REQ-STF-01` | Create and edit Annexes 1 to 10. | `src/components/documents` (`AnnexFormEngine`) | `TestAnnexFormValidation` |
-| `REQ-STF-02` | Validate and store scanned signed PDFs. | `src/app/api/documents/[id]/upload` | `TestPdfUploadLimit` |
-| `REQ-STF-03` | Configure dynamic TDP application schemas. | `src/app/(dashboard)/calls` (`DynamicCallBuilder`) | `TestDynamicFormBuilder` |
-| `REQ-STF-04` | Catalog dispatched transmittals. | `src/app/(dashboard)/outgoing` | `TestTransmittalCataloging` |
+- **`REQ-STF-01`**: Satisfied by `StudentValidationQueue` (`/registrations`), verified by `tests/student-data-integrity.test.ts`.
+- **`REQ-STF-02`**: Satisfied by `TripartiteVerificationEngine` (`/verification`), verified by `tests/verification-matcher.test.ts`.
+- **`REQ-STF-03`**: Satisfied by `DiscrepancyResolver`, ensuring manual coordinator review before Annex 4 generation.
+- **`REQ-STF-04`**: Satisfied by `CertificateDesigner` (`/certificate-editor`), verifying multi-paper sizes and Word doc exports.
+- **`REQ-STF-05`**: Satisfied by `ExcelJSExporter`, verified by 3-tab workbook stream assertion tests.
+- **`REQ-STF-06`**: Satisfied by `OutgoingTransmittalRegistry`, logging courier records and shared Google Drive URLs.

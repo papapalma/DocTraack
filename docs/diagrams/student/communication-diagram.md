@@ -1,28 +1,37 @@
-# Communication Diagram: Student Applicant Domain
+# Student Applicant — Communication Diagram
 
-## 1. Description
-This communication diagram visualizes the structural links and sequenced messages exchanged between collaborating objects when a student queries their application status using a tracking code.
+> **Role:** `STUDENT`  
+> **Diagram Type:** Communication Diagram  
+> **Scenario:** Student Authentication, Tracking Lookup & Application Submission Collaborations  
+> **Standard:** UML 2.5 Communication Specification
 
-## 2. ASD-STE100 Technical Specifications
-- Order messages with sequential numbers to show invocation order.
-- Connect collaborating instances through explicit structural paths.
-- Enforce public lookup constraints without exposing sensitive internal remarks.
+---
 
-## 3. Communication Diagram (Mermaid)
+## 1. Purpose
+
+The Communication Diagram shows the structural links and sequenced messages exchanged between collaborating software instances when a student authenticates with 2FA, queries application status via tracking code, or accesses locked profile details in MinSU DocTrack.
+
+---
+
+## 2. Mermaid Communication Diagram
 
 ```mermaid
 graph LR
     Browser["1: studentClient : WebBrowser"]
     PortalCtrl["2: portalCtrl : PortalController"]
-    TrackerEngine["3: tracker : TrackingCodeEngine"]
-    PrismaDB["4: db : PrismaClient"]
-    RateLimiter["5: limiter : RateLimiterService"]
+    RateLimiter["3: limiter : RateLimiterService"]
+    AuthEngine["4: authEngine : TwoFactorService"]
+    TrackerEngine["5: tracker : TrackingCodeEngine"]
+    ProfileService["6: profileService : ProfileLockService"]
+    PrismaDB["7: db : PrismaClient"]
 
-    Browser -- "1: lookupStatus(trackingCode)<br/>6: renderStatusView(statusData)" --> PortalCtrl
-    PortalCtrl -- "2: checkRateLimit(ipAddress)" --> RateLimiter
-    PortalCtrl -- "3: validateCodeFormat(trackingCode)" --> TrackerEngine
-    PortalCtrl -- "4: queryByTrackingCode(trackingCode)" --> PrismaDB
-    PrismaDB -- "5: return applicationRecord" --> PortalCtrl
+    Browser -- "1: submitStatusLookup(trackingCode)<br/>8: renderTrackingTimeline(statusData)" --> PortalCtrl
+    PortalCtrl -- "2: checkIpLimit(clientIp)" --> RateLimiter
+    PortalCtrl -- "3: validateTotpToken(code, secret)" --> AuthEngine
+    PortalCtrl -- "4: parseTrackingCode(trackingCode)" --> TrackerEngine
+    PortalCtrl -- "5: getApplicationRecord(trackingCode)" --> PrismaDB
+    PrismaDB -- "6: return applicationAndStudent" --> PortalCtrl
+    PortalCtrl -- "7: filterLockedAttributes(student)" --> ProfileService
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph Legend ["📌 Diagram Legend"]
@@ -37,21 +46,26 @@ graph LR
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
 | Element | Format / Syntax | Technical Meaning | MinSU Implementation Context |
 |---|---|---|---|
-| Subsystem Node | `[N: name : Class]` | Structural software participant | Controllers, Workflow Engines, Prisma Client, Storage Adapters |
+| Subsystem Node | `[N: name : Class]` | Structural software participant | Controllers, 2FA Services, Tracking Engine, Prisma Client |
 | Link Connector | `-- "..." -->` | Directed communication channel | HTTP request, RPC method call, or database query |
-| Numbered Prefix | `1:`, `2:`, `10:` | Chronological message sequence number | Sequential execution order from client event to persistence and UI update |
-| Method Signature | `methodName(params)` | Invoked operation contract | `verifyRole(token)`, `checkVariance()`, `writeAuditLog()` |
-| 🟢 Green Tone | `#F1F8F1` / `#1B5E20` | Core Subsystem Component | Institutional controllers, persistence adapters, and business engines |
-| 🟡 Gold Tone | `#FFF1C2` / `#B88A00` | Guard & Dispatch Relay | Access guards, validation checks, and notification dispatchers |
+| Numbered Prefix | `1:`, `2:`, `8:` | Chronological message sequence number | Execution order from client trigger to persistence and view update |
+| Method Signature | `methodName(params)` | Invoked operation contract | `validateTotpToken()`, `checkIpLimit()`, `parseTrackingCode()` |
+| 🟢 Green Tone | `#F1F8F1` / `#1B5E20` | Core Subsystem Component | Portal controllers, database clients, profile services |
+| 🟡 Gold Tone | `#FFF1C2` / `#B88A00` | Security & Dispatch Guard | Rate limiters, TOTP engines, and tracking resolvers |
 
+---
 
-## 5. Message Sequence Steps
-- **1**: The student enters their tracking code (e.g., `TDP-2026-0042`) into the lookup form on the web portal.
-- **2**: The portal controller checks the client IP address against the rate limiter to prevent automated scraping.
-- **3**: The tracking code engine verifies the code conforms to the standard regular expression format.
-- **4-5**: The database client executes a parameterized query to locate the matching application record.
-- **6**: The portal controller formats the status timeline and renders the progress card to the student.
+## 4. Message Sequence Steps
+
+1. **Step 1**: The student enters their tracking code (`TDP-YYYY-XXXX`) or requests their profile status from the portal web UI.
+2. **Step 2**: `PortalController` requests client IP evaluation from `RateLimiterService` to prevent scraping and automated enumeration.
+3. **Step 3**: For authenticated actions, `TwoFactorService` validates the 6-digit TOTP code against the student's stored secret.
+4. **Step 4**: `TrackingCodeEngine` validates the code structure using regular expressions.
+5. **Step 5**: `PrismaClient` executes an indexed query against the PostgreSQL database to retrieve the application and student records.
+6. **Step 6**: The database returns the matching entities.
+7. **Step 7**: `ProfileLockService` masks locked identity fields (Student ID Number and Legal Name) if the applicant is an accepted scholar.
+8. **Step 8**: `PortalController` formats the public timeline and renders the progress card to the student browser.

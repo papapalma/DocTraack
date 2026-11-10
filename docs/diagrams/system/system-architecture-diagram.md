@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-The System Architecture Diagram shows the main components of MinSU DocTrack. It shows user clients, the application server, the database, and external agency links.
+The System Architecture Diagram shows the main components of MinSU DocTrack. It shows user clients, the edge proxy, application servers, verification engines, document compilers, databases, and external agency links.
 
 ---
 
@@ -24,88 +24,104 @@ flowchart TB
     classDef extStyle fill:#F6F8F6,stroke:#55645B,stroke-width:2px,stroke-dasharray: 5 5,color:#1F2A24;
 
     subgraph CLIENT_TIER["Client Tier (Web Browsers)"]
-        DirectorUser["Campus Director<br/>(Desktop Browser)"]:::clientStyle
-        StaffUser["Staff Coordinator<br/>(Desktop Browser)"]:::clientStyle
-        AccountingUser["Accounting Officer<br/>(Desktop Browser)"]:::clientStyle
-        AdminUser["System Admin<br/>(Desktop Browser)"]:::clientStyle
-        StudentUser["Student Applicant<br/>(Mobile / Desktop)"]:::clientStyle
+        DirectorUser["Campus Director<br/>(Review & Analytics)"]:::clientStyle
+        StaffUser["Staff Coordinator<br/>(Annexes & Verification)"]:::clientStyle
+        AccountingUser["Accounting Officer<br/>(Financial Annexes 6-9)"]:::clientStyle
+        AdminUser["System Admin<br/>(Users, CMS & Security)"]:::clientStyle
+        StudentUser["Student Applicant<br/>(Portal, 2FA & Profile)"]:::clientStyle
     end
 
     subgraph EDGE_TIER["Edge & Reverse Proxy Tier"]
         NginxProxy["Reverse Proxy / TLS Termination<br/>(Nginx / HTTPS 443)"]:::edgeStyle
+        RateLimiter["Rate Limiting Shield<br/>(Anti-Brute-Force Guard)"]:::edgeStyle
         NextMiddleware["Edge Middleware<br/>(RBAC & Security Headers)"]:::edgeStyle
     end
 
     subgraph APP_TIER["Application Tier (Node.js / Next.js Fullstack Engine)"]
         subgraph RSC_LAYER["React Server Components Layer"]
-            DashboardPages["Admin & Review Dashboards"]:::appStyle
-            PortalPages["Public Landing & Student Portal"]:::appStyle
+            DashboardPages["Admin, Staff & Accounting Dashboards"]:::appStyle
+            PortalPages["Student Portal & Public Landing CMS"]:::appStyle
+            DesignerPages["Certificate Designer & Split CMS Editor"]:::appStyle
         end
 
         subgraph API_LAYER["Route Handlers & Server Actions"]
-            AuthModule["Auth & Session Controller<br/>(Bcrypt & HTTP-Only Cookie)"]:::appStyle
+            AuthModule["Auth & 2FA Controller<br/>(Bcrypt, Sessions & TOTP)"]:::appStyle
             DocController["Document Engine<br/>(Annexes 1 to 10 CRUD)"]:::appStyle
-            AppController["Application & Calls Engine<br/>(Annex 2 Form Builder)"]:::appStyle
-            AuditService["Audit Log Service<br/>(Immutable Action History)"]:::appStyle
-            PdfRenderer["Puppeteer PDF Compiler<br/>(Official Annex Templates)"]:::appStyle
+            VerifyEngine["3-Way Verification Engine<br/>(CHED / Registrar Tripartite Match)"]:::appStyle
+            CertService["Certificate Designer Engine<br/>(Signatories & Paper Layouts)"]:::appStyle
+            AnnouncementService["Announcements Engine<br/>(Category Ticker & Push Feed)"]:::appStyle
+            ExportEngine["Multi-Format Document Exporter<br/>(ExcelJS Workbooks & Word Docx)"]:::appStyle
+            AuditService["Audit Log Service<br/>(Immutable Action Ledger)"]:::appStyle
+            LandingService["Landing CMS & Branding Engine<br/>(Section Manager & Logo Store)"]:::appStyle
         end
     end
 
     subgraph DATA_TIER["Data & Storage Tier"]
-        PrismaClient["Prisma ORM Client"]:::dataStyle
-        PostgresDB[("PostgreSQL Database<br/>(Port 5432)")]:::dataStyle
-        LocalStorage[("Local Secure Volume<br/>(/uploads/signed-scans)")]:::dataStyle
+        PrismaClient["Prisma ORM Client (v6)"]:::dataStyle
+        PostgresDB[("PostgreSQL Database (Port 5432)<br/>minsu_doctrack")]:::dataStyle
+        LocalStorage[("Local Secure Volume<br/>(/uploads/signed-scans, /logos)")]:::dataStyle
     end
 
     subgraph EXTERNAL_TIER["External Stakeholders & Services"]
         GoogleDrive["External Google Drive<br/>(Transmittal Repositories)"]:::extStyle
-        CHEDUniFAST["CHED / UniFAST Regional Office<br/>(Hardcopy & Transmittal Registry)"]:::extStyle
+        CHEDUniFAST["CHED / UniFAST Regional Office<br/>(Official Sub-Allotments)"]:::extStyle
+        COAAuditor["COA Resident Auditor<br/>(Post-Disbursement Clearances)"]:::extStyle
     end
 
     %% Client to Edge Connections
-    DirectorUser -->|HTTPS / WSS| NginxProxy
-    StaffUser -->|HTTPS / WSS| NginxProxy
-    AccountingUser -->|HTTPS / WSS| NginxProxy
-    AdminUser -->|HTTPS / WSS| NginxProxy
+    DirectorUser -->|HTTPS| NginxProxy
+    StaffUser -->|HTTPS| NginxProxy
+    AccountingUser -->|HTTPS| NginxProxy
+    AdminUser -->|HTTPS| NginxProxy
     StudentUser -->|HTTPS| NginxProxy
 
-    NginxProxy -->|HTTP / 3000| NextMiddleware
+    NginxProxy --> RateLimiter
+    RateLimiter --> NextMiddleware
     NextMiddleware --> RSC_LAYER
     NextMiddleware --> API_LAYER
 
     %% Internal Application Connections
     DashboardPages --> DocController
+    DashboardPages --> VerifyEngine
     DashboardPages --> AuthModule
-    PortalPages --> AppController
+    PortalPages --> AuthModule
+    DesignerPages --> CertService
+    DesignerPages --> LandingService
+
     DocController --> AuditService
-    DocController --> PdfRenderer
+    DocController --> ExportEngine
+    VerifyEngine --> ExportEngine
+    VerifyEngine --> AuditService
+    CertService --> AuditService
+    LandingService --> AuditService
+
     DocController --> PrismaClient
-    AppController --> PrismaClient
+    VerifyEngine --> PrismaClient
     AuthModule --> PrismaClient
+    CertService --> PrismaClient
+    AnnouncementService --> PrismaClient
+    LandingService --> PrismaClient
     AuditService --> PrismaClient
 
     %% Data Connections
     PrismaClient -->|Prisma Engine / TCP 5432| PostgresDB
-    PdfRenderer -->|Binary Stream Write| LocalStorage
-    DocController -->|Store Scans| LocalStorage
+    DocController -->|Store Scanned PDFs| LocalStorage
+    LandingService -->|Store Brand Logos| LocalStorage
 
     %% External Connections
-    StaffUser -.->|Uploads Scanned Annex 1| GoogleDrive
+    StaffUser -.->|Uploads Scanned Transmittal| GoogleDrive
     DocController -.->|Logs Shared Link| GoogleDrive
     StaffUser -.->|Physical Dispatch & Manifest| CHEDUniFAST
+    AccountingUser -.->|Submits Annexes 6-8| COAAuditor
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph LEGEND ["📌 Diagram Legend"]
         direction TB
         L_Client["Client Tier Actor / UI"]:::clientStyle
-        L_Edge["Edge / Gateway Tier"]:::edgeStyle
-        L_App["Application Tier Service"]:::appStyle
-        L_Data[("Data Tier Persistence")]:::dataStyle
-        L_Ext["External Stakeholder"]:::extStyle
-        L_Client -->|Network Protocol| L_Edge
-        L_Edge --> L_App
-        L_App --> L_Data
-        L_App -.->|External Sync| L_Ext
+        L_Edge["Edge / Security / Proxy Gateway"]:::edgeStyle
+        L_App["Application Server Component"]:::appStyle
+        L_Data[("Persistent Storage / Database")]:::dataStyle
+        L_Ext["External Stakeholder / Service"]:::extStyle
     end
 ```
 
@@ -113,31 +129,77 @@ flowchart TB
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | Architectural Tier | MinSU System Implementation |
+| Visual Symbol | Syntax / Style | UML Concept | MinSU System Implementation |
 |---|---|---|---|
-| 🟩 Soft Green Box | `fill:#F1F8F1, stroke:#1B5E20` | Client Presentation Tier | Browser clients for Student, Staff, Director, Accounting, and Admin |
-| 🟨 Gold Box | `fill:#FFF1C2, stroke:#F2B705` | Edge & Security Gateway Tier | Nginx TLS termination reverse-proxy and Next.js edge RBAC middleware |
-| ⬜ White Box | `fill:#FFFFFF, stroke:#1B5E20` | Core Application Tier | Next.js Server Components, Document Engine, Auth Controller, PDF Compiler |
-| 🟩 Dark Green Cylinder | `fill:#DCEFDD, stroke:#123F17` | Persistent Data Tier | PostgreSQL 16 relational database (Port 5432) and local storage volumes |
-| ◻️ Dashed Border Box | `stroke-dasharray: 5 5` | External Stakeholder / Boundary | CHED/UniFAST regional office and external Google Drive transmittal archive |
-| `-->` Solid Arrow | Network & Internal Call | Synchronous HTTPS, WSS, HTTP (port 3000), or TCP (port 5432) |
-| `-.->` Dashed Arrow | Out-of-Band Integration | Physical courier shipment or external cloud drive URL synchronization |
+| `Actor` | `Client Tier` | User clients accessing the web system | Director, Staff, Accounting, Admin, Student |
+| `Edge Node` | `Edge Tier` | Security, rate limiting, and TLS gateway | Nginx, In-Memory Rate Limiter, Next.js Edge Middleware |
+| `Component` | `Application Tier` | Business logic services and controllers | Document Engine, 3-Way Verification Engine, 2FA Controller, ExcelJS Exporter |
+| `Database` | `Data Tier` | Relational storage and file volumes | PostgreSQL database container, persistent `/uploads` volume |
+| `External System` | `External Tier` | External governing agencies | CHEDRO MIMAROPA, UniFAST, COA Resident Auditor, Google Drive |
 
 ---
 
-## 4. Component Descriptions
+## 4. PlantUML Architecture Diagram
 
-- **Client Tier**: Web browsers connect over secure HTTPS.
-- **Edge Tier**: Nginx terminates TLS connections. Next.js middleware verifies session tokens and role permissions.
-- **Application Tier**: Next.js combines React Server Components and server routes.
-- **Data Tier**: Prisma ORM executes typed queries against PostgreSQL. Local file volumes hold signed document scans.
-- **External Tier**: Staff upload approved Annex 1 packages to external Google Drive storage and notify CHED.
+```plantuml
+@startuml
+skinparam componentStyle uml2
+skinparam packageBackgroundColor #F6F8F6
 
----
+package "Client Tier" {
+  [Campus Director] as Director
+  [Staff Coordinator] as Staff
+  [Accounting Officer] as Accounting
+  [System Admin] as Admin
+  [Student Applicant] as Student
+}
 
-## 5. STE Rules Applied
+package "Edge & Security Tier" {
+  [Nginx TLS Termination] as Nginx
+  [Rate Limiting Shield] as RateLimit
+  [Edge Middleware (RBAC)] as Middleware
+}
 
-- The diagram shows high-level parts only.
-- Each connection shows the data protocol.
-- Component names are singular and clear.
-- Paragraphs contain six sentences or fewer.
+package "Application Engine (Next.js 16)" {
+  [Document Engine] as DocEngine
+  [3-Way Verification Engine] as VerifyEngine
+  [Auth & 2FA Controller] as AuthEngine
+  [Certificate Designer] as CertEngine
+  [Announcements Hub] as AnnounceEngine
+  [ExcelJS & Docx Exporter] as ExportEngine
+  [Immutable Audit Service] as AuditEngine
+  [Landing CMS & Branding] as CMSEngine
+}
+
+database "PostgreSQL 16" as DB
+folder "Local Disk Storage" as Storage
+
+Director --> Nginx
+Staff --> Nginx
+Accounting --> Nginx
+Admin --> Nginx
+Student --> Nginx
+
+Nginx --> RateLimit
+RateLimit --> Middleware
+Middleware --> DocEngine
+Middleware --> VerifyEngine
+Middleware --> AuthEngine
+
+DocEngine --> ExportEngine
+VerifyEngine --> ExportEngine
+DocEngine --> AuditEngine
+VerifyEngine --> AuditEngine
+
+DocEngine --> DB
+VerifyEngine --> DB
+AuthEngine --> DB
+CertEngine --> DB
+AnnounceEngine --> DB
+CMSEngine --> DB
+AuditEngine --> DB
+
+DocEngine --> Storage
+CMSEngine --> Storage
+@enduml
+```

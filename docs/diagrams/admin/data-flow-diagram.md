@@ -2,13 +2,13 @@
 
 > **Role:** `SYSTEM_ADMIN`  
 > **Diagram Type:** Data Flow Diagram (Level 1)  
-> **Focus:** Account Management, Audit Ingestion, and CMS Operations
+> **Focus:** Account Governance, Audit Ingestion, CMS, Branding & Rate Limiting
 
 ---
 
 ## 1. Purpose
 
-The Data Flow Diagram shows how administrative data enters the system, changes through processes, and reaches persistent data stores. It does not show control flow or execution time.
+The Data Flow Diagram shows how administrative inputs move through governance processes to persistent data stores, logo volumes, and audit sinks.
 
 ---
 
@@ -21,75 +21,80 @@ flowchart TD
     classDef processStyle fill:#FFFFFF,stroke:#1B5E20,stroke-width:2px,color:#1F2A24;
     classDef storeStyle fill:#FFF1C2,stroke:#F2B705,stroke-width:2px,color:#1F2A24;
 
-    AdminEntity["Admin User<br/>(External Entity)"]:::entityStyle
+    AdminEntity["System Administrator<br/>(External Entity)"]:::entityStyle
 
     subgraph PROCESSES["Administrative Processes"]
-        P1["1.0<br/>Manage User Accounts"]:::processStyle
-        P2["2.0<br/>Inspect Audit Logs"]:::processStyle
-        P3["3.0<br/>Manage Landing CMS"]:::processStyle
+        P1["1.0<br/>Manage User Accounts & 2FA"]:::processStyle
+        P2["2.0<br/>Filter & Export Audit Forensics"]:::processStyle
+        P3["3.0<br/>Manage Landing CMS Content"]:::processStyle
+        P4["4.0<br/>Configure Institutional Branding"]:::processStyle
+        P5["5.0<br/>Control Rate Limiting Rules"]:::processStyle
     end
 
-    subgraph DATA_STORES["Data Stores (PostgreSQL)"]
+    subgraph DATA_STORES["Data Stores"]
         D1[("D1: users Table")]:::storeStyle
         D2[("D2: audit_log Table")]:::storeStyle
         D3[("D3: landing_page_config Table")]:::storeStyle
+        D4[("D4: /uploads/logos Volume")]:::storeStyle
+        D5[("D5: system_branding Table")]:::storeStyle
     end
 
     %% Flows from Admin
-    AdminEntity -->|Account Credentials & Role| P1
-    AdminEntity -->|Filter Query & Date Range| P2
-    AdminEntity -->|Draft Section Content & Images| P3
+    AdminEntity -->|Credentials, Role, 2FA Reset| P1
+    AdminEntity -->|Forensic Filter & Export Query| P2
+    AdminEntity -->|Draft Sections & Hero Images| P3
+    AdminEntity -->|SVG Logos & Header Styles| P4
+    AdminEntity -->|Rate Limit Toggle Flag| P5
 
     %% Flows to Admin
     P1 -->|User Roster & Status Codes| AdminEntity
-    P2 -->|Filtered Log Records & Diffs| AdminEntity
-    P3 -->|Publication Confirmation| AdminEntity
+    P2 -->|Filtered Log Records & Forensic CSV| AdminEntity
+    P3 -->|Live Preview & Publish Acknowledgment| AdminEntity
+    P4 -->|Branding Preview & Logo URLs| AdminEntity
+    P5 -->|Active IP Block Status| AdminEntity
 
     %% Data Store Interactions
-    P1 -->|Write New User & Updated Role| D1
-    D1 -->|Read User Credentials| P1
-    P1 -->|Dispatch USER_ACTION Event| D2
+    P1 -->|Upsert User & Reset TOTP| D1
+    D1 -->|Read Account Records| P1
+    P1 -->|Log: USER_UPDATED| D2
 
     D2 -->|Stream Chronological Events| P2
 
     P3 -->|Write Draft & Published JSON| D3
-    D3 -->|Read Current Landing Config| P3
-    P3 -->|Dispatch CMS_PUBLISHED Event| D2
+    D3 -->|Read Active CMS Config| P3
+    P3 -->|Log: LANDING_CMS_PUBLISHED| D2
+
+    P4 -->|Store Image Files| D4
+    P4 -->|Update Header Config| D5
+    P4 -->|Log: BRANDING_UPDATED| D2
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Ent["[Square]: External Entity"]:::legEnt
-        L_Proc["1.0 [Box]: Process"]:::legProc
-        L_Store[("[(Cylinder)]: Data Store")]:::legStore
-        L_Ent -->|Data Flow Payload| L_Proc
-        L_Proc -->|Data Mutation| L_Store
+        L_Ent["[Square]: External Entity"]:::entityStyle
+        L_Proc["(Circle / Rounded): Process Step"]:::processStyle
+        L_Store[("[(Cylinder)]: Data Store")]:::storeStyle
+        L_Ent -->|Data Flow| L_Proc -->|Storage Flow| L_Store
     end
-    classDef legEnt fill:#FFFFFF,stroke:#123F17,color:#1F2A24;
-    classDef legProc fill:#F1F8F1,stroke:#1B5E20,color:#1F2A24;
-    classDef legStore fill:#FFF1C2,stroke:#F2B705,color:#1F2A24;
 ```
 
 ---
 
 ## 3. Diagram Legend & Symbol Guide
 
-| DFD Element Shape | Gane & Sarson / Yourdon Notation | Technical Role | MinSU System Implementation |
+| Visual Symbol | Syntax / Style | DFD Concept | MinSU Implementation |
 |---|---|---|---|
-| `[Rectangle]` | External Entity | Source or sink outside the process boundary | Students, Staff Coordinator, Campus Director, Accounting, CHED Agency |
-| `(("((Double Circle))"))` | Context Process (Level 0) | Top-level system boundary | Entire MinSU DocTrack system |
-| `["1.0 Process"]` | Operational Process (Level 1) | Data transformation or business logic step | Intake Applications, Validate Annexes, Executive Review, Financials |
-| `[("[(Cylinder)]")]` | Persistent Data Store | Relational table or permanent data repository | Users & Sessions, Applications, Documents, Transmittals, Audit Logs |
-| `-->|Data Flow|` | Named Flow Arrow | In-transit data packet or payload | Forms, tracking codes, financial records, audit rows |
-| 🟢 Green Box | Process Node | Active workflow processing unit | Core backend services and transaction coordinators |
-| 🟨 Gold Cylinder | Data Store Node | Persistent PostgreSQL / File store | Secure database tables with RLS and foreign key integrity |
-
+| `[Entity]` | `["Name"]` | External Source or Sink | System Administrator |
+| `(Process)` | `["N.0\nName"]` | Transformation of data packets | Account management, audit forensics, CMS editing |
+| `[(Data Store)]` | `[("DN: table")]` | Relational table or storage volume | PostgreSQL tables (`users`, `audit_log`), `/uploads/logos` |
+| `-->` | Directed Arrow | Flow of data packets | User credentials, forensic CSV stream, SVG buffers |
 
 ---
 
-## 4. Data Dictionary
+## 4. Data Flow Descriptions
 
-- **Account Credentials & Role**: Full name, institutional email address, initial password, and selected Role enum.
-- **Filter Query & Date Range**: Search terms for actor ID, target entity, or timestamp intervals.
-- **Filtered Log Records & Diffs**: List of action verbs, actor names, affected UUIDs, and field change payloads.
-- **Draft Section Content & Images**: Landing page banners, announcement headlines, and scholarship guidelines.
+- **1.0 Manage User Accounts & 2FA**: Provisions institutional accounts, updates RBAC roles, and resets user 2FA TOTP secrets.
+- **2.0 Filter & Export Audit Forensics**: Queries the append-only `audit_log` table by actor and date range and streams forensic CSV exports.
+- **3.0 Manage Landing CMS Content**: Allows drafting, previewing, and publishing landing page sections.
+- **4.0 Configure Institutional Branding**: Validates uploaded logos, stores them in `./storage/uploads/logos`, and saves branding styles.
+- **5.0 Control Rate Limiting Rules**: Enables administrators to temporarily disable anti-brute-force rate limiting during mass registration drives.

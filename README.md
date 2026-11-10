@@ -1,8 +1,8 @@
 # MinSU DocTrack — TDP Annex Management System
 
-> **Official Mindoro State University (MinSU)** Tulong Dunong Program (TDP) Annex Management & Review Tracking System.
+> **Official Mindoro State University (MinSU)** Tulong Dunong Program (TDP) Annex Management, Verification & Review Tracking System.
 
-MinSU DocTrack replaces the manual prepare → review → scan → upload → email routine for TDP Annexes 1–10 with a single, role-based, tracked workflow.
+MinSU DocTrack replaces the manual prepare → review → scan → upload → email routine for TDP Annexes 1–10 with a single, role-based, cryptographically tracked workflow.
 
 ---
 
@@ -23,40 +23,87 @@ All demo accounts are seeded with the password: **`Password@123`**
 
 | Role | Email | Purpose & Permissions |
 |---|---|---|
-| **Campus Director** | `director@minsu.edu.ph` | Executive review queue, formal approval, return with comments, executive KPI analytics dashboard |
-| **Staff Coordinator** | `staff@minsu.edu.ph` | Prepare Annexes 1–10, submit for review, record transmittals, publish Annex 2 applicant calls |
-| **Accounting Officer** | `accounting@minsu.edu.ph` | Prepare and submit financial Annexes (6, 7, 8, 9) |
-| **System Admin** | `admin@minsu.edu.ph` | Manage users & roles, inspect outgoing transmittal registry, view full audit logs |
-| **Student** | `student@minsu.edu.ph` | Open self-service registration, browse active TDP calls, submit online Annex 2 application, track status |
+| **Campus Director** | `director@minsu.edu.ph` | Executive review queue, formal approval, return with comments, executive KPI analytics dashboard, 3-way verification discrepancy review, award certificate signee approvals |
+| **Staff Coordinator** | `staff@minsu.edu.ph` | Prepare Annexes 1–5 & 10, submit for review, record transmittals, publish Annex 2 applicant calls, Student Masterlist Validation Queue (`/registrations`), 3-Way Verification Engine (`/verification`), Certificate Designer (`/certificate-editor`), announcements authoring |
+| **Accounting Officer** | `accounting@minsu.edu.ph` | Prepare and submit financial Annexes (6, 7, 8, 9), bank debit reconciliation, check registers, general stipend payrolls, multi-tab native ExcelJS export |
+| **System Admin** | `admin@minsu.edu.ph` | Manage users & roles, anti-brute-force rate limiting controls, full tamper-evident audit logs & forensics, Landing Page CMS Split-Screen Editor (`/landing-editor`), system branding & logo management, emergency IT announcements |
+| **Student** | `student@minsu.edu.ph` | Open self-service registration, 2FA Microsoft Authenticator setup, active TDP calls catalog, online Annex 2 application, tracking code lookup, persistent student profile with RA 10173 identity locking, announcements feed (`/portal/announcements`) |
 
 ---
 
-## 📋 TDP Annex Schedule Coverage
+## 📋 TDP Annex Schedule Coverage & Export Capabilities
 
-| Annex | Document Name | Prepared By | Reviewed By | Action Loop |
+| Annex | Document Name | Prepared By | Reviewed By | Action Loop & Primary Export |
 |---|---|---|---|---|
-| **1** | Submission to Agency | Staff | Director | Preparer records external agency dispatch & Drive links |
-| **2** | Call for Applicants | Staff / Student | Director (Analytics) | Public portal, online form submission, unique tracking code |
-| **3** | Continuing Billing | Staff | Director | In-app form, Director review queue, approval & stamp |
-| **4** | New Billing | Staff | Director | In-app form, Director review queue, approval & stamp |
-| **5** | Certificate of Qualified | Staff | Director | Eligibility masterlist endorsement |
-| **6** | Certificate of Fund Utilization | Staff / Accounting | Director | Financial reconciliation review & approval |
-| **7** | Report of Advance to Debit | Staff / Accounting | Director | Bank debit reference verification |
-| **8** | Report of Check Issued | Staff / Accounting | Director | Check disbursement audit record |
-| **9** | Payroll | Staff / Accounting | Director | Stipend beneficiary payroll endorsement |
-| **10** | TDP Notice of Awards | Staff | Director | Award batch issuance & guidelines |
+| **1** | Submission to Agency | Staff | Director | Preparer records external agency dispatch & Drive links; native ExcelJS export |
+| **2** | Call for Applicants | Staff / Student | Director (Analytics) | Public portal, online form submission, unique tracking code, student validation queue |
+| **3** | Continuing Billing | Staff | Director | In-app form, Director review queue, approval & stamp; 3-tab `Annex3.xlsx` export |
+| **4** | New Billing | Staff | Director | In-app form, 1-click applicant sync, Director review queue; 3-tab `Annex4.xlsx` export |
+| **5** | Certificate of Qualified | Staff | Director | Eligibility masterlist endorsement under UniFAST MO 01 s. 2024; ExcelJS export |
+| **6** | Certificate of Fund Utilization | Staff / Accounting | Director | Financial reconciliation review & approval; 3-signatory `Annex6.xlsx` export |
+| **7** | Report of Advance to Debit | Staff / Accounting | Director | Bank debit reference verification & Disbursing Officer oath; `Annex7.xlsx` export |
+| **8** | Report of Check Issued | Staff / Accounting | Director | Check disbursement audit record & Cashier register; 4-signatory `Annex8.xlsx` export |
+| **9** | Payroll | Staff / Accounting | Director | Stipend beneficiary payroll endorsement, dual-term stipend tracking; `Annex9.xlsx` export |
+| **10** | TDP Notice of Awards | Staff | Director | Award batch issuance, Certificate Designer template integration; native Word (`.doc`) export |
+
+---
+
+## 🚀 Key System Capabilities
+
+1. **Microsoft Authenticator & 2FA Extensions**:
+   - Time-based One-Time Password (TOTP) algorithm compatible with Microsoft Authenticator and Google Authenticator.
+   - Dynamic QR code generation, recovery emergency backup codes, and anti-lockout security preferences.
+
+2. **3-Way Cross-Matching Verification Engine**:
+   - Tripartite automated reconciliation cross-matching CHED CSV, Registrar Enrollment CSV, and MinSU System Masterlist datasets.
+   - Jaro-Winkler and Levenshtein fuzzy string matching with automated confidence scoring.
+   - Discrepancy classifications: `FULLY_VERIFIED`, `NEEDS_ENCODING`, `NOT_ENROLLED`, `SYSTEM_DISCREPANCY`, `POSSIBLE_MATCH`, and `ENROLLED_NON_SCHOLAR`.
+   - Manual discrepancy resolution workflows (`CONFIRM` / `DISMISS`) and comprehensive Excel audit export.
+
+3. **Student Masterlist & Registration Queue**:
+   - Staff coordinator validation dashboard (`/registrations`) with batch acceptance and rejection controls.
+   - Compliance with RA 10173 (Data Privacy Act of 2012): Student ID Number and Full Legal Name locked permanently upon acceptance, while academic and contact information (GWA, phone, address, parents) remain student-editable for renewal.
+
+4. **Certificate of No Other Scholarship & Certificate Designer**:
+   - In-app interactive Certificate Designer (`/certificate-editor`) with customizable layout, typography, dimensions (Letter, A4, Legal, Folio), and orientation (Portrait, Landscape).
+   - Dynamic signatory positioning, role-based signature blocks, live canvas preview, and one-click template reset.
+
+5. **Campus & Public Announcements System**:
+   - Real-time university announcement hub (`/announcements` and `/portal/announcements`).
+   - Categorization by `GENERAL`, `URGENT`, `DEADLINE`, `REQUIREMENTS`, and `PAYROLL`.
+   - Priority pinning, audience filtering (`ALL`, `STUDENTS`, `PUBLIC`), and configurable push notifications.
+
+6. **Native Multi-Format Document Generation**:
+   - Dual-Mode Interactive Suites: instant switching between Interactive Workspace (math, search, validation) and Official Government Canvas replicas.
+   - Pixel-perfect multi-tab Excel workbooks generated via **ExcelJS** with embedded government formatting and automated mathematical formulas.
+   - Native Microsoft Word (`.doc`) generation for official institutional award letters (Annex 10).
+   - Print-optimized CSS `@media print` for browser-based physical printing.
+
+7. **Landing Page CMS Split-Screen Editor**:
+   - Split-screen visual editor (`/landing-editor`) for System Administrators.
+   - Modular section controls (Hero, Ticker, Features, Stats, FAQ, Contact) with live responsive preview frames (Desktop, Tablet, Mobile) and draft vs. published workflow.
+
+8. **Institutional Branding & Media Assets**:
+   - Centralized institutional and partner agency logo management (`/api/branding/logo`).
+   - Strict MIME validation, cryptographically randomized paths, and Content-Security-Policy (CSP) headers protecting against SVG XSS vulnerabilities.
+
+9. **Rate Limiting & Defensive Security**:
+   - In-memory sliding window rate limiting on authentication and registration routes.
+   - System Administrator control toggle to bypass or enforce rate limits during campus-wide mass registration events.
+   - Hardened edge HTTP response security headers (X-Frame-Options, CSP, nosniff, CoOP, CoRP).
 
 ---
 
 ## ⚙️ Tech Stack
 
-- **Framework**: Next.js 16 (App Router, Fullstack)
-- **Database**: PostgreSQL
-- **ORM**: Prisma 6 (Client & Schema Migrations)
-- **Styling**: Tailwind CSS with custom MinSU CSS variables
-- **Icons**: Lucide React
-- **Authentication**: Server-side database sessions, `HttpOnly` Secure `SameSite=Lax` cookies, bcrypt password hashing
-- **Audit Logging**: Immutable event ledger tracking every state transition
+- **Framework**: Next.js 16 (App Router, Fullstack React Server Components & Server Actions)
+- **Database**: PostgreSQL 16
+- **ORM**: Prisma 6 (Client, Type Safety & Automated Migrations)
+- **Styling**: Tailwind CSS with custom MinSU design system tokens & CSS variables
+- **UI & Primitives**: Radix UI, Lucide React, Apple fluid spring physics animations
+- **Document Engines**: ExcelJS (native multi-tab `.xlsx`), HTML-to-Docx (`.doc`), Puppeteer PDF compiler
+- **Security & Auth**: Server-side database sessions, `HttpOnly` Secure `SameSite=Lax` cookies, bcryptjs password hashing, Speakeasy / OTPAuth TOTP 2FA
+- **Audit Logging**: Immutable event ledger tracking every state transition and security event
 
 ---
 
@@ -134,19 +181,35 @@ npm run start
 ## 🔄 Document Workflow Lifecycle
 
 ```mermaid
-flowchart LR
-    A[Draft] -->|Submit for Review| B[Submitted]
-    B -->|Director Approves| C[Approved]
-    B -->|Director Returns| D[Returned]
-    D -->|Preparer Revises & Resubmits| B
-    C -->|Upload Scanned Copy| E[Scan Uploaded]
-    E -->|Record Agency Transmittal| F[Transmitted]
-    F -->|Archive Record| G[Archived]
+flowchart TD
+    subgraph Intake["1. Intake & Masterlist"]
+        Reg["Student Online Application"] --> StaffVal["Staff Registration Validation"]
+        StaffVal --> CrossMatch{"3-Way Verification Engine"}
+        CrossMatch -->|CHED + Registrar Match| ValidatedRoster["Validated Scholar Masterlist"]
+    end
+
+    subgraph Preparation["2. Document Preparation"]
+        ValidatedRoster --> Draft["Draft Annex Creation"]
+        Draft --> Submit["Submit for Executive Review"]
+    end
+
+    subgraph Executive["3. Executive Review & Endorsement"]
+        Submit --> DirReview{"Campus Director Review"}
+        DirReview -->|Director Returns| Return["Returned with Comments"]
+        Return -->|Preparer Revises| Submit
+        DirReview -->|Director Endorses| Approved["Approved & Wet-Ink Ready"]
+    end
+
+    subgraph Agency["4. Dispatch & Liquidation"]
+        Approved --> Upload["Upload Signed Scan"]
+        Upload --> Transmit["Record Agency Transmittal (CHED/UniFAST)"]
+        Transmit --> Archive["Archived Retention Record"]
+    end
 ```
 
-- **Draft**: Only the preparer can view and edit.
-- **Submitted / Resubmitted**: Appears immediately in the Director's Review Queue.
-- **Approved**: Document locked from further tampering; ready for agency dispatch.
+- **Draft**: Editable only by the original preparer.
+- **Submitted / Resubmitted**: Appears immediately in the Director's Review Queue; locked against tampering.
+- **Approved**: Document endorsed by the Campus Director; unlocked for scan upload and agency dispatch.
 - **Returned**: Unlocked for preparer with corrective feedback and annotations.
 - **Transmitted**: Official record of dispatch to CHED, UniFAST, or DBM with Google Drive URL tracking.
 - **Archived**: Safely retained in institutional archives.
@@ -169,3 +232,16 @@ Comprehensive guides detailing both the statutory CHED/UniFAST regulatory requir
 - **[Annex 09: TDP Grantee Stipend Disbursement Payroll](./docs/annexes/annex-09-payroll.md)**
 - **[Annex 10: TDP Notice of Awards (NOA)](./docs/annexes/annex-10-notice-of-awards.md)**
 
+---
+
+## 🏛️ System & Role UML / SysML Diagrams
+
+MinSU DocTrack provides an exhaustive specification suite of 102 architectural and behavioral diagrams adhering to ASD-STE100 Simplified Technical English across 6 operational scopes:
+
+- 📊 **[System & Role Diagrams Master Matrix](./docs/diagrams/README.md)**
+- 🏢 **[Whole-System Architecture Suite (17 Diagrams)](./docs/diagrams/system/README.md)**
+- 🛡️ **[System Administrator Suite (17 Diagrams)](./docs/diagrams/admin/README.md)**
+- 👔 **[Campus Director Executive Suite (17 Diagrams)](./docs/diagrams/director/README.md)**
+- 📋 **[Staff Coordinator Operations Suite (17 Diagrams)](./docs/diagrams/staff/README.md)**
+- 💰 **[Accounting Officer Financial Suite (17 Diagrams)](./docs/diagrams/accounting/README.md)**
+- 🎓 **[Student Applicant Portal Suite (17 Diagrams)](./docs/diagrams/student/README.md)**

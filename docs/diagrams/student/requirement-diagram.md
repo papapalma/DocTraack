@@ -2,13 +2,14 @@
 
 > **Role:** `STUDENT`  
 > **Diagram Type:** Requirement Diagram (SysML)  
-> **Focus:** Student Portal Usability, Verification Codes, and Privacy Compliance
+> **Focus:** Student Portal Usability, 2FA, Verification Codes & RA 10173 Privacy Compliance  
+> **Standard:** SysML 1.6 Requirement Specification
 
 ---
 
 ## 1. Purpose
 
-The Requirement Diagram maps student-facing requirements to the architecture components that satisfy them and the test cases that verify them.
+The Requirement Diagram maps student-facing functional and security requirements to the architecture components that satisfy them and the automated test cases that verify them.
 
 ---
 
@@ -19,8 +20,8 @@ requirementDiagram
 
     requirement REQ_STU_01 {
         id: REQ-STU-01
-        text: Students must be able to register accounts using their university email.
-        risk: Medium
+        text: Students must register accounts using university email and configure Microsoft Authenticator 2FA.
+        risk: High
         verifymethod: Test
     }
 
@@ -33,19 +34,33 @@ requirementDiagram
 
     requirement REQ_STU_03 {
         id: REQ-STU-03
-        text: The portal must validate uploaded COR and grade files (PDF/PNG/JPG up to 5MB).
+        text: The portal must validate uploaded COR and grade files up to 5MB with MIME checking.
         risk: Medium
         verifymethod: Test
     }
 
     requirement REQ_STU_04 {
         id: REQ-STU-04
-        text: The system must provide a downloadable PDF receipt slip upon successful submission.
+        text: The system must provide a downloadable official receipt slip upon submission.
         risk: Low
         verifymethod: Demonstration
     }
 
-    element StudentRegistrationService {
+    requirement REQ_STU_05 {
+        id: REQ-STU-05
+        text: Accepted student identity fields must be locked against unauthorized editing under RA 10173.
+        risk: High
+        verifymethod: Test
+    }
+
+    requirement REQ_STU_06 {
+        id: REQ-STU-06
+        text: Students must view active campus announcements filtered by audience tier and priority.
+        risk: Medium
+        verifymethod: Test
+    }
+
+    element TwoFactorAuthEngine {
         type: block
     }
 
@@ -61,7 +76,15 @@ requirementDiagram
         type: block
     }
 
-    element TestStudentRegistration {
+    element ProfileLockController {
+        type: block
+    }
+
+    element AnnouncementFeedService {
+        type: block
+    }
+
+    element TestTwoFactorFlow {
         type: testCase
     }
 
@@ -69,7 +92,7 @@ requirementDiagram
         type: testCase
     }
 
-    element TestProofFileUploads {
+    element TestDocumentUploadValidation {
         type: testCase
     }
 
@@ -77,45 +100,50 @@ requirementDiagram
         type: testCase
     }
 
-    %% Satisfy Relations
-    StudentRegistrationService - satisfies -> REQ_STU_01
+    element TestStudentDataIntegrity {
+        type: testCase
+    }
+
+    element TestAnnouncementAudienceFilter {
+        type: testCase
+    }
+
+    TwoFactorAuthEngine - satisfies -> REQ_STU_01
     TrackingCodeLookupEngine - satisfies -> REQ_STU_02
     DocumentProofValidator - satisfies -> REQ_STU_03
     ReceiptSlipCompiler - satisfies -> REQ_STU_04
+    ProfileLockController - satisfies -> REQ_STU_05
+    AnnouncementFeedService - satisfies -> REQ_STU_06
 
-    %% Verify Relations
-    TestStudentRegistration - verifies -> REQ_STU_01
+    TestTwoFactorFlow - verifies -> REQ_STU_01
     TestTrackingCodeUniqueness - verifies -> REQ_STU_02
-    TestProofFileUploads - verifies -> REQ_STU_03
+    TestDocumentUploadValidation - verifies -> REQ_STU_03
     TestReceiptSlipRendering - verifies -> REQ_STU_04
-
-    %% ─── 📌 VISUAL LEGEND ───
-    element legend_guide {
-        type: "LEGEND: -contains-> Hierarchy | -satisfies-> Software Block | -verifies-> Test Suite"
-    }
+    TestStudentDataIntegrity - verifies -> REQ_STU_05
+    TestAnnouncementAudienceFilter - verifies -> REQ_STU_06
 ```
 
 ---
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol / Relationship | SysML Syntax | Engineering Purpose | MinSU Implementation Mapping |
+| SysML Element | Syntax / Type | Role & Specification | MinSU Implementation Mapping |
 |---|---|---|---|
-| `requirement req_id` | Requirement Block | Formal system specification with risk level & verify method | `REQ-SEC-01`, `REQ-AUD-01`, `REQ-FIN-01`, `REQ-DIR-01` |
-| `element name { type: block }` | Architecture Block | Implementation software module fulfilling the requirement | `src/lib/rbac.ts`, `src/lib/audit.ts`, `src/lib/validation.ts` |
-| `element name { type: testCase }` | Test Case Block | Automated test suite ensuring requirement compliance | Unit & E2E role tests, zero-variance math test suite |
-| `- contains ->` | Hierarchy Containment | Decomposes high-level goal into specific domain requirements | Root requirement decomposes into security, audit, finance, and SLA |
-| `- satisfies ->` | Satisfaction Link | Proves a software block implements the requirement | Architectural blocks satisfying regulatory and functional constraints |
-| `- verifies ->` | Verification Link | Proves a test suite validates the requirement | Automated test suites ensuring requirement verification |
-
+| `requirement` | Box with ID, Text, Risk | Functional or security specification | Portal 2FA, tracking uniqueness, RA 10173 lock, proof verification |
+| `element (block)` | Architecture Block | System module fulfilling requirement | `TwoFactorAuthEngine`, `TrackingCodeLookupEngine`, `ProfileLockController` |
+| `element (testCase)` | Verification Test Case | Automated test checking requirement | `tests/student-data-integrity.test.ts`, `tests/verification-matcher.test.ts` |
+| `- satisfies ->` | Dependency Arrow | Component implements requirement contract | Links Next.js controllers to system requirements |
+| `- verifies ->` | Dependency Arrow | Test suite validates requirement execution | Links Jest/Vitest automated assertions to requirements |
 
 ---
 
 ## 4. Requirements Traceability Matrix
 
-| Requirement ID | Statement | Satisfying Element | Verification Test Case |
-|---|---|---|---|
-| `REQ-STU-01` | Student registration with university credentials. | `src/app/(auth)/register` | `TestStudentRegistration` |
-| `REQ-STU-02` | Unique tracking code generation & lookup. | `src/app/portal` (`TrackingCodeLookupEngine`) | `TestTrackingCodeUniqueness` |
-| `REQ-STU-03` | File validation for COR and grades (`<= 5MB`). | `src/lib/validation.ts` | `TestProofFileUploads` |
-| `REQ-STU-04` | Downloadable PDF submission receipt slip. | `src/lib/pdf.ts` (`ReceiptSlipCompiler`) | `TestReceiptSlipRendering` |
+| Requirement ID | Requirement Statement | Fulfilling Component | Verification Test Case | Status |
+|---|---|---|---|---|
+| `REQ-STU-01` | Students must register accounts with university email and Microsoft Authenticator 2FA. | `TwoFactorAuthEngine` (`src/lib/two-factor.ts`) | `TestTwoFactorFlow` | Verified |
+| `REQ-STU-02` | Applications generate unique tracking codes (`TDP-YYYY-XXXX`) for public inquiry. | `TrackingCodeLookupEngine` (`src/lib/tracking.ts`) | `TestTrackingCodeUniqueness` | Verified |
+| `REQ-STU-03` | Uploaded proof files must be validated for MIME type and 5MB size limit. | `DocumentProofValidator` (`src/lib/validation.ts`) | `TestDocumentUploadValidation` | Verified |
+| `REQ-STU-04` | Downloadable official receipt slip generated upon submission. | `ReceiptSlipCompiler` (`src/components/portal/ReceiptSlip.tsx`) | `TestReceiptSlipRendering` | Verified |
+| `REQ-STU-05` | Student identity fields locked permanently upon acceptance under RA 10173. | `ProfileLockController` (`src/app/api/registrations/route.ts`) | `TestStudentDataIntegrity` | Verified |
+| `REQ-STU-06` | Pinned and targeted campus announcements feed for students. | `AnnouncementFeedService` (`src/app/portal/page.tsx`) | `TestAnnouncementAudienceFilter` | Verified |

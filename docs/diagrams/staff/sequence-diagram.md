@@ -2,13 +2,14 @@
 
 > **Role:** `STAFF`  
 > **Diagram Type:** Sequence Diagram  
-> **Scenario:** Signed Scan Upload & Transmittal Registration
+> **Scenario:** 3-Way Tripartite Verification & Native Excel Export  
+> **Standard:** UML 2.5 Sequence Specification
 
 ---
 
 ## 1. Purpose
 
-The Sequence Diagram shows the messages exchanged when the Staff Coordinator uploads a wet-signed PDF scan and registers the outgoing transmittal to CHED.
+The Sequence Diagram shows the chronological message flow when the Staff Coordinator executes a 3-way cross-matching run, resolves student discrepancies, imports verified grantees into Annex 4, and exports the native Excel workbook.
 
 ---
 
@@ -18,59 +19,77 @@ The Sequence Diagram shows the messages exchanged when the Staff Coordinator upl
 sequenceDiagram
     autonumber
     actor Staff as Staff Coordinator
-    participant UI as Document Detail UI
-    participant UploadAPI as /api/documents/[id]/upload
-    participant Disk as Local Disk Storage (/uploads)
-    participant TransmitAPI as /api/documents/[id]/transmit
+    participant UI as Verification UI (/verification)
+    participant VerifyAPI as /api/verification/run
+    participant Engine as 3-Way Matcher Engine
     participant Prisma as Prisma ORM Client
-    participant Audit as Audit Log Service
     participant DB as PostgreSQL Database
+    participant ExportAPI as /api/annex-4/export-excel
+    participant Audit as Audit Log Service
 
     %% ─── 📌 VISUAL LEGEND ───
-    Note over Staff,DB: ─── 📌 DIAGRAM LEGEND: Solid Line (->>) = Request/Command | Dashed Line (-->>) = Response/Data | Rect = Phase Boundary ───
+    Note over Staff,Audit: ─── 📌 DIAGRAM LEGEND: Solid Line (->>) = Request/Command | Dashed Line (-->>) = Response/Data | Rect = Phase Boundary ───
 
+    rect rgb(241, 248, 241)
+        Note over Staff,DB: Phase 1: CSV Dataset Ingestion & Tripartite Cross-Matching
+        Staff->>UI: Uploads CHED CSV & Registrar CSV
+        Staff->>UI: Clicks "Run Tripartite Verification"
+        UI->>VerifyAPI: POST multipart/form-data (chedFile, regFile)
+        activate VerifyAPI
+        VerifyAPI->>Engine: executeTripartiteMatch(chedRows, registrarRows)
+        activate Engine
+        Engine->>Prisma: Fetch active student registrations from DB
+        Prisma->>DB: SELECT * FROM registrations WHERE status = 'ACCEPTED'
+        DB-->>Prisma: Return student masterlist
+        Prisma-->>Engine: Masterlist records
+        Engine->>Engine: Run Jaro-Winkler fuzzy matching & student ID normalization
+        Engine-->>VerifyAPI: MatchSummary { fullyVerified, discrepancies, needsEncoding }
+        deactivate Engine
+        VerifyAPI->>Prisma: INSERT INTO verification_runs & verification_results
+        Prisma->>DB: Save verification run and discrepancy rows
+        DB-->>Prisma: Confirmed commit
+        VerifyAPI->>Audit: logAuditEvent(staffId, "VERIFICATION_RUN_EXECUTED", runId)
+        Audit->>DB: INSERT INTO audit_log
+        VerifyAPI-->>UI: 200 OK { runId, stats, discrepancies }
+        deactivate VerifyAPI
+        UI-->>Staff: Display verification summary cards & discrepancy table
+    end
 
-    Staff->>UI: Selects signed scan file (annex1_signed.pdf)
-    Staff->>UI: Clicks "Upload Signed Copy"
-    UI->>UploadAPI: POST multipart/form-data (file: Buffer, mime: application/pdf)
-    
-    activate UploadAPI
-    UploadAPI->>UploadAPI: Verify file MIME type & 15MB size limit
-    UploadAPI->>Disk: Write stream to /uploads/scans/annex1_signed_uuid.pdf
-    Disk-->>UploadAPI: File path acknowledged (/uploads/scans/...)
-    
-    UploadAPI->>Prisma: UPDATE documents SET fileUrl = '/uploads/...', status = 'UPLOADED'
-    Prisma->>DB: Execute document status update
-    DB-->>Prisma: Confirm status = UPLOADED
-    
-    UploadAPI->>Audit: logAuditEvent(staffId, "SCAN_UPLOADED", "DOCUMENT", docId)
-    Audit->>DB: INSERT INTO audit_log (...)
-    
-    UploadAPI-->>UI: 200 OK { success: true, fileUrl: "/uploads/..." }
-    deactivate UploadAPI
-    UI-->>Staff: Show badge: UPLOADED
+    rect rgb(255, 241, 194)
+        Note over Staff,DB: Phase 2: Discrepancy Evaluation & Resolution Gate
+        alt Discrepancies Found? -- Yes
+            Staff->>UI: Clicks "Resolve" on student discrepancy item
+            Staff->>UI: Selects action ("CONFIRM" or "DISMISS") with justification
+            UI->>VerifyAPI: POST /api/verification/resolve { resultId, resolutionAction, notes }
+            VerifyAPI->>Prisma: UPDATE verification_results SET resolved = true, notes = notes
+            Prisma->>DB: Update result status
+            DB-->>Prisma: Confirmed update
+            VerifyAPI-->>UI: 200 OK { resolved: true }
+            UI-->>Staff: Discrepancy item marked resolved with green badge
+        else Discrepancies Found? -- No
+            UI-->>Staff: Display 100% verification badge: "Ready for Annex Billing Import"
+        end
+    end
 
-    Staff->>UI: Clicks "Record Transmittal"
-    Staff->>UI: Inputs: Recipient: "CHED MMARO", Method: "Courier", DriveLink: "https://drive.google.com/..."
-    UI->>TransmitAPI: POST /api/documents/docId/transmit { recipient, method, driveLink, notes }
-    
-    activate TransmitAPI
-    TransmitAPI->>Prisma: $transaction(Create Transmittal & Set Status to TRANSMITTED)
-    activate Prisma
-    Prisma->>DB: INSERT INTO transmittals (documentId, sentById, recipient, method, driveLink)
-    Prisma->>DB: UPDATE documents SET status = 'TRANSMITTED'
-    Prisma->>DB: INSERT INTO status_history (...)
-    Prisma-->>TransmitAPI: Transaction successful
-    deactivate Prisma
-    
-    TransmitAPI->>Audit: logAuditEvent(staffId, "TRANSMITTAL_LOGGED", "DOCUMENT", docId)
-    Audit->>DB: INSERT INTO audit_log (...)
-    
-    TransmitAPI-->>UI: 200 OK { success: true, status: "TRANSMITTED" }
-    deactivate TransmitAPI
-    
-    UI-->>Staff: Display green toast: "Transmittal successfully cataloged in Outgoing Registry"
+    rect rgb(220, 239, 221)
+        Note over Staff,Audit: Phase 3: Annex Compilation & Native Multi-Tab Excel Export
+        Staff->>UI: Clicks "Import Verified Roster into Annex 4"
+        UI->>VerifyAPI: POST /api/annex-4/sync-verified { runId }
+        VerifyAPI->>Prisma: Populate Annex 4 Form 2 line items from verified grantees
+        Prisma->>DB: INSERT / UPDATE documents (formData)
+        DB-->>Prisma: Confirmed document draft updated
+        VerifyAPI-->>UI: 200 OK { documentId, granteeCount }
+        UI-->>Staff: Show Annex 4 draft populated with verified students
 
+        Staff->>UI: Clicks "Export Native Excel (.xlsx)"
+        UI->>ExportAPI: GET /api/annex-4/export-excel?docId=documentId
+        activate ExportAPI
+        ExportAPI->>ExportAPI: Build 3-Tab ExcelJS Workbook (Summary, Form 2, Details)
+        ExportAPI->>ExportAPI: Calculate 0.5% Administrative Cost formula: ROUND(stipends * 0.005, 2)
+        ExportAPI-->>UI: Stream application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+        deactivate ExportAPI
+        UI-->>Staff: Download Annex4_Verified_Billing.xlsx file
+    end
 ```
 
 ---
@@ -79,21 +98,23 @@ sequenceDiagram
 
 | Visual / Symbol | Element Type | Technical Role | MinSU DocTrack Context |
 |---|---|---|---|
-| 👤 `actor` | Human Actor | External user role triggering system operations | Student Applicant, Staff Coordinator, Campus Director, Accounting Officer |
-| 🔲 `participant` | System Component | Internal software subsystem or persistence boundary | Web UI, API Endpoint, Workflow Engine, Prisma/PostgreSQL, PDF Compiler |
-| ──▶ `->>` | Solid Arrow | Synchronous invocation or command message | Submitting forms, verifying tokens, invoking database writes |
-| - - ▷ `-->>` | Dashed Arrow | Return response or data payload | Confirmation slips, tracking codes, PDF binary buffers, query results |
-| 🔲 `activate / deactivate` | Activation Lifeline | Period during which a component executes logic | Active request execution on API controllers or PDF engines |
-| 🔲 `alt / else` | Conditional Fragment | Decision tree handling alternative workflow paths | Approval vs. Return branching, SLA compliance checks |
-
+| `Actor` | Human User | Initiator of operational procedures | Staff Coordinator executing verification runs |
+| `Participant` | System Component | Boundary, controller, or data store | Verification API, 3-Way Matcher Engine, Prisma ORM |
+| `->>` | Synchronous Message | Command or method invocation | Upload CSV files, run matching, resolve discrepancy |
+| `-->>` | Return Message | Response data or confirmation payload | Returns summary metrics, discrepancy lists, streamed Excel file |
+| `alt / else` | Conditional Frame | Guarded execution path (**Yes** / **No**) | Discrepancies Found? Yes -> manual resolution; No -> instant ready |
+| `rect` | Grouping Boundary | Multi-step logical operational phase | Ingestion phase, discrepancy gate, compilation and export |
 
 ---
 
-## 4. Sequence Steps
+## 4. Execution Sequence Steps
 
-1. Staff uploads the scanned PDF via the document detail screen.
-2. API validates file type and streams binary data to local `/uploads` storage.
-3. Database marks the document as `UPLOADED`.
-4. Staff enters courier tracking information and the external Google Drive link.
-5. API creates a `Transmittal` record and marks the document `TRANSMITTED`.
-6. Audit Log Service stores the dispatch event, and the Outgoing Registry updates.
+1. Staff Coordinator uploads CHED and Registrar CSV datasets to `/verification`.
+2. Staff clicks "Run Tripartite Verification".
+3. System normalizes student IDs and applies Jaro-Winkler fuzzy name matching.
+4. If discrepancies exist (**Yes**), Staff inspects items and manually resolves them.
+5. If zero discrepancies exist (**No**), System marks the cohort ready for billing.
+6. Staff clicks "Import Verified Roster into Annex 4".
+7. System generates the Form 2 student grantee table.
+8. Staff clicks "Export Native Excel".
+9. System generates and streams a native 3-tab `ExcelJS` spreadsheet with automated fiscal formulas.

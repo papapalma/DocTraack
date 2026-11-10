@@ -35,7 +35,9 @@ While Annex 3 bills for continuing scholars already enrolled in the UniFAST regi
 
 ```mermaid
 graph TD
-    A2[Annex 2: Online Student Intake] -->|1-Click Roster Sync| F2[Annex 4 Form 2: Consolidated New TDP Details]
+    A2[Annex 2: Online Student Intake] -->|Staff Validation Queue| ValReg[Validated Student Registrations]
+    ValReg --> Verify[3-Way Verification Engine: CHED + Registrar CSVs]
+    Verify -->|1-Click Roster Sync| F2[Annex 4 Form 2: Consolidated New TDP Details]
     F2 -->|Headcount N, Total ₱ & 0.5% Fee| F1[Annex 4 Form 1: Consolidated Billing Statement]
     F2 -->|Campus Grantee Headcount Breakdown| F3[Annex 4 Form 3: Institutional Certification & Jurat]
     F1 -.->|Mathematical Reconciliation| F2

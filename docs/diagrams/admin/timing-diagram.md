@@ -2,14 +2,14 @@
 
 > **Role:** `SYSTEM_ADMIN`  
 > **Diagram Type:** Timing Diagram  
-> **Scenario:** Administrative Session Expiration & Audit Write Constraints  
+> **Scenario:** Administrative Session Expiration, 2FA Time-Steps & Rate Limit Lockout Windows  
 > **Standard:** UML 2.5 Timing Specification
 
 ---
 
 ## 1. Purpose
 
-The Timing Diagram shows how the state of an Administrator's session and the audit write latency change over exact time scales.
+The Timing Diagram shows the lifecycle states of administrative sessions, TOTP token validity intervals, anti-brute-force lockout windows, and audit log write latency constraints.
 
 ---
 
@@ -21,49 +21,55 @@ skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
 
 robust "Admin User Activity" as AdminAct
-robust "Session State" as SessState
-concise "Audit Event Ingestion" as AuditLog
+robust "Session & 2FA State" as SessState
+concise "Rate Limit Window" as RateLimit
+concise "Audit Ingestion" as AuditLog
 
 @0
 AdminAct is Active
-SessState is Valid
-AuditLog is Idle
-
-@20
-AdminAct is Idle
-SessState is Valid
+SessState is Authenticating
+RateLimit is Clear
 AuditLog is Idle
 
 @30
 AdminAct is Active
-SessState is Valid
-AuditLog is Recording
-note bottom of AuditLog : User Role Mutation Logged (< 100ms)
-
-@31
+SessState is Valid2FA
+RateLimit is Clear
 AuditLog is Idle
+note bottom of SessState : RFC 6238 TOTP Verified (30s time step)
 
 @60
+AdminAct is MutatingConfig
+SessState is Valid2FA
+RateLimit is Clear
+AuditLog is Recording
+note bottom of AuditLog : Mutation Logged to PostgreSQL (<= 100ms)
+
+@61
+AuditLog is Idle
+
+@70
 AdminAct is Inactive
-SessState is Valid
+SessState is Valid2FA
+RateLimit is Clear
 
 @120
 AdminAct is Inactive
 SessState is Expired
-note bottom of SessState : 2-hour Inactivity Limit Reached
+RateLimit is Clear
+note bottom of SessState : Inactivity Session Expiration Reached
 
-@0 <-> @30 : {Session Valid}
-@30 <-> @31 : {Audit Ingestion <= 100ms}
-@60 <-> @120 : {Inactivity Limit = 60 mins}
+@0 <-> @30 : {TOTP Token Step = 30 seconds}
+@60 <-> @61 : {Audit Ingestion Latency <= 100ms}
+@70 <-> @120 : {Max Inactivity Window = 50 minutes}
 
 legend right
   <b>📌 DIAGRAM LEGEND & TIMING NOTATION</b>
   robust : Discrete operational state lifeline
   concise : Status bar indicating condition / SLA
-  @N : Time tick offset in minutes
-  @A <-> @B : Strict interval SLA constraint
+  @N : Time tick offset in seconds/minutes
+  @A <-> @B : Strict interval timing constraint
 endlegend
-
 @enduml
 ```
 
@@ -71,20 +77,17 @@ endlegend
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Notation / Element | Type / Syntax | Temporal Role | MinSU Operational Application |
+| Visual Symbol | Syntax / Style | UML Timing Concept | MinSU Implementation Context |
 |---|---|---|---|
-| `robust "Lifeline"` | Discrete State Lifeline | Tracks operational state transitions over time | `AdminAct` (Administrator activity), `SessState` (Session validity) |
-| `concise "Status"` | Status Interval Bar | Tracks system event ingestion status | `AuditLog` (`Idle` vs. `Recording`) |
-| `@N` | Time Tick Offset | Minute marker from administrator session initiation | `@0` (Login), `@30` (Privileged action), `@60` (Idle), `@120` (Inactivity limit) |
-| `@A <-> @B : {Rule}` | Time Constraint Interval | Hard security or system performance constraint | Session Valid, Audit Ingestion (<= 100ms), Inactivity Limit (60 mins) |
-| `note bottom of ...` | Event Milestone Callout | Operational trigger annotation | Audit event logged within 100ms, 2-hour inactivity timeout reached |
+| Lifeline Wave | `robust "Name"` | Continuous state value of an entity | Admin Activity, Session & 2FA State |
+| State Label | `Lifeline is STATE` | Active discrete status during interval | `AUTHENTICATING`, `VALID2FA`, `EXPIRED` |
+| Timing Bar | `concise "Name"` | Qualitative status during interval | `Clear`, `Recording`, `Idle` |
+| Interval Constraint | `@A <-> @B : {Label}` | Strict timing deadline or window | 30s TOTP step, 100ms audit write limit |
 
 ---
 
-## 4. Timeline & Time Constraints
+## 4. Timeline Milestones & Timing Rules
 
-| Milestone | Time Elapsed | Session State | Time Constraint & Description |
-|---|---|---|---|
-| **Login Authenticated** | `0 min` | `Valid` | Session cookie set with 7-day maximum age and HTTP-only flag. |
-| **Administrative Mutation** | `30 min` | `Valid` | Audit event written atomically within `<= 100ms`. |
-| **Inactivity Limit** | `120 min` | `Expired` | Inactive admin session terminated to protect security boundaries. |
+- **Second 0 to 30**: RFC 6238 time-step window for Microsoft Authenticator TOTP token verification.
+- **Second 60**: Administrator modifies a user role; system commits the audit log within 100 milliseconds.
+- **Minute 50 to 120**: Session inactivity limit; expires session token and requires re-authentication.

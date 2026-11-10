@@ -1,43 +1,50 @@
-# Object Diagram: Accounting Officer Domain
+# Accounting Officer — Object Diagram
 
-## 1. Description
-This object diagram shows a runtime instance snapshot of an Accounting Officer compiling and reconciling an Annex 9 Beneficiary Payroll document in MinSU DocTrack. It captures concrete attribute values, financial totals, and object associations at the exact moment of document submission.
+> **Role:** `ACCOUNTING_OFFICER`  
+> **Diagram Type:** Object Diagram  
+> **Scenario:** Runtime Snapshot of Annex 9 Payroll Submission & Zero-Variance Reconciliation  
+> **Standard:** UML 2.5 Object Specification
 
-## 2. ASD-STE100 Technical Specifications
-- Display concrete object instances with explicit identifier values.
-- Calculate exact currency sums with zero variance between payroll and allocation.
-- Show active audit relationships and status history records.
+---
 
-## 3. Object Diagram (Mermaid)
+## 1. Purpose
+
+The Object Diagram shows a concrete runtime snapshot of objects, attribute values, and links created when an Accounting Officer balances an Annex 9 Beneficiary Payroll and submits it to executive review.
+
+---
+
+## 2. Mermaid Object Diagram
 
 ```mermaid
-graph TB
-    subgraph Instances ["Runtime Instance Snapshot: Annex 9 Payroll Submission"]
-        user1["acctOfficer_1 : User<br/>id = 'usr_acc_881'<br/>name = 'Elena Ramos'<br/>role = 'ACCOUNTING'"]
+flowchart TD
+    %% Styling Classes
+    classDef objStyle fill:#FFFFFF,stroke:#1B5E20,stroke-width:2px,color:#1F2A24;
 
-        doc1["doc_payroll : Document<br/>id = 'doc_annex9_2026_01'<br/>title = 'TDP 1st Sem Beneficiary Payroll'<br/>annexType = 'ANNEX_9'<br/>status = 'SUBMITTED'<br/>createdById = 'usr_acc_881'"]
+    user1["<u>acctOfficer : User</u><br/>id = 'usr_acc_881'<br/>name = 'Elena Ramos'<br/>role = ACCOUNTING_OFFICER<br/>twoFactorEnabled = true"]:::objStyle
 
-        meta1["payrollData : FinancialMetadata<br/>allocatedFund = 500000.00 PHP<br/>disbursedAmount = 500000.00 PHP<br/>remainingBalance = 0.00 PHP<br/>beneficiaryCount = 100<br/>checkNumber = 'CHK-2026-9041'<br/>bankAccount = 'LBP-0492-1102'"]
+    doc1["<u>doc_payroll : Document</u><br/>id = 'doc_annex9_2026_01'<br/>title = 'TDP 1st Sem Beneficiary Payroll'<br/>annexType = ANNEX_9<br/>status = SUBMITTED<br/>createdById = 'usr_acc_881'"]:::objStyle
 
-        hist1["status_draft : StatusHistory<br/>id = 'sh_01'<br/>fromStatus = null<br/>toStatus = 'DRAFT'<br/>changedById = 'usr_acc_881'<br/>remarks = 'Initial ledger entry'"]
+    meta1["<u>payrollTotals : FinancialSummary</u><br/>allocatedFund = 500000.00 PHP<br/>totalDisbursed = 500000.00 PHP<br/>variance = 0.00 PHP<br/>beneficiaryCount = 50<br/>checkNumber = 'CHK-2026-9041'"]:::objStyle
 
-        hist2["status_submitted : StatusHistory<br/>id = 'sh_02'<br/>fromStatus = 'DRAFT'<br/>toStatus = 'SUBMITTED'<br/>changedById = 'usr_acc_881'<br/>remarks = 'Balanced payroll submitted to Director'"]
+    excelObj["<u>payrollWorkbook : ExcelWorkbook</u><br/>fileName = 'Annex9_Payroll_2026.xlsx'<br/>tabCount = 3<br/>formattedCurrency = true"]:::objStyle
 
-        audit1["audit_log_99 : AuditLog<br/>id = 'aud_fin_99'<br/>userId = 'usr_acc_881'<br/>action = 'DOCUMENT_SUBMITTED'<br/>resourceType = 'DOCUMENT'<br/>resourceId = 'doc_annex9_2026_01'"]
-    end
+    histObj["<u>statusHistory : StatusHistory</u><br/>id = 'sh_02'<br/>fromStatus = DRAFT<br/>toStatus = SUBMITTED<br/>actorId = 'usr_acc_881'<br/>remarks = 'Zero variance verified against CHED allocation'"]:::objStyle
 
-    user1 -->|created| doc1
-    doc1 -->|contains| meta1
-    doc1 -->|appended| hist1
-    doc1 -->|transitioned| hist2
-    user1 -->|triggered| hist2
-    user1 -->|emitted| audit1
+    audit1["<u>auditLog : AuditLog</u><br/>id = 'aud_fin_99'<br/>actorId = 'usr_acc_881'<br/>action = 'FINANCIAL_ANNEX_SUBMITTED'<br/>entity = 'DOCUMENT'<br/>entityId = 'doc_annex9_2026_01'"]:::objStyle
+
+    user1 ---|prepares| doc1
+    doc1 ---|summarized by| meta1
+    doc1 ---|exported as| excelObj
+    doc1 ---|transitioned by| histObj
+    user1 ---|submits| histObj
+    user1 ---|triggers| audit1
+    audit1 ---|logs| doc1
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Inst["instanceName : ClassName<br/>attribute1 = value<br/>attribute2 = value"]:::legInst
-        L_Link["Link: --predicate-->"]:::legLink
+        L_Inst["<u>instanceName : ClassName</u><br/>attribute1 = value<br/>attribute2 = value"]:::legInst
+        L_Link["Link: ---predicate---"]:::legLink
         L_Inst --> L_Link
     end
     classDef legInst fill:#F1F8F1,stroke:#1B5E20,color:#1F2A24;
@@ -46,19 +53,21 @@ graph TB
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
 | Visual Symbol | Syntax / Format | UML Role | MinSU Instance Context |
 |---|---|---|---|
-| Instance Node | `instanceName : ClassName` | Concrete runtime instance in memory/DB | Active users, specific scholarship calls, concrete annex documents |
-| Attribute Values | `attr = 'value'` | Concrete state of instance properties | `status = 'APPROVED'`, `trackingCode = 'TDP-2026-0192'`, `slotQuota = 250` |
-| `-->|predicate|` | Directed Association Link | Concrete relationship between runtime objects | User compiles document, director endorses record, transmittal dispatches |
-| Subgraph Boundary | `subgraph GroupName` | Domain grouping boundary | Active Users, Intake Instances, Compiled Annexes, Transmittal Audits |
-| 🟢 Green Container | `#F1F8F1` / `#1B5E20` | Operational Domain Entities | Authenticated staff/director records and approved scholarship documents |
-| 🟡 Gold Node | `#FFF1C2` / `#B88A00` | Financial & Security Linkages | Ledger documents and audit log event tracking |
+| `<u>instance : Class</u>` | Underlined Identifier | Concrete runtime object in memory | Accounting Officer, active payroll document, Excel file |
+| `attr = 'value'` | Key-Value Assignment | Concrete state of instance properties | `variance = 0.00 PHP`, `status = SUBMITTED` |
+| `---predicate---` | Undirected Semantic Link | Association relationship at runtime | Officer prepares document, exports workbook |
+| 🟢 Green Container | `#1B5E20` / `#F1F8F1` | Verified Financial Entity | Balanced payroll with zero variance ready for endorsement |
 
+---
 
-## 5. Snapshot State Verification
-- **Allocated Fund**: ₱500,000.00 matched exactly with 100 student beneficiaries at ₱5,000.00 each.
-- **Variance**: ₱0.00 remaining balance, satisfying zero-variance validation rules.
-- **State Transition**: Moved from `DRAFT` to `SUBMITTED`, initiating executive review queue notification.
+## 4. Runtime Object Attributes
+
+- `acctOfficer`: Authenticated accounting user with verified two-factor authentication.
+- `doc_payroll`: Official Annex 9 payroll document transitioned to `SUBMITTED`.
+- `payrollTotals`: Reconciled figures showing exact ₱0.00 variance between allocation and disbursements.
+- `payrollWorkbook`: Native 3-tab `ExcelJS` spreadsheet generated from live grantee line items.
+- `auditLog`: Immutable security entry documenting the submission event.

@@ -29,11 +29,11 @@ flowchart TD
 
     HasPending -- Yes --> SdInspect["sd: Inspect Annex Details & PDF Preview<br/>Director examines student roster & fiscal totals"]:::frameNode
     
-    SdInspect --> DecisionAccept{Evaluation Decision}:::decisionNode
+    SdInspect --> DecisionAccept{Does Director Approve Document?}:::decisionNode
 
-    DecisionAccept -- Endorsement --> RefApprove["ref: Execute Endorsement Sequence<br/>(Sets APPROVED, alerts preparer, logs audit)"]:::frameNode
+    DecisionAccept -- Yes --> RefApprove["ref: Execute Endorsement Sequence<br/>(Sets APPROVED, alerts preparer, logs audit)"]:::frameNode
 
-    DecisionAccept -- Revisions Needed --> RefReturn["ref: Execute Return Sequence<br/>(Sets RETURNED, attaches feedback, unlocks form)"]:::frameNode
+    DecisionAccept -- No --> RefReturn["ref: Execute Return Sequence<br/>(Sets RETURNED, attaches feedback, unlocks form)"]:::frameNode
 
     RefApprove --> JoinDecisions(( )):::controlNode
     RefReturn --> JoinDecisions
@@ -49,7 +49,7 @@ flowchart TD
         L_Dec{"{Decision Node}"}:::legDec
         L_Term(["([Terminal / End])"]):::legTerm
         L_Frame --> L_Dec
-        L_Dec -->|Approved / Success| L_Term
+        L_Dec -->|Yes| L_Term
     end
     classDef legFrame fill:#F1F8F1,stroke:#1B5E20,color:#1F2A24;
     classDef legDec fill:#FFF1C2,stroke:#B88A00,color:#1F2A24;
@@ -66,7 +66,7 @@ flowchart TD
 | `{Decision}` | `{"Decision"}` | Activity decision branch point | Critical decision gate (e.g., approval vs. return, variance check) |
 | `([Pill Node])` | `([Start / End])` | Lifecycle start or terminal archive node | Initiating semester operations or locking final records in archive |
 | `-->` Solid Arrow | Control Flow Connector | Sequential hand-off between frames | Passing control from one interaction frame to the next |
-| `-->|Label|` | Guarded Branch | Conditional scenario path | "Yes: Approved", "No: Discrepancy", "Return with Remarks" |
+| `-->|Label|` | Guarded Branch | Conditional scenario path | "Yes", "No" |
 | 🟢 Green Box | `#F1F8F1` / `#1B5E20` | Successful Workflow Phase | Forward operational processing and executive approval |
 | 🟡 Gold Diamond | `#FFF1C2` / `#B88A00` | Institutional Checkpoint | Evaluation queue and zero-variance fiscal math check |
 
@@ -80,8 +80,8 @@ flowchart TD
 | `Authenticate Director Session` | Sequence (`ref`) | System Auth | Validates session token and verifies `DIRECTOR` privileges. |
 | `Fetch /review Pending Documents` | Sequence (`ref`) | Document Service | Loads documents with status `SUBMITTED` or `RESUBMITTED`. |
 | `Inspect Annex Details & PDF Preview` | Inline (`sd`) | Review UI | Displays structured roster and compiles visual PDF preview. |
-| `Execute Endorsement Sequence` | Sequence (`ref`) | [`sequence-diagram.md`](file:///c:/Users/Paolo%20Amor%20P.%20Palma/Desktop/NICKO/docs/diagrams/director/sequence-diagram.md) | Executes 1-click approval transaction and notifies preparer. |
-| `Execute Return Sequence` | Sequence (`ref`) | [`sequence-diagram.md`](file:///c:/Users/Paolo%20Amor%20P.%20Palma/Desktop/NICKO/docs/diagrams/director/sequence-diagram.md) | Captures revision comments, updates status, and unlocks form. |
+| `Execute Endorsement Sequence` | Sequence (`ref`) | [`sequence-diagram.md`](./sequence-diagram.md) | Executes 1-click approval transaction and notifies preparer. |
+| `Execute Return Sequence` | Sequence (`ref`) | [`sequence-diagram.md`](./sequence-diagram.md) | Captures revision comments, updates status, and unlocks form. |
 
 ---
 

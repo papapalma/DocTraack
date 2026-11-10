@@ -1,30 +1,47 @@
-# Communication Diagram: Accounting Officer Domain
+# Accounting Officer — Communication Diagram
 
-## 1. Description
-This communication diagram visualizes the structural associations and numbered message exchanges between collaborating objects during an Annex 6 Fund Utilization reconciliation performed by the Accounting Officer.
+> **Role:** `ACCOUNTING_OFFICER`  
+> **Diagram Type:** Communication Diagram  
+> **Scenario:** Annex 6 Fund Utilization Balancing, Excel Export, and Submission  
+> **Standard:** UML 2.5 Communication Specification
 
-## 2. ASD-STE100 Technical Specifications
-- Number messages sequentially to show execution order.
-- Connect collaborating instances through explicit structural links.
-- Record audit trails and notification dispatches during financial ledger updates.
+---
 
-## 3. Communication Diagram (Mermaid)
+## 1. Purpose
+
+The Communication Diagram shows the structural links and numbered message invocations during financial balancing, native multi-tab Excel generation, and executive submission performed by the Accounting Officer.
+
+---
+
+## 2. Mermaid Communication Diagram
 
 ```mermaid
-graph LR
-    AcctUI["1: acctUI : WebBrowser"]
-    DocCtrl["2: docCtrl : DocumentController"]
-    FinMath["3: finMath : CurrencyMathEngine"]
-    PrismaDB["4: db : PrismaClient"]
-    AuditLog["5: audit : AuditService"]
-    NotifSvc["6: notif : NotificationService"]
+flowchart LR
+    %% Styling Classes
+    classDef actorStyle fill:#F1F8F1,stroke:#1B5E20,stroke-width:2px,color:#1F2A24;
+    classDef objStyle fill:#FFFFFF,stroke:#1B5E20,stroke-width:1.5px,color:#1F2A24;
 
-    AcctUI -- "1: submitAnnex6(formData)<br/>7: renderSuccess(docId)" --> DocCtrl
-    DocCtrl -- "2: calculateVariance(alloc, disburse)" --> FinMath
-    FinMath -- "3: return varianceResult" --> DocCtrl
-    DocCtrl -- "4: updateDocumentStatus(docId, 'SUBMITTED')" --> PrismaDB
-    DocCtrl -- "5: logFinancialEvent(userId, 'DOC_SUBMITTED')" --> AuditLog
-    DocCtrl -- "6: notifyDirector(docId, 'New Annex 6 Submitted')" --> NotifSvc
+    AcctUser["accounting : AccountingOfficer"]:::actorStyle
+    AcctUI["acctUI : FinancialFormView"]:::objStyle
+    DocCtrl["docCtrl : FinancialDocumentController"]:::objStyle
+    FinMath["finMath : ZeroVarianceEngine"]:::objStyle
+    ExcelExport["excel : ExcelJSExporter"]:::objStyle
+    PrismaDB["db : PrismaClient"]:::objStyle
+    AuditLog["audit : AuditService"]:::objStyle
+    NotifSvc["notif : NotificationService"]:::objStyle
+
+    %% Object Links and Numbered Messages
+    AcctUser ---|1: submitFinancialAnnex(formData)| AcctUI
+    AcctUI ---|2: calculateVariance(alloc, disburse)| FinMath
+    FinMath ---|3: returnVariance(0.00 PHP)| AcctUI
+    AcctUI ---|4: requestWorkbookExport(docId)| ExcelExport
+    ExcelExport ---|5: streamExcelWorkbook(Annex6.xlsx)| AcctUI
+    AcctUI ---|6: POST /api/documents/:id/submit| DocCtrl
+    DocCtrl ---|7: updateDocumentStatus('SUBMITTED')| PrismaDB
+    DocCtrl ---|8: logAuditEvent(FINANCIAL_ANNEX_SUBMITTED)| AuditLog
+    DocCtrl ---|9: notifyDirector('New Annex 6 Submitted')| NotifSvc
+    DocCtrl ---|10: 200 OK (Submission Confirmed)| AcctUI
+    AcctUI ---|11: displaySuccessNotice()| AcctUser
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph Legend ["📌 Diagram Legend"]
@@ -39,22 +56,25 @@ graph LR
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
-| Element | Format / Syntax | Technical Meaning | MinSU Implementation Context |
+| Visual Symbol | Syntax / Style | UML Communication Meaning | MinSU Implementation |
 |---|---|---|---|
-| Subsystem Node | `[N: name : Class]` | Structural software participant | Controllers, Workflow Engines, Prisma Client, Storage Adapters |
-| Link Connector | `-- "..." -->` | Directed communication channel | HTTP request, RPC method call, or database query |
-| Numbered Prefix | `1:`, `2:`, `10:` | Chronological message sequence number | Sequential execution order from client event to persistence and UI update |
-| Method Signature | `methodName(params)` | Invoked operation contract | `verifyRole(token)`, `checkVariance()`, `writeAuditLog()` |
-| 🟢 Green Tone | `#F1F8F1` / `#1B5E20` | Core Subsystem Component | Institutional controllers, persistence adapters, and business engines |
-| 🟡 Gold Tone | `#FFF1C2` / `#B88A00` | Guard & Dispatch Relay | Access guards, validation checks, and notification dispatchers |
+| `[Object]` | `["instance : Class"]` | Named runtime instance participating in flow | `accounting`, `docCtrl`, `finMath`, `excel : ExcelJSExporter` |
+| `---` | Association Line | Structural communication link between objects | Connects UI to calculation engine and controller |
+| `N: method()` | Sequence Call Number | Chronological order and message invocation | `1: submit()`, `2: calculateVariance()`, `4: requestExport()` |
+| 🟢 Green Tone | `#F1F8F1` / `#1B5E20` | Accounting Actor / Authorized Endpoint | Authenticated Accounting Officer managing financial reports |
 
+---
 
-## 5. Message Sequence Description
-- **1**: The Accounting Officer triggers submission of Annex 6 Fund Utilization through the browser interface.
-- **2-3**: The controller requests variance calculation from the `CurrencyMathEngine` and verifies 0.00 discrepancy.
-- **4**: The controller commits the status change to `SUBMITTED` in the relational database.
-- **5**: An immutable audit log entry is recorded for security monitoring.
-- **6**: The notification service alerts the Campus Director that an executive financial review is waiting.
-- **7**: The browser displays a success confirmation badge to the Accounting Officer.
+## 4. Message Invocation Sequence
+
+1. Accounting Officer triggers submission of Annex 6 Fund Utilization in the browser.
+2. UI invokes `ZeroVarianceEngine` to compare line item expenditures against grant allocations.
+3. Engine confirms exact ₱0.00 variance.
+4. Officer requests a native Excel workbook; `ExcelJS` streams the multi-tab spreadsheet.
+5. UI submits the verified document to the server.
+6. Controller transitions status to `SUBMITTED` in PostgreSQL.
+7. Audit service creates an immutable security log entry.
+8. Notification service alerts the Campus Director of the pending financial review.
+9. UI displays a success confirmation toast to the Accounting Officer.

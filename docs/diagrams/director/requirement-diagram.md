@@ -2,13 +2,13 @@
 
 > **Role:** `DIRECTOR`  
 > **Diagram Type:** Requirement Diagram (SysML)  
-> **Focus:** Signatory Authority, Review Turnaround, and Decision Tracking
+> **Focus:** Signatory Authority, Review Turnaround, 2FA Security, and Verification Oversight
 
 ---
 
 ## 1. Purpose
 
-The Requirement Diagram connects Campus Director compliance requirements to the software blocks that implement them and the test cases that verify them.
+The Requirement Diagram maps Campus Director regulatory governance, signatory authority, and review performance requirements to the system architecture blocks that satisfy them.
 
 ---
 
@@ -19,28 +19,42 @@ requirementDiagram
 
     requirement REQ_DIR_01 {
         id: REQ-DIR-01
-        text: Only users with the DIRECTOR role shall have the authority to endorse submitted documents.
-        risk: High
+        text: The system shall restrict document approval authority strictly to authenticated CAMPUS_DIRECTOR sessions.
+        risk: Critical
         verifymethod: Test
     }
 
     requirement REQ_DIR_02 {
         id: REQ-DIR-02
-        text: The system must allow the Director to return documents with revision comments.
+        text: The system shall require mandatory revision feedback before a document can be marked RETURNED.
         risk: Medium
         verifymethod: Demonstration
     }
 
     requirement REQ_DIR_03 {
         id: REQ-DIR-03
-        text: The system shall calculate review turnaround velocity and status distributions in real time.
+        text: The system shall compute approval velocity and track compliance against a 48-hour SLA.
         risk: Medium
-        verifymethod: Analysis
+        verifymethod: Test
     }
 
     requirement REQ_DIR_04 {
         id: REQ-DIR-04
-        text: The system must notify preparers immediately upon approval or return of an Annex.
+        text: The system shall present tripartite verification summary statistics before Annex 4 endorsement.
+        risk: High
+        verifymethod: Test
+    }
+
+    requirement REQ_DIR_05 {
+        id: REQ-DIR-05
+        text: The system shall require Microsoft Authenticator 2FA TOTP verification for director sign-in.
+        risk: Critical
+        verifymethod: Test
+    }
+
+    requirement REQ_DIR_06 {
+        id: REQ-DIR-06
+        text: The system shall broadcast in-app alerts and write immutable audit records for all executive actions.
         risk: Low
         verifymethod: Test
     }
@@ -53,69 +67,48 @@ requirementDiagram
         type: block
     }
 
-    element AnalyticsEngine {
+    element VelocityAnalyticsEngine {
         type: block
     }
 
-    element NotificationService {
+    element VerificationOversightModule {
         type: block
     }
 
-    element TestSignatoryRoleValidation {
-        type: testCase
+    element TwoFactorAuthenticatorModule {
+        type: block
     }
 
-    element TestReturnCommentAttachment {
-        type: testCase
+    element NotificationAuditDispatcher {
+        type: block
     }
 
-    element TestVelocityCalculation {
-        type: testCase
-    }
-
-    element TestNotificationDelivery {
-        type: testCase
-    }
-
-    %% Satisfy Relations
     SignatoryPolicyGuard - satisfies -> REQ_DIR_01
     ReturnWorkflowEngine - satisfies -> REQ_DIR_02
-    AnalyticsEngine - satisfies -> REQ_DIR_03
-    NotificationService - satisfies -> REQ_DIR_04
-
-    %% Verify Relations
-    TestSignatoryRoleValidation - verifies -> REQ_DIR_01
-    TestReturnCommentAttachment - verifies -> REQ_DIR_02
-    TestVelocityCalculation - verifies -> REQ_DIR_03
-    TestNotificationDelivery - verifies -> REQ_DIR_04
-
-    %% ─── 📌 VISUAL LEGEND ───
-    element legend_guide {
-        type: "LEGEND: -contains-> Hierarchy | -satisfies-> Software Block | -verifies-> Test Suite"
-    }
+    VelocityAnalyticsEngine - satisfies -> REQ_DIR_03
+    VerificationOversightModule - satisfies -> REQ_DIR_04
+    TwoFactorAuthenticatorModule - satisfies -> REQ_DIR_05
+    NotificationAuditDispatcher - satisfies -> REQ_DIR_06
 ```
 
 ---
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol / Relationship | SysML Syntax | Engineering Purpose | MinSU Implementation Mapping |
+| Visual Symbol / Syntax | SysML Concept | Technical Function | MinSU Domain Meaning |
 |---|---|---|---|
-| `requirement req_id` | Requirement Block | Formal system specification with risk level & verify method | `REQ-SEC-01`, `REQ-AUD-01`, `REQ-FIN-01`, `REQ-DIR-01` |
-| `element name { type: block }` | Architecture Block | Implementation software module fulfilling the requirement | `src/lib/rbac.ts`, `src/lib/audit.ts`, `src/lib/validation.ts` |
-| `element name { type: testCase }` | Test Case Block | Automated test suite ensuring requirement compliance | Unit & E2E role tests, zero-variance math test suite |
-| `- contains ->` | Hierarchy Containment | Decomposes high-level goal into specific domain requirements | Root requirement decomposes into security, audit, finance, and SLA |
-| `- satisfies ->` | Satisfaction Link | Proves a software block implements the requirement | Architectural blocks satisfying regulatory and functional constraints |
-| `- verifies ->` | Verification Link | Proves a test suite validates the requirement | Automated test suites ensuring requirement verification |
-
+| `requirement NAME` | Requirement Block | Declares functional or regulatory constraint | `REQ-DIR-01` (Executive Signatory Authority) |
+| `element NAME` | Architecture Element | Block or component satisfying requirement | `SignatoryPolicyGuard`, `VelocityAnalyticsEngine` |
+| `- satisfies ->` | Satisfy Relationship | Traceability link from component to requirement | Component satisfies explicit business specification |
+| `verifymethod` | Verification Attribute | Method of verifying compliance | `Test` (`npm run test:all`), `Demonstration` |
 
 ---
 
-## 4. Requirements Traceability Matrix
+## 4. Requirements Traceability
 
-| Requirement ID | Description | Satisfying Element | Verification Test Case |
-|---|---|---|---|
-| `REQ-DIR-01` | Only `DIRECTOR` users can endorse documents. | `src/lib/rbac.ts` (`SignatoryPolicyGuard`) | `TestSignatoryRoleValidation` |
-| `REQ-DIR-02` | Return defective documents with comments. | `src/app/api/documents/[id]/return` | `TestReturnCommentAttachment` |
-| `REQ-DIR-03` | Real-time turnaround velocity metrics. | `src/app/(dashboard)/analytics` | `TestVelocityCalculation` |
-| `REQ-DIR-04` | Send immediate in-app notifications on status changes. | `src/lib/notifications.ts` | `TestNotificationDelivery` |
+- **`REQ-DIR-01`**: Satisfied by `SignatoryPolicyGuard` in `src/lib/rbac.ts`, blocking unauthorized approval attempts.
+- **`REQ-DIR-02`**: Satisfied by `ReturnWorkflowEngine`, ensuring comments are inserted atomically with `RETURNED` status.
+- **`REQ-DIR-03`**: Satisfied by `VelocityAnalyticsEngine` (`/api/analytics`), measuring duration from submission to endorsement.
+- **`REQ-DIR-04`**: Satisfied by `VerificationOversightModule`, preventing approval if unverified grantees exist.
+- **`REQ-DIR-05`**: Satisfied by `TwoFactorAuthenticatorModule`, enforcing RFC 6238 TOTP tokens.
+- **`REQ-DIR-06`**: Satisfied by `NotificationAuditDispatcher`, dispatching alerts and writing append-only logs.

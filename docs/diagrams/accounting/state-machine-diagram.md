@@ -1,70 +1,91 @@
-# State Machine Diagram: Accounting Officer Domain
+# Accounting Officer — State Machine Diagram
 
-## 1. Description
-This state machine diagram details the lifecycle states, transitions, guard conditions, and actions of a financial annex document (Annexes 6, 7, 8, and 9) managed by the Accounting Officer.
+> **Role:** `ACCOUNTING_OFFICER`  
+> **Diagram Type:** State Machine Diagram  
+> **Entity:** Financial Annex Lifecycle (`Annex 6`, `Annex 7`, `Annex 8`, `Annex 9`)  
+> **Standard:** UML 2.5 State Machine Specification
 
-## 2. ASD-STE100 Technical Specifications
-- Start document records in the `Draft` state.
-- Transition documents to `Submitted` only when balance calculations equal zero variance.
-- Permit revision and re-submission when a document enters the `Returned` state.
-- Move documents to `Archived` after formal completion.
+---
 
-## 3. State Machine Diagram (Mermaid)
+## 1. Purpose
+
+The State Machine Diagram shows the lifecycle states of financial documents managed by the Accounting Officer, including zero-variance balancing checks and executive approval gates. All decision choices evaluate strictly to binary Yes and No paths.
+
+---
+
+## 2. Mermaid State Machine Diagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Draft : Create Financial Annex
+    direction TB
 
-    state Draft {
+    [*] --> DRAFT : Create Financial Annex
+
+    state DRAFT {
         [*] --> EnteringLedger
-        EnteringLedger --> CalculatingTotals : Update Row / Amount
-        CalculatingTotals --> BalanceValidated : Validate Zero Variance
-        BalanceValidated --> EnteringLedger : Edit Values
+        EnteringLedger --> CalculatingTotals : Enter line item amounts
+        CalculatingTotals --> EnteringLedger : Modify figures
     }
 
-    Draft --> Submitted : Submit Document [variance == 0.00]
-    
-    state Submitted {
+    state check_variance <<choice>>
+    DRAFT --> check_variance : Officer clicks Submit for Review
+
+    check_variance --> SUBMITTED : [Is Variance == 0.00 PHP? -- Yes]
+    check_variance --> DRAFT : [Is Variance == 0.00 PHP? -- No]
+
+    state SUBMITTED {
         [*] --> InExecutiveQueue
-        InExecutiveQueue --> UnderReview : Director Opens
+        InExecutiveQueue --> UnderDirectorReview : Director opens document
     }
 
-    Submitted --> Returned : Director Returns [with revision comments]
-    Submitted --> Approved : Director Approves [signatures verified]
+    state review_decision <<choice>>
+    SUBMITTED --> review_decision : Director completes review
 
-    Returned --> Draft : Accounting Officer Edits Ledger
-    
-    Approved --> Archived : Archive Document Record
-    Archived --> [*]
+    review_decision --> APPROVED : [Does Director Approve Document? -- Yes]
+    review_decision --> RETURNED : [Does Director Approve Document? -- No]
+
+    RETURNED --> DRAFT : Accounting Officer unlocks form for revision
+
+    state APPROVED {
+        [*] --> LockedAgainstEdit
+        LockedAgainstEdit --> ReadyForExcelExport : Enable multi-tab .xlsx download
+    }
+
+    APPROVED --> UPLOADED : uploadSignedScan() [stamped wet-signatures attached]
+    UPLOADED --> ARCHIVED : archiveRecord() [semester liquidation complete]
+    ARCHIVED --> [*]
 
     %% ─── 📌 VISUAL LEGEND ───
-    note right of SystemInitialized
+    note right of check_variance
         <b>📌 DIAGRAM LEGEND</b>
         ● [*] : Initial / Terminal Boundary
         [StateName] : Active Lifecycle Status
+        <<choice>> : Mutually Exclusive Decision Point
         --> : Trigger Event Transition
-        [guard] : Mandatory Guard Rule
-        -- : Orthogonal Region Split
+        [guard] : Guard Rule (Strictly Yes / No)
     end note
-
 ```
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
 | Visual Symbol / Syntax | UML State Machine Concept | Technical Meaning | MinSU Document & Student Lifecycle |
 |---|---|---|---|
-| `● [*]` | Initial State Node | Point of entry into a lifecycle region | Annex creation begins or student application submitted |
-| `◎ [*]` | Terminal State Node | Final conclusion of lifecycle | Document permanently archived or student awarded/disqualified |
-| `state "Name"` | Composite State | Container holding nested sub-states | Draft, Submitted, Approved, Returned, Under Review |
-| `-->` | Transition Arrow | Movement from one state to another triggered by an event | Director Opens, Author Re-edits, 1-Click Approve |
-| `[guardCondition]` | Transition Guard | Boolean condition that must evaluate to TRUE | `[zeroVariance]`, `[directorSignatureVerified]`, `[scannedPdfAttached]` |
-| `--` | Concurrent Regions | Orthogonal regions running in parallel | Document Lifecycle runs concurrently with Student Application Lifecycle |
+| `● [*]` | Initial State Node | Point of entry into a lifecycle region | Initial financial annex creation begins |
+| `◎ [*]` | Terminal State Node | Final conclusion of lifecycle | Financial document permanently archived |
+| `state "Name"` | Composite State | Container holding nested sub-states | `DRAFT` (holds ledger entry), `APPROVED` (holds locked status) |
+| `<<choice>>` | Decision Pseudostate | Dynamic evaluation of runtime guard | Decision gate evaluating strictly to **Yes** or **No** |
+| `-->` | Transition Arrow | Movement from one state to another | Input, balance, submit, endorse |
+| `[guard]` | Transition Guard | Boolean condition that must evaluate to TRUE | `[Is Variance == 0.00 PHP? -- Yes]`, `[Does Director Approve? -- Yes]` |
 
+---
 
-## 5. State Transition Rules
-- **Draft to Submitted**: Guard condition checks that total disbursements equal allocated funding with 0.00 variance.
-- **Submitted to Returned**: Triggered by Campus Director review. Reopens editing capabilities for the Accounting Officer.
-- **Submitted to Approved**: Finalizes the financial ledger and locks document content against modifications.
-- **Approved to Archived**: Concludes the academic year cycle and preserves read-only access.
+## 4. State Details & Behavioral Constraints
+
+- **`DRAFT`**: Accounting officer enters check numbers, bank references, and stipend figures.
+- **`check_variance` Choice**: If line items balance with CHED allocations with ₱0.00 variance (**Yes**), document transitions to `SUBMITTED`. If variance exists (**No**), document remains in `DRAFT`.
+- **`SUBMITTED`**: Document is locked against modification and enters the Campus Director review queue.
+- **`review_decision` Choice**: If Director endorses document (**Yes**), status transitions to `APPROVED`. If revisions are requested (**No**), status transitions to `RETURNED`.
+- **`APPROVED`**: Authorizes native multi-tab `ExcelJS` spreadsheet download and wet-signed scan upload.
+- **`UPLOADED`**: Stamped physical PDF is attached and ready for CHED liquidation.

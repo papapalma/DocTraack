@@ -1,76 +1,105 @@
-# Component Diagram: Accounting Officer Domain
+# Accounting Officer — Component Diagram
 
-## 1. Description
-This component diagram models the modular software architecture that supports the Accounting Officer subsystem. It shows the client-side financial interface, calculation engines, server actions, and persistence layers that process Annexes 6, 7, 8, and 9.
+> **Role:** `ACCOUNTING_OFFICER`  
+> **Diagram Type:** Component Diagram  
+> **Standard:** UML 2.5 Component Specification
 
-## 2. ASD-STE100 Technical Specifications
-- Separate data presentation from mathematical calculation logic.
-- Execute server-side transaction verifications inside the database wrapper.
-- Cache currency exchange and formatting filters in dedicated helpers.
-- Transmit all audit logs directly to the security logger.
+---
 
-## 3. Component Diagram (Mermaid)
+## 1. Purpose
+
+The Component Diagram shows the software components, provided interfaces, and required dependencies within the Accounting Officer subsystem, managing Annexes 6, 7, 8, and 9 with zero-variance balancing and native multi-tab Excel generation.
+
+---
+
+## 2. Mermaid Component Diagram
 
 ```mermaid
-graph TB
-    subgraph ClientLayer ["Client Presentation Layer (Browser)"]
-        UI_Form["Financial Annex Form Builder<br/>[React Server/Client Component]"]
-        UI_Table["Ledger Data Table<br/>[Tailwind + Inter]"]
-        UI_Export["Export & Print View<br/>[Print CSS / PDF Trigger]"]
+flowchart LR
+    %% Styling Classes
+    classDef compStyle fill:#FFFFFF,stroke:#1B5E20,stroke-width:2px,color:#1F2A24;
+    classDef ifaceStyle fill:#DCEFDD,stroke:#123F17,stroke-width:1.5px,color:#123F17;
+    classDef dataComp fill:#FFF1C2,stroke:#F2B705,stroke-width:2px,color:#1F2A24;
+
+    subgraph PRESENTATION["Presentation Layer"]
+        FinancialUI["<<component>><br/>Financial Annex Form Builder"]:::compStyle
+        PayrollUI["<<component>><br/>Beneficiary Payroll Table View"]:::compStyle
+        DebitAdviceUI["<<component>><br/>Debit Advice Reconciler View"]:::compStyle
     end
 
-    subgraph ServiceLayer ["Application Logic Layer (Next.js 16 Server)"]
-        CalcEngine["Currency Math Engine<br/>[Decimal Precision]"]
-        ReconcileSvc["Bank & Fund Reconciliation Service"]
-        ValidationSvc["Financial Zod Validator<br/>[lib/validation.ts]"]
-        AuditSvc["Audit Event Logger<br/>[lib/audit.ts]"]
+    subgraph SECURITY["Security Layer"]
+        AccountingGuard["<<component>><br/>Accounting RBAC Guard"]:::compStyle
     end
 
-    subgraph DataLayer ["Data Access & Storage"]
-        PrismaRepo["Prisma Document Repository<br/>[lib/prisma.ts]"]
-        PostgresDB[("PostgreSQL Database<br/>Document & AuditLog Tables")]
+    subgraph SERVICES["Financial Services Layer"]
+        VarianceEngine["<<component>><br/>Zero-Variance Math Engine"]:::compStyle
+        ExcelExporter["<<component>><br/>Native ExcelJS Exporter"]:::compStyle
+        ReconcileService["<<component>><br/>Bank & Fund Reconciliation Service"]:::compStyle
+        AuditService["<<component>><br/>Audit Event Logger"]:::compStyle
     end
 
-    UI_Form -->|Form Inputs| ValidationSvc
-    UI_Form -->|Row Calculations| CalcEngine
-    UI_Table -->|Read Data| PrismaRepo
-    UI_Export -->|Compile Rows| CalcEngine
+    subgraph STORAGE["Storage Subsystem"]
+        PrismaClient["<<component>><br/>Prisma ORM Client"]:::dataComp
+        DiskStorage["<<component>><br/>Local File Storage (/uploads/scans)"]:::dataComp
+    end
 
-    ValidationSvc -->|Validated Payload| ReconcileSvc
-    ReconcileSvc -->|Check Allocation| CalcEngine
-    ReconcileSvc -->|Mutate Document| PrismaRepo
-    ReconcileSvc -->|Log Mutation| AuditSvc
+    %% Interfaces
+    IAccounting(["IAccountingGuard"]):::ifaceStyle
+    IFinancialMath(["IFinancialMath"]):::ifaceStyle
+    IExcelExport(["IExcelExport"]):::ifaceStyle
+    IReconcile(["IReconciliation"]):::ifaceStyle
+    IData(["IDataAccess"]):::ifaceStyle
 
-    PrismaRepo -->|SQL Queries| PostgresDB
-    AuditSvc -->|Write Log| PostgresDB
+    %% Connections
+    FinancialUI --> IAccounting
+    PayrollUI --> IAccounting
+    DebitAdviceUI --> IAccounting
+
+    IAccounting --> AccountingGuard
+    AccountingGuard --> ReconcileService
+    AccountingGuard --> VarianceEngine
+
+    FinancialUI --> IFinancialMath
+    PayrollUI --> IFinancialMath
+    VarianceEngine --> IFinancialMath
+
+    FinancialUI --> IExcelExport
+    PayrollUI --> IExcelExport
+    ExcelExporter --> IExcelExport
+
+    ReconcileService --> IReconcile
+    ReconcileService --> IData
+    AuditService --> IData
+
+    IData --> PrismaClient
+    ReconcileService --> DiskStorage
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Comp["<<component>><br/>Software Subsystem"]:::compStyle
-        L_Iface(["(Iface): Interface Contract"]):::ifaceStyle
-        L_Data["<<component>><br/>Persistence Adapter"]:::dataComp
-        L_Comp -- "depends on" --> L_Iface
-        L_Data -- "provides" --> L_Iface
+        L_Comp["[Component Box]: Software Module"]:::compStyle
+        L_Iface(["(Round Pin): Provided Interface"]):::ifaceStyle
+        L_Data["[Gold Box]: Data Store / Storage"]:::dataComp
+        L_Comp --> L_Iface --> L_Data
     end
 ```
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | Technical Role | MinSU Architecture Mapping |
+| Visual Symbol | Syntax / Style | UML Component Meaning | MinSU Implementation |
 |---|---|---|---|
-| `<<component>>` Box | `fill:#FFFFFF, stroke:#1B5E20` | Architectural subsystem or service module | Views, Controllers, Auth Services, Document Engines |
-| `([Interface Circle])` | `fill:#DCEFDD, stroke:#123F17` | Provided / Required Interface Contract | `IAuthSession`, `IRBACGuard`, `IDocumentWorkflow`, `IDataAccess` |
-| 🟨 Data Component | `fill:#FFF1C2, stroke:#F2B705` | Persistence & Storage adapter component | Prisma ORM Client, Local Storage Volume, Google Drive Client |
-| `-->` Solid Arrow | Dependency / Consumer | Module calls or requires the interface | View components requiring workflow and auth interfaces |
-| `-- provides -->` | Realization / Provider | Module implements or provides the interface | Service layer realizing database or workflow contracts |
-| Boundary Subgraph | `subgraph LAYER` | Architectural tier / layer grouping | Presentation, Security, Domain Logic, and Persistence Layers |
+| `[Component]` | `["<<component>>\nName"]` | Autonomous modular unit with internal logic | Zero-Variance Math Engine, ExcelJS Exporter, Reconciliation Service |
+| `(Interface)` | `(["IName"])` | Formal contract or API boundary | `IFinancialMath`, `IExcelExport`, `IReconciliation` |
+| `Solid Arrow` | `-->` | Direct dependency or invocation | Financial UI invokes calculation and export services |
+| `Data Component` | Gold Tone `#FFF1C2` | Persistence or storage component | Prisma ORM client adapter |
 
+---
 
-## 5. Component Interfaces
-- **Currency Math Engine**: Calculates row sums, deductions, and variance against approved agency grants.
-- **Bank & Fund Reconciliation Service**: Verifies check disbursements against bank debit allocations.
-- **Financial Zod Validator**: Rejects negative balances, missing check numbers, and invalid date entries.
-- **Prisma Document Repository**: Persists verified financial ledgers into relational tables.
+## 4. Component Responsibilities
+
+- **Financial Annex Form Builder (`FinancialUI`)**: Renders dynamic ledgers for Annexes 6, 7, 8, and 9 with real-time currency formatting.
+- **Zero-Variance Math Engine (`VarianceEngine`)**: Compares line items against official grant allocations down to 0.00 Philippine Pesos.
+- **Native ExcelJS Exporter (`ExcelExporter`)**: Compiles disbursement rosters into native multi-tab `.xlsx` workbooks with dynamic sum formulas.
+- **Bank & Fund Reconciliation Service (`ReconcileService`)**: Reconciles Landbank electronic debit advices and MDS check numbers.

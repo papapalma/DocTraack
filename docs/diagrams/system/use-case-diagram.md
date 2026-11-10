@@ -1,7 +1,7 @@
 # Use Case Diagram: MinSU DocTrack Whole System
 
 ## 1. Description
-This comprehensive Use Case diagram models the system boundaries, actors, goals, and interactions across the entire MinSU DocTrack application. It captures how internal staff, students, executives, accounting officers, administrators, and external agencies collaborate across the document lifecycle.
+This comprehensive Use Case diagram models the system boundaries, actors, goals, and interactions across the entire MinSU DocTrack application. It captures how internal staff, students, executives, accounting officers, administrators, and external agencies collaborate across the document lifecycle, 3-way verification, certificate design, and announcements.
 
 ## 2. ASD-STE100 Technical Specifications
 - Position actors outside the system boundary rectangle.
@@ -36,12 +36,18 @@ rectangle "MinSU DocTrack System Boundary" {
   usecase "Browse Published Calls" as UC_Browse
   usecase "Submit Scholarship Application" as UC_Apply
   usecase "Track Application Status" as UC_Track
-  usecase "Download Receipt Slip" as UC_Receipt
+  usecase "Configure 2FA Authenticator" as UC_2FA
+  usecase "Maintain Student Profile" as UC_Profile
+  usecase "View Campus Announcements" as UC_ViewAnnounce
 
   ' Staff Coordinator Use Cases
   usecase "Publish Annex 2 Call" as UC_PubCall
-  usecase "Evaluate Student Applications" as UC_EvalApp
+  usecase "Validate Student Registrations" as UC_ValReg
+  usecase "Execute 3-Way Tripartite Verification" as UC_3Way
+  usecase "Resolve Verification Discrepancies" as UC_ResolveDisc
+  usecase "Design Award Certificates" as UC_CertDesign
   usecase "Draft Operational Annex (1-5, 10)" as UC_DraftAnnex
+  usecase "Publish University Announcement" as UC_PostAnnounce
   usecase "Upload Wet-Signed Scan" as UC_UploadScan
   usecase "Dispatch Transmittal" as UC_Dispatch
 
@@ -49,148 +55,133 @@ rectangle "MinSU DocTrack System Boundary" {
   usecase "Inspect Executive Review Queue" as UC_ReviewQueue
   usecase "Approve Document (1-Click)" as UC_Approve
   usecase "Return with Comments" as UC_Return
+  usecase "Inspect Executive KPI Analytics" as UC_Analytics
+  usecase "Review 3-Way Verification Runs" as UC_ReviewVerify
 
   ' Accounting Use Cases
   usecase "Draft Financial Annex (6-9)" as UC_DraftFin
   usecase "Reconcile Zero Variance" as UC_Reconcile
   usecase "Compile Beneficiary Payroll" as UC_Payroll
+  usecase "Export Multi-Tab Excel Workbook" as UC_ExcelExport
 
   ' Admin Use Cases
   usecase "Provision User Accounts" as UC_Users
   usecase "Configure Public Landing CMS" as UC_CMS
-  usecase "Inspect Security Audit Logs" as UC_Audit
+  usecase "Upload Branding & Logos" as UC_Branding
+  usecase "Toggle Anti-Brute-Force Rate Limits" as UC_RateLimit
+  usecase "Inspect Tamper-Resistant Audit Logs" as UC_AuditLogs
 
-  ' Shared / System Core
-  usecase "Authenticate & Guard RBAC" as UC_Auth
-  usecase "Record Immutable Audit Log" as UC_LogAudit
-  usecase "Export Printable PDF" as UC_ExportPDF
+  ' Shared / Included Use Cases
+  usecase "Authenticate with Session & 2FA" as UC_Auth
+  usecase "Write Immutable Audit Log" as UC_AuditWrite
 }
 
-' Student Links
+' Student connections
 Student --> UC_Browse
 Student --> UC_Apply
 Student --> UC_Track
-UC_Apply ..> UC_Receipt : <<include>>
-UC_Apply ..> UC_LogAudit : <<include>>
+Student --> UC_2FA
+Student --> UC_Profile
+Student --> UC_ViewAnnounce
 
-' Staff Links
+' Staff connections
 Staff --> UC_PubCall
-Staff --> UC_EvalApp
+Staff --> UC_ValReg
+Staff --> UC_3Way
+Staff --> UC_CertDesign
 Staff --> UC_DraftAnnex
+Staff --> UC_PostAnnounce
 Staff --> UC_UploadScan
 Staff --> UC_Dispatch
-UC_DraftAnnex ..> UC_Auth : <<include>>
-UC_Dispatch ..> UC_LogAudit : <<include>>
-UC_Dispatch --> Agency
 
-' Director Links
+' Director connections
 Director --> UC_ReviewQueue
 Director --> UC_Approve
 Director --> UC_Return
-UC_Approve ..> UC_LogAudit : <<include>>
-UC_Return ..> UC_LogAudit : <<include>>
-UC_ReviewQueue ..> UC_Auth : <<include>>
+Director --> UC_Analytics
+Director --> UC_ReviewVerify
 
-' Accounting Links
+' Accounting connections
 Accounting --> UC_DraftFin
+Accounting --> UC_Reconcile
 Accounting --> UC_Payroll
-UC_DraftFin ..> UC_Reconcile : <<include>>
-UC_DraftFin ..> UC_Auth : <<include>>
-UC_Payroll ..> UC_ExportPDF : <<extend>>
+Accounting --> UC_ExcelExport
 
-' Admin Links
+' Admin connections
 Admin --> UC_Users
 Admin --> UC_CMS
-Admin --> UC_Audit
-UC_Users ..> UC_LogAudit : <<include>>
-UC_CMS ..> UC_LogAudit : <<include>>
+Admin --> UC_Branding
+Admin --> UC_RateLimit
+Admin --> UC_AuditLogs
+
+' Inclusions and extensions
+UC_3Way ..> UC_ResolveDisc : <<extend>>
+UC_DraftAnnex ..> UC_Auth : <<include>>
+UC_DraftFin ..> UC_Auth : <<include>>
+UC_Approve ..> UC_AuditWrite : <<include>>
+UC_Return ..> UC_AuditWrite : <<include>>
+UC_Dispatch ..> Agency : notifies
+UC_ExcelExport ..> UC_DraftFin : <<extend>>
 
 @enduml
 ```
 
 ---
 
-## 4. Use Case Overview (Mermaid)
+## 4. Mermaid System Use Case Diagram
 
 ```mermaid
-graph LR
-    subgraph Actors ["System Actors"]
-        Student["Student Applicant"]
-        Staff["Staff Coordinator"]
-        Director["Campus Director"]
-        Acct["Accounting Officer"]
-        Admin["System Administrator"]
-        Agency["CHED / UniFAST"]
+flowchart LR
+    %% Styling Classes
+    classDef actorStyle fill:#F1F8F1,stroke:#1B5E20,stroke-width:2px,color:#1F2A24;
+    classDef ucStyle fill:#FFFFFF,stroke:#1B5E20,stroke-width:1.5px,color:#1F2A24;
+    classDef inclStyle fill:#FFF1C2,stroke:#F2B705,stroke-width:1px,stroke-dasharray: 4 4,color:#1F2A24;
+
+    Student(("Student Applicant")):::actorStyle
+    Staff(("Staff Coordinator")):::actorStyle
+    Director(("Campus Director")):::actorStyle
+    Accounting(("Accounting Officer")):::actorStyle
+    Admin(("System Administrator")):::actorStyle
+
+    subgraph SYSTEM_BOUNDARY["MinSU DocTrack System Boundary"]
+        UC_Apply(["Apply Online & Track Code"]):::ucStyle
+        UC_2FA(["Setup 2FA Authenticator"]):::ucStyle
+        UC_ValReg(["Validate Student Registrations"]):::ucStyle
+        UC_3Way(["Execute 3-Way Tripartite Match"]):::ucStyle
+        UC_Cert(["Design Award Certificate Template"]):::ucStyle
+        UC_DocDraft(["Prepare Annex Documents (1-10)"]):::ucStyle
+        UC_Review(["Executive Review & 1-Click Approval"]):::ucStyle
+        UC_Analytics(["Inspect KPI Turnaround Analytics"]):::ucStyle
+        UC_FinExport(["Export Multi-Tab Excel Workbook"]):::ucStyle
+        UC_CMS(["Edit & Publish Landing Page CMS"]):::ucStyle
+        UC_RateLimit(["Toggle Anti-Brute-Force Rate Limits"]):::ucStyle
+        UC_Audit(["Inspect Tamper-Resistant Audit Logs"]):::ucStyle
+        UC_Announce(["Publish Campus Announcements"]):::ucStyle
     end
 
-    subgraph PortalCore ["Public Portal & Intake"]
-        UC1["Browse Active Calls"]
-        UC2["Submit Application & Proofs"]
-        UC3["Inquire Tracking Code"]
-    end
-
-    subgraph DocumentEngine ["Document & Operations Engine"]
-        UC4["Draft Operational Annex (1-5, 10)"]
-        UC5["Executive Queue & 1-Click Endorsement"]
-        UC6["Reconcile Financials & Payroll (6-9)"]
-        UC7["Upload Signed Scan & Dispatch"]
-    end
-
-    subgraph SecurityGovernance ["Governance & Security"]
-        UC8["Manage User Roles & CMS"]
-        UC9["Immutable Audit Logging"]
-    end
-
-    Student --> UC1
-    Student --> UC2
-    Student --> UC3
-
-    Staff --> UC4
-    Staff --> UC7
-    UC7 --> Agency
-
-    Director --> UC5
-    Acct --> UC6
-
-    Admin --> UC8
-
-    UC2 -.->|include| UC9
-    UC4 -.->|include| UC9
-    UC5 -.->|include| UC9
-    UC6 -.->|include| UC9
-    UC7 -.->|include| UC9
-    UC8 -.->|include| UC9
-
-    %% ─── 📌 VISUAL LEGEND ───
-    subgraph Legend ["📌 Diagram Legend"]
-        direction TB
-        L_Actor["[Actor]: User Role"]:::legActor
-        L_UC(["(Use Case Action)"]):::legUC
-        L_Actor --> L_UC
-        L_UC -.->|<<include>>| L_Audit(["(Audit Logging)"]):::legUC
-    end
-    classDef legActor fill:#F6F8F6,stroke:#1B5E20,color:#1F2A24;
-    classDef legUC fill:#FFFFFF,stroke:#1B5E20,color:#1F2A24;
+    Student --- UC_Apply
+    Student --- UC_2FA
+    Staff --- UC_ValReg
+    Staff --- UC_3Way
+    Staff --- UC_Cert
+    Staff --- UC_DocDraft
+    Staff --- UC_Announce
+    Director --- UC_Review
+    Director --- UC_Analytics
+    Accounting --- UC_DocDraft
+    Accounting --- UC_FinExport
+    Admin --- UC_CMS
+    Admin --- UC_RateLimit
+    Admin --- UC_Audit
 ```
 
 ---
 
 ## 5. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | UML Use Case Concept | MinSU System Implementation |
-|---|---|---|---|
-| `actor` / `[Actor]` | External Role | User or external system triggering use cases | Student, Staff Coordinator, Campus Director, Accounting, Admin, CHED Agency |
-| `usecase` / `(["(Action)"])` | Use Case Unit | Distinct capability or user goal | `Browse Calls`, `Submit Application`, `1-Click Endorsement`, `Reconcile Financials` |
-| `-->` Solid Arrow | Actor Association | User initiates or receives data from the use case | `Student --> UC_Apply`, `Director --> UC_Approve`, `Staff --> UC_Dispatch` |
-| `..>` / `-.->` Dashed Arrow | Stereotyped Dependency | Relationship between two use cases | `<<include>>` (Mandatory invocation) or `<<extend>>` (Optional augmentation) |
-| `<<include>>` | Mandatory Inclusion | Always executed as part of base use case | Every mutation includes `Record Immutable Audit Log` & `Authenticate` |
-| `<<extend>>` | Optional Extension | Conditionally extends base use case | Payroll compilation optionally triggers `Export Printable PDF` |
-
----
-
-## 6. Use Case Descriptions
-- **Submit Scholarship Application**: Allows students to provide demographic information and upload PDF/image proofs within active deadlines.
-- **Draft Operational Annex**: Allows staff coordinators to aggregate student records into CHED-compliant masterlists.
-- **Executive Queue & 1-Click Endorsement**: Gives campus directors an accelerated approval workflow with electronic verification.
-- **Reconcile Financials & Payroll**: Enforces zero variance between disbursements and CHED fund allocations for accounting officers.
-- **Dispatch Transmittal**: Packages approved annexes, attaches courier tracking metadata, and delivers records to external oversight agencies.
+| Visual Symbol | UML Concept | MinSU Domain Meaning |
+|---|---|---|
+| `Actor` | External Human User | Student, Staff, Campus Director, Accounting Officer, System Admin |
+| `Use Case` | Functional Capability | 3-Way Verification, Certificate Design, Registration Validation, Excel Export |
+| `<<include>>` | Mandatory Sub-action | Authenticate with session and write immutable audit trail |
+| `<<extend>>` | Optional Flow | Resolve discrepancies, export multi-tab Excel workbooks |

@@ -1,55 +1,51 @@
-# Profile Diagram: Accounting Officer Domain
+# Accounting Officer — Profile Diagram
 
-## 1. Description
-This UML profile diagram defines domain-specific stereotypes, tagged values, and constraints tailored to the financial management modules of the MinSU DocTrack system.
+> **Role:** `ACCOUNTING_OFFICER`  
+> **Diagram Type:** Profile Diagram  
+> **Target Domain:** Financial Compliance, Zero-Variance Balancing, and ExcelJS Workbooks
 
-## 2. ASD-STE100 Technical Specifications
-- Extend standard UML meta-classes with domain stereotypes.
-- Tag financial classes with currency codes and precision rules.
-- Enforce strict balance constraints through tagged validation definitions.
+---
 
-## 3. Profile Diagram (Mermaid)
+## 1. Purpose
+
+The Profile Diagram defines domain-specific UML stereotypes and constraints governing financial annex operations, currency precision rules, zero-variance balancing, and native Excel export configurations.
+
+---
+
+## 2. Mermaid Profile Diagram
 
 ```mermaid
-classDiagram
-    direction TB
+flowchart TD
+    %% Styling Classes
+    classDef metaStyle fill:#F6F8F6,stroke:#55645B,stroke-width:1.5px,color:#1F2A24;
+    classDef stereoStyle fill:#DCEFDD,stroke:#1B5E20,stroke-width:2px,color:#123F17;
 
-    class Metaclass_Class {
-        <<metaclass>>
-        Class
-    }
+    subgraph METACLASSES["UML Metaclasses"]
+        MetaClass["<<metaclass>><br/>Class"]:::metaStyle
+        MetaProp["<<metaclass>><br/>Property"]:::metaStyle
+        MetaOp["<<metaclass>><br/>Operation"]:::metaStyle
+    end
 
-    class Metaclass_Property {
-        <<metaclass>>
-        Property
-    }
+    subgraph PROFILE["<<profile>> MinSU_Accounting_Profile"]
+        FinancialAnnex["<<stereotype>><br/>FinancialAnnex<br/>+annexNumbers: List~Int~ = [6,7,8,9]<br/>+requiresZeroVariance: Boolean = true"]:::stereoStyle
 
-    class FinancialAnnex {
-        <<stereotype>>
-        +annexNumber: Int
-        +requiresBankReconciliation: Boolean
-        +requiresDirectorApproval: Boolean
-    }
+        CurrencyPrecision["<<stereotype>><br/>CurrencyPrecision<br/>+currencyCode: String = 'PHP'<br/>+decimalPlaces: Int = 2<br/>+allowNegative: Boolean = false"]:::stereoStyle
 
-    class CurrencyPrecision {
-        <<stereotype>>
-        +currencyCode: String = "PHP"
-        +decimalPlaces: Int = 2
-        +allowNegative: Boolean = false
-    }
+        ZeroVarianceRule["<<stereotype>><br/>ZeroVarianceRule<br/>+tolerancePHP: Float = 0.00<br/>+enforceOnSubmit: Boolean = true"]:::stereoStyle
 
-    class ZeroVarianceRule {
-        <<stereotype>>
-        +tolerance: Float = 0.00
-        +enforceOnSubmit: Boolean = true
-    }
+        ExportableWorkbook["<<stereotype>><br/>ExportableWorkbook<br/>+library: String = 'ExcelJS'<br/>+tabCount: Int = 3<br/>+formulaValidation: Boolean = true"]:::stereoStyle
 
-    Metaclass_Class <|-- FinancialAnnex : extends
-    Metaclass_Property <|-- CurrencyPrecision : extends
-    Metaclass_Class <|-- ZeroVarianceRule : extends
+        AccountingSignatory["<<stereotype>><br/>AccountingSignatory<br/>+role: Role = ACCOUNTING_OFFICER<br/>+requires2FA: Boolean = true"]:::stereoStyle
+    end
+
+    FinancialAnnex -- "<<extension>>" --> MetaClass
+    CurrencyPrecision -- "<<extension>>" --> MetaProp
+    ZeroVarianceRule -- "<<extension>>" --> MetaOp
+    ExportableWorkbook -- "<<extension>>" --> MetaClass
+    AccountingSignatory -- "<<extension>>" --> MetaClass
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
         L_Meta["<<metaclass>><br/>UML Foundation"]:::metaStyle
         L_Stereo["<<stereotype>><br/>Domain Extension<br/>+taggedValue: Type"]:::stereoStyle
@@ -59,18 +55,21 @@ classDiagram
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
 | Visual Symbol | Syntax / Style | UML Profile Mechanism | MinSU Governance Application |
 |---|---|---|---|
-| `<<metaclass>>` Box | `fill:#F6F8F6, stroke:#55645B` | Core UML base meta-element | Standard UML `Class` or `Component` |
-| `<<stereotype>>` Box | `fill:#DCEFDD, stroke:#1B5E20` | Domain-specific extension | `<<TDPAnnex>>`, `<<FinancialAnnex>>`, `<<AuditedEntity>>`, `<<ExecutiveReviewable>>` |
-| `+taggedValue: Type` | Tagged Value Attribute | Metadata property attached to stereotype | `annexNumber`, `signatoryRole`, `slaHours = 48`, `requiresDisbursementCheck` |
-| `-- "<<extension>>" -->` | Extension Relationship | Extends metaclass semantics | Connects custom TDP stereotype to standard UML metaclass |
-| `-- "<<generalization>>" -->` | Specialization Hierarchy | Stereotype inheritance | `FinancialAnnex` inherits all properties of `TDPAnnex` |
+| `<<metaclass>>` Box | `fill:#F6F8F6, stroke:#55645B` | Core UML base meta-element | Standard UML `Class`, `Property`, or `Operation` |
+| `<<stereotype>>` Box | `fill:#DCEFDD, stroke:#1B5E20` | Domain-specific extension | `<<FinancialAnnex>>`, `<<ZeroVarianceRule>>`, `<<CurrencyPrecision>>` |
+| `+taggedValue: Type` | Tagged Value Attribute | Metadata property attached to stereotype | `currencyCode = 'PHP'`, `tolerancePHP = 0.00`, `library = 'ExcelJS'` |
+| `-- "<<extension>>" -->` | Extension Relationship | Extends metaclass semantics | Connects custom accounting stereotype to standard UML metaclass |
 
+---
 
-## 5. Stereotype Definitions
-- **`<<FinancialAnnex>>`**: Applied to document models representing Annexes 6, 7, 8, and 9. Dictates review policies and banking rules.
-- **`<<CurrencyPrecision>>`**: Applied to monetary fields. Fixes precision to two decimal digits in Philippine Peso (`PHP`).
-- **`<<ZeroVarianceRule>>`**: Applied to financial entities. Prevents submission if the calculated variance does not equal 0.00.
+## 4. Stereotype Tagged Values & Rules
+
+- **`<<FinancialAnnex>>`**: Restricts authoring permissions exclusively to the `ACCOUNTING_OFFICER` role.
+- **`<<CurrencyPrecision>>`**: Formats all numeric amounts in Philippine Peso (`₱#,##0.00`) aligned to two decimal places.
+- **`<<ZeroVarianceRule>>`**: Enforces strict equality between grant allocation sums and line item disbursements before submission.
+- **`<<ExportableWorkbook>>`**: Directs the generation of native multi-tab `.xlsx` workbooks with live Excel sum formulas.
+- **`<<AccountingSignatory>>`**: Enforces two-factor authentication on financial submission and scan upload operations.

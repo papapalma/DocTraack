@@ -1,77 +1,93 @@
-# Package Diagram: Accounting Officer Domain
+# Accounting Officer — Package Diagram
 
-## 1. Description
-This package diagram illustrates the code organization, directory structure, and namespace dependencies supporting the Accounting Officer domain in the MinSU DocTrack application.
+> **Role:** `ACCOUNTING_OFFICER`  
+> **Diagram Type:** Package Diagram  
+> **Standard:** UML 2.5 Package Specification
 
-## 2. ASD-STE100 Technical Specifications
-- Group related route handlers, UI components, and utility modules into separate packages.
-- Prevent circular imports between client components and server actions.
-- Import data models strictly through the Prisma client adapter package.
+---
 
-## 3. Package Diagram (Mermaid)
+## 1. Purpose
+
+The Package Diagram shows the organization of codebase packages, UI modules, calculation utilities, and export libraries that build the Accounting Officer subsystem.
+
+---
+
+## 2. Mermaid Package Diagram
 
 ```mermaid
-graph TB
-    subgraph AppPackage ["src/app/(dashboard)/documents"]
-        Page["documents/page.tsx<br/>[Server Component]"]
-        NewAnnex["documents/new/page.tsx<br/>[Financial Annex Form]"]
-        DocDetail["documents/[id]/page.tsx<br/>[Detail & Verification View]"]
+flowchart TD
+    %% Styling Classes
+    classDef routeStyle fill:#F1F8F1,stroke:#1B5E20,stroke-width:2px,color:#1F2A24;
+    classDef compStyle fill:#FFFFFF,stroke:#1B5E20,stroke-width:1.5px,color:#1F2A24;
+    classDef libStyle fill:#FFF1C2,stroke:#F2B705,stroke-width:2px,color:#1F2A24;
+    classDef typeStyle fill:#DCEFDD,stroke:#123F17,stroke-width:1.5px,color:#123F17;
+
+    subgraph ROUTE_PKG["Package: src/app (Financial Routing & APIs)"]
+        DOCS_PAGE["app/(dashboard)/documents (Annexes 6-9)"]:::routeStyle
+        NEW_PAGE["app/(dashboard)/documents/new (Financial Creator)"]:::routeStyle
+        API_EXCEL["app/api/annex-[6-9]/export-excel (ExcelJS Routes)"]:::routeStyle
+        API_SUBMIT["app/api/documents/[id]/submit"]:::routeStyle
     end
 
-    subgraph ComponentsPackage ["src/components/documents"]
-        FinancialTable["FinancialTable.tsx"]
-        Annex6Form["Annex6FundUtilization.tsx"]
-        Annex7Form["Annex7AdviceDebit.tsx"]
-        Annex8Form["Annex8ChecksIssued.tsx"]
-        Annex9Form["Annex9BeneficiaryPayroll.tsx"]
-        CurrencyInput["CurrencyInput.tsx"]
+    subgraph COMP_PKG["Package: src/components (Financial Views)"]
+        FIN_TABLE["components/documents/FinancialTable.tsx"]:::compStyle
+        ANNEX6_FORM["components/documents/Annex6FundUtilization.tsx"]:::compStyle
+        ANNEX7_FORM["components/documents/Annex7AdviceDebit.tsx"]:::compStyle
+        ANNEX8_FORM["components/documents/Annex8ChecksIssued.tsx"]:::compStyle
+        ANNEX9_FORM["components/documents/Annex9BeneficiaryPayroll.tsx"]:::compStyle
     end
 
-    subgraph LibPackage ["src/lib"]
-        PrismaClient["prisma.ts<br/>[DB Singleton]"]
-        Validation["validation.ts<br/>[Zod Financial Schemas]"]
-        RBAC["rbac.ts<br/>[Role Permission Guards]"]
-        Audit["audit.ts<br/>[Immutable Log Service]"]
-        Formatters["formatters.ts<br/>[Peso Currency Helpers]"]
+    subgraph LIB_PKG["Package: src/lib (Core Financial Logic)"]
+        EXCEL_LIB["lib/excel.ts (ExcelJS Multi-Tab Workbooks)"]:::libStyle
+        VALIDATION_LIB["lib/validation.ts (Zero-Variance Assertions)"]:::libStyle
+        FORMAT_LIB["lib/formatters.ts (PHP Currency Formatter)"]:::libStyle
+        RBAC_LIB["lib/rbac.ts (Accounting Signatory Guard)"]:::libStyle
+        PRISMA_LIB["lib/prisma.ts (Database Client)"]:::libStyle
     end
 
-    subgraph TypesPackage ["src/types"]
-        DocTypes["document.ts<br/>[AnnexType, DocumentStatus]"]
-        FinTypes["financial.ts<br/>[LedgerRow, BankCheck]"]
+    subgraph TYPES_PKG["Package: src/types (Financial Contracts)"]
+        DOC_TYPES["types/document.ts (DocumentStatus Enums)"]:::typeStyle
+        FIN_TYPES["types/financial.ts (LedgerRow, BankCheck)"]:::typeStyle
     end
 
-    AppPackage --> ComponentsPackage
-    AppPackage --> LibPackage
-    AppPackage --> TypesPackage
-    ComponentsPackage --> LibPackage
-    ComponentsPackage --> TypesPackage
-    LibPackage --> TypesPackage
+    %% Dependencies
+    ROUTE_PKG --> COMP_PKG
+    ROUTE_PKG --> LIB_PKG
+    ROUTE_PKG --> TYPES_PKG
+
+    COMP_PKG --> LIB_PKG
+    COMP_PKG --> TYPES_PKG
+
+    LIB_PKG --> TYPES_PKG
+    LIB_PKG --> PRISMA_LIB
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_App["subgraph: Routing & UI Package"]:::pkgStyle
-        L_Lib["subgraph: Domain Services & Utils"]:::libStyle
-        L_Type["subgraph: Pure TypeScript Contracts"]:::typeStyle
-        L_App -->|imports / depends on| L_Lib
-        L_Lib -->|implements types| L_Type
+        L_Route["subgraph: Routing & API Layer"]:::routeStyle
+        L_Comp["subgraph: Presentation Components"]:::compStyle
+        L_Lib["subgraph: Business Logic & ExcelJS"]:::libStyle
+        L_Type["subgraph: Domain Types"]:::typeStyle
+        L_Route --> L_Comp --> L_Lib --> L_Type
     end
 ```
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | UML Package Concept | MinSU DocTrack Codebase Structure |
+| Visual Symbol | Syntax / Style | UML Package Concept | MinSU Implementation |
 |---|---|---|---|
-| 🟩 Green Folder | `fill:#F1F8F1, stroke:#1B5E20` | Presentation & Routing Package | Next.js App Router (`src/app`) & React components (`src/components`) |
-| 🟨 Gold Folder | `fill:#FFF1C2, stroke:#F2B705` | Core Business & Lib Services | Prisma singleton, crypto auth, RBAC guards, PDF compiler (`src/lib`) |
-| 🟩 Dark Green Box | `fill:#DCEFDD, stroke:#123F17` | Contract & Persistence Schema | Strictly typed schemas (`src/types`) and ORM definition (`prisma/`) |
-| `-->` Solid Arrow | Downward Package Dependency | Upstream module imports or depends on downstream services (strictly unidirectional) |
+| `subgraph Pkg` | Folder Container | Architectural Namespace or Directory | `src/app`, `src/components`, `src/lib`, `src/types` |
+| `[Module]` | Rectangle with border | Concrete file or sub-package | `excel.ts`, `validation.ts`, `FinancialTable.tsx` |
+| `-->` | Directed Dependency | Import or invocation relationship | Financial routes import calculation helpers and components |
+| 🟢 Green Tone | `#F1F8F1` / `#1B5E20` | Financial Routing Layer | App router pages and Excel export route handlers |
 
+---
 
-## 5. Package Responsibilities
-- **`src/app/(dashboard)/documents`**: Houses page routes for drafting, viewing, and exporting financial annexes.
-- **`src/components/documents`**: Supplies reusable UI widgets for tabular ledger calculation and currency inputs.
-- **`src/lib`**: Provides validation schemas, database client access, and currency formatting helpers.
-- **`src/types`**: Declares TypeScript types, status enums, and ledger data shapes.
+## 4. Package Organization & Separation of Concerns
+
+- **`src/app`**: Exposes financial document drafting views and Excel export routes streaming native `.xlsx` files.
+- **`src/components`**: Houses modular ledger views for Annexes 6, 7, 8, and 9 with zero-variance visual indicators.
+- **`src/lib`**: Encapsulates `ExcelJS` multi-tab formatting, Philippine Peso currency formatters (`₱#,##0.00`), and role guards.
+- **`src/types`**: Declares TypeScript discriminating unions for financial document types and bank check models.

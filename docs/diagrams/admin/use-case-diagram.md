@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-The Use Case Diagram shows what the System Administrator can do in MinSU DocTrack. It sets the boundary for user management, audit review, and portal configuration.
+The Use Case Diagram shows what the System Administrator can do in MinSU DocTrack. It sets the boundary for user management, audit review, landing page CMS configuration, branding, rate limiting, and emergency announcements.
 
 ---
 
@@ -31,6 +31,9 @@ flowchart LR
         UC_FilterAudit(["Filter Logs by Entity and Date"]):::inclStyle
         UC_LandingCMS(["Edit Landing Page Content"]):::ucStyle
         UC_PublishCMS(["Publish CMS Draft Changes"]):::inclStyle
+        UC_Branding(["Upload Institutional Logos"]):::ucStyle
+        UC_RateLimit(["Toggle Rate Limiting Shield"]):::ucStyle
+        UC_Announce(["Broadcast Emergency IT Notice"]):::ucStyle
         UC_VerifyEmail(["Verify University Email"]):::inclStyle
     end
 
@@ -39,6 +42,9 @@ flowchart LR
     Admin --- UC_Deactivate
     Admin --- UC_AuditLogs
     Admin --- UC_LandingCMS
+    Admin --- UC_Branding
+    Admin --- UC_RateLimit
+    Admin --- UC_Announce
 
     UC_CreateUser -.->|<<include>>| UC_VerifyEmail
     UC_AuditLogs -.->|<<extend>>| UC_FilterAudit
@@ -50,7 +56,7 @@ flowchart LR
         L_Actor["[Actor]: User Role"]:::legActor
         L_UC(["(Use Case Action)"]):::legUC
         L_Actor --> L_UC
-        L_UC -.->|<<include>>| L_Audit(["(Audit Logging)"]):::legUC
+        L_UC -.->|<<include>>| L_Audit(["(Mandatory Sub-Action)"]):::legUC
     end
     classDef legActor fill:#F6F8F6,stroke:#1B5E20,color:#1F2A24;
     classDef legUC fill:#FFFFFF,stroke:#1B5E20,color:#1F2A24;
@@ -62,13 +68,10 @@ flowchart LR
 
 | Visual Symbol | Syntax / Style | UML Use Case Concept | MinSU System Implementation |
 |---|---|---|---|
-| `actor` / `[Actor]` | External Role | User or external system triggering use cases | Student, Staff Coordinator, Campus Director, Accounting, Admin, CHED Agency |
-| `usecase` / `(["(Action)"])` | Use Case Unit | Distinct capability or user goal | Browse Calls, Submit Application, 1-Click Endorsement, Reconcile Financials |
-| `-->` Solid Arrow | Actor Association | User initiates or receives data from the use case | Student initiates application, Director approves, Staff dispatches |
-| `..>` / `-.->` Dashed Arrow | Stereotyped Dependency | Relationship between two use cases | `<<include>>` (Mandatory invocation) or `<<extend>>` (Optional augmentation) |
-| `<<include>>` | Mandatory Inclusion | Always executed as part of base use case | Every mutation includes `Record Immutable Audit Log` & `Authenticate` |
-| `<<extend>>` | Optional Extension | Conditionally extends base use case | Payroll compilation optionally triggers `Export Printable PDF` |
-
+| `actor` / `[Actor]` | External Role | User triggering administrative actions | System Administrator |
+| `usecase` / `(["(Action)"])` | Use Case Unit | Distinct capability or administrative goal | Create User, Toggle Rate Limits, Edit CMS, Inspect Audits |
+| `-->` Solid Arrow | Actor Association | User initiates or receives data | Admin configures rate limits, manages logos, provisions users |
+| `..>` / `-.->` Dashed Arrow | Stereotyped Dependency | Relationship between use cases | `<<include>>` (Mandatory invocation) or `<<extend>>` (Optional filter) |
 
 ---
 
@@ -91,6 +94,9 @@ rectangle "MinSU DocTrack Administrative Portal" {
   usecase "Filter Logs" as UC_Filter
   usecase "Manage Landing CMS" as UC_CMS
   usecase "Publish CMS Changes" as UC_Publish
+  usecase "Upload Logos & Branding" as UC_Brand
+  usecase "Toggle Rate Limiting" as UC_Rate
+  usecase "Broadcast IT Announcement" as UC_Announce
   usecase "Verify Email Syntax" as UC_Email
 }
 
@@ -99,19 +105,12 @@ Admin --> UC_Role
 Admin --> UC_Deact
 Admin --> UC_Audit
 Admin --> UC_CMS
+Admin --> UC_Brand
+Admin --> UC_Rate
+Admin --> UC_Announce
 
 UC_Create ..> UC_Email : <<include>>
 UC_Audit ..> UC_Filter : <<extend>>
 UC_CMS ..> UC_Publish : <<include>>
-
 @enduml
 ```
-
----
-
-## 5. Use Case Specifications
-
-- **Create User Account**: Admin provisions institutional accounts with name, university email, and initial password.
-- **Assign Role and Department**: Admin sets user role (`STAFF`, `DIRECTOR`, `ACCOUNTING`, `STUDENT`, `SYSTEM_ADMIN`).
-- **Inspect Immutable Audit Logs**: Admin reviews chronological action logs with actor ID, entity ID, and status change diffs.
-- **Edit Landing Page Content**: Admin updates university announcements and scholarship deadlines on the public portal.

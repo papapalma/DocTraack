@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-The Package Diagram shows the codebase packages, component folders, and utility libraries that build the Staff operations subsystem.
+The Package Diagram shows the codebase packages, component folders, and utility libraries that build the Staff Coordinator operations subsystem.
 
 ---
 
@@ -22,28 +22,33 @@ flowchart TD
     classDef libStyle fill:#FFF1C2,stroke:#F2B705,stroke-width:2px,color:#1F2A24;
     classDef typeStyle fill:#DCEFDD,stroke:#123F17,stroke-width:1.5px,color:#123F17;
 
-    subgraph STAFF_ROUTES["Package: src/app (Staff Routing)"]
-        DOCS_ROUTE["app/(dashboard)/documents"]:::routeStyle
-        CALLS_ROUTE["app/(dashboard)/calls"]:::routeStyle
-        REGS_ROUTE["app/(dashboard)/registrations"]:::routeStyle
-        OUTGOING_ROUTE["app/(dashboard)/outgoing"]:::routeStyle
+    subgraph STAFF_ROUTES["Package: src/app (Staff Routing Layer)"]
+        DOCS_ROUTE["app/(dashboard)/documents (Annex 1-5, 10)"]:::routeStyle
+        REGS_ROUTE["app/(dashboard)/registrations (Validation Queue)"]:::routeStyle
+        VERIFY_ROUTE["app/(dashboard)/verification (3-Way Match UI)"]:::routeStyle
+        CERT_ROUTE["app/(dashboard)/certificate-editor (Designer)"]:::routeStyle
+        OUTGOING_ROUTE["app/(dashboard)/outgoing (Transmittals)"]:::routeStyle
     end
 
-    subgraph STAFF_COMPONENTS["Package: src/components (Staff Views)"]
-        DOC_FORMS["components/documents (Annexes 1-10 Forms)"]:::compStyle
-        CALL_BUILDER["components/calls (Form Schema Builder)"]:::compStyle
+    subgraph STAFF_COMPONENTS["Package: src/components (Presentation Modules)"]
+        DOC_FORMS["components/documents (Dynamic Form Schema)"]:::compStyle
+        VERIFY_COMP["components/verification (Discrepancy Table)"]:::compStyle
+        CERT_COMP["components/certificate-editor (Layout Canvas)"]:::compStyle
         REGISTRY_TABLE["components/outgoing (Transmittal Registry)"]:::compStyle
     end
 
     subgraph STAFF_LIB["Package: src/lib (Operational Services)"]
-        VALIDATION_LIB["lib/validation.ts (Zod Annex Schemas)"]:::libStyle
-        PDF_LIB["lib/pdf.ts (PDF Document Generator)"]:::libStyle
-        AUDIT_LIB["lib/audit.ts (Action Logger)"]:::libStyle
-        PRISMA_LIB["lib/prisma.ts (Database Access)"]:::libStyle
+        VERIFY_LIB["lib/verification-matcher.ts (Tripartite Matcher)"]:::libStyle
+        EXCEL_LIB["lib/excel.ts (ExcelJS Multi-Tab Workbooks)"]:::libStyle
+        WORD_LIB["lib/word.ts (Word Docx Exporter)"]:::libStyle
+        VALIDATION_LIB["lib/validation.ts (Input & Identity Locks)"]:::libStyle
+        PRISMA_LIB["lib/prisma.ts (Database Client)"]:::libStyle
     end
 
-    subgraph STAFF_TYPES["Package: src/types (Operational Contracts)"]
-        ANNEX_TYPES["types/annex.ts (Form Schema Definitions)"]:::typeStyle
+    subgraph STAFF_TYPES["Package: src/types (Contract Definitions)"]
+        ANNEX_TYPES["types/annex.ts (Annex Form Models)"]:::typeStyle
+        VERIFY_TYPES["types/verification.ts (3-Way Match Schemas)"]:::typeStyle
+        CERT_TYPES["types/certificate.ts (Template Layouts)"]:::typeStyle
     end
 
     %% Dependencies
@@ -58,13 +63,11 @@ flowchart TD
     STAFF_LIB --> PRISMA_LIB
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_App["subgraph: Routing & UI Package"]:::pkgStyle
-        L_Lib["subgraph: Domain Services & Utils"]:::libStyle
-        L_Type["subgraph: Pure TypeScript Contracts"]:::typeStyle
-        L_App -->|imports / depends on| L_Lib
-        L_Lib -->|implements types| L_Type
+        L_Pkg["Package: folderPath"]:::routeStyle
+        L_Mod["Sub-Module / File"]:::compStyle
+        L_Pkg --> L_Mod
     end
 ```
 
@@ -72,64 +75,18 @@ flowchart TD
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | UML Package Concept | MinSU DocTrack Codebase Structure |
+| Visual Symbol | Syntax / Style | UML Package Concept | MinSU Implementation |
 |---|---|---|---|
-| 🟩 Green Folder | `fill:#F1F8F1, stroke:#1B5E20` | Presentation & Routing Package | Next.js App Router (`src/app`) & React components (`src/components`) |
-| 🟨 Gold Folder | `fill:#FFF1C2, stroke:#F2B705` | Core Business & Lib Services | Prisma singleton, crypto auth, RBAC guards, PDF compiler (`src/lib`) |
-| 🟩 Dark Green Box | `fill:#DCEFDD, stroke:#123F17` | Contract & Persistence Schema | Strictly typed schemas (`src/types`) and ORM definition (`prisma/`) |
-| `-->` Solid Arrow | Downward Package Dependency | Upstream module imports or depends on downstream services (strictly unidirectional) |
-
-
----
-
-## 4. PlantUML Package Diagram
-
-```plantuml
-@startuml
-skinparam packageStyle folder
-skinparam backgroundColor #FFFFFF
-skinparam packageBackgroundColor #F1F8F1
-skinparam packageBorderColor #1B5E20
-
-package "src/app (Staff Routes)" {
-  package "documents" as DocRoutes
-  package "calls" as CallRoutes
-  package "registrations" as RegRoutes
-  package "outgoing" as OutgoingRoutes
-}
-
-package "src/components" {
-  package "documents" as DocComponents
-  package "calls" as CallComponents
-  package "outgoing" as OutgoingComponents
-}
-
-package "src/lib" {
-  [validation.ts] as Validation
-  [pdf.ts] as PDF
-  [audit.ts] as Audit
-  [prisma.ts] as DB
-}
-
-package "src/types" {
-  [annex.ts] as AnnexTypes
-}
-
-DocRoutes ..> DocComponents
-CallRoutes ..> CallComponents
-OutgoingRoutes ..> OutgoingComponents
-
-DocComponents ..> Validation : <<use>>
-DocComponents ..> PDF : <<use>>
-DocComponents ..> DB : <<use>>
-DocComponents ..> AnnexTypes : <<import>>
-
-@enduml
-```
+| `subgraph Pkg` | Folder Container | Architectural Namespace or Directory | `src/app`, `src/components`, `src/lib`, `src/types` |
+| `[Module]` | Rectangle with border | Concrete file or sub-package | `verification-matcher.ts`, `excel.ts`, `validation.ts` |
+| `-->` | Directed Dependency | Import or invocation relationship | Next.js routes import domain components and libraries |
+| 🟢 Green Tone | `#F1F8F1` / `#1B5E20` | Operational Routing & UI Modules | User-facing dashboard paths and form generators |
 
 ---
 
-## 5. Package Principles
+## 4. Package Organization & Separation of Concerns
 
-- `components/documents` uses `lib/validation.ts` to validate form entries before submission.
-- All packages depend downward on `types/annex.ts` without reverse coupling.
+- **`src/app`**: Implements App Router endpoints for Annex management, validation queues, 3-way matching, and certificate designing.
+- **`src/components`**: Houses modular UI components for table rendering, discrepancy filtering, and drag-and-drop certificate layout.
+- **`src/lib`**: Encapsulates business logic including Jaro-Winkler string distance scoring, multi-tab `ExcelJS` generation, and immutable audit logging.
+- **`src/types`**: Enforces strict TypeScript interfaces for Annex schemas, verification results, and template layouts.

@@ -1,14 +1,14 @@
 # Accounting Officer — Data Flow Diagram (DFD)
 
-> **Role:** `ACCOUNTING`  
+> **Role:** `ACCOUNTING_OFFICER`  
 > **Diagram Type:** Data Flow Diagram (Level 1)  
-> **Focus:** Fiscal Reconciliations, Bank Debit Audits, and Payroll Submissions
+> **Focus:** Fiscal Reconciliations, Zero-Variance Calculation, and Multi-Tab Excel Export
 
 ---
 
 ## 1. Purpose
 
-The Data Flow Diagram shows how financial metrics, debit notices, and check registers flow from the Accounting Officer through calculation processes to database tables.
+The Data Flow Diagram shows how financial figures, Landbank debit advices, check registers, and stipend payroll entries move through accounting validation processes to database tables and export streams.
 
 ---
 
@@ -29,80 +29,72 @@ flowchart TD
         P2["2.0<br/>Catalog Advice to Debit (Annex 7)"]:::processStyle
         P3["3.0<br/>Catalog Checks Issued (Annex 8)"]:::processStyle
         P4["4.0<br/>Compile Beneficiary Payroll (Annex 9)"]:::processStyle
-        P5["5.0<br/>Submit Financial Annex"]:::processStyle
+        P5["5.0<br/>Validate Zero-Variance Balance"]:::processStyle
+        P6["6.0<br/>Stream Multi-Tab ExcelJS Workbook"]:::processStyle
     end
 
     subgraph DATA_STORES["Data Stores"]
-        D1[("D1: annex_types Table")]:::storeStyle
-        D2[("D2: documents Table")]:::storeStyle
-        D3[("D3: status_history Table")]:::storeStyle
+        D1[("D1: documents Table")]:::storeStyle
+        D2[("D2: status_history Table")]:::storeStyle
+        D3[("D3: notifications Table")]:::storeStyle
         D4[("D4: audit_log Table")]:::storeStyle
     end
 
-    %% Bank Ingestion
-    LandBank -->|ADA Debit Notices & Bank Statements| P2
+    %% External Bank Ingestion
+    LandBank -->|ADA Notices & Electronic Advices| P2
 
-    %% Accounting Flows
-    AccountingUser -->|CHED Grant Allocation Sums| P1
-    AccountingUser -->|Account Numbers & Debit Amounts| P2
-    AccountingUser -->|Check Serial Numbers & Payees| P3
-    AccountingUser -->|Grantee Stipend Roster| P4
-    AccountingUser -->|Submission Action Trigger| P5
+    %% Accounting Inputs
+    AccountingUser -->|Grant Allocation Totals| P1
+    AccountingUser -->|Account Numbers & Debit Figures| P2
+    AccountingUser -->|MDS Check Numbers & Payees| P3
+    AccountingUser -->|Student Stipend Tiers (₱7.5k / ₱10k)| P4
+    AccountingUser -->|Request Excel Export| P6
 
-    P1 -->|Calculated Utilization Balance| AccountingUser
-    P4 -->|Balanced Payroll Summary| AccountingUser
+    %% Feedback Flows
+    P5 -->|Balanced Confirmation (₱0.00 Variance)| AccountingUser
+    P6 -->|Streamed Excel Spreadsheet (.xlsx)| AccountingUser
 
-    %% Process Interactions
-    D1 -->|Read Fiscal Form Schema| P1
-    D1 -->|Read Fiscal Form Schema| P2
-    D1 -->|Read Fiscal Form Schema| P3
-    D1 -->|Read Fiscal Form Schema| P4
+    %% Inter-Process Movements
+    P1 -->|Utilization Line Items| P5
+    P2 -->|Debit Advice Entries| P5
+    P3 -->|Check Register Totals| P5
+    P4 -->|Payroll Stipend Sums| P5
 
-    P1 -->|Draft Annex 6 Document| D2
-    P2 -->|Draft Annex 7 Document| D2
-    P3 -->|Draft Annex 8 Document| D2
-    P4 -->|Draft Annex 9 Document| D2
-
-    D2 -->|Fetch Draft Document Record| P5
-    P5 -->|Update Status: SUBMITTED| D2
-    P5 -->|Insert Status Transition| D3
-    P5 -->|Write Financial Action Event| D4
+    P5 -->|Populate Form Data & Save Draft| D1
+    P5 -->|Format Figures into Worksheets| P6
+    P5 -->|Submit to Director (status: SUBMITTED)| D1
+    P5 -->|Record Transition Row| D2
+    P5 -->|Alert Director of New Submission| D3
+    P5 -->|Audit: FINANCIAL_ANNEX_SUBMITTED| D4
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Ent["[Square]: External Entity"]:::legEnt
-        L_Proc["1.0 [Box]: Process"]:::legProc
-        L_Store[("[(Cylinder)]: Data Store")]:::legStore
-        L_Ent -->|Data Flow Payload| L_Proc
-        L_Proc -->|Data Mutation| L_Store
+        L_Ent["[Square]: External Entity"]:::entityStyle
+        L_Proc["(Circle / Rounded): Process Step"]:::processStyle
+        L_Store[("[(Cylinder)]: Data Store")]:::storeStyle
+        L_Ent -->|Data Flow| L_Proc -->|Storage Flow| L_Store
     end
-    classDef legEnt fill:#FFFFFF,stroke:#123F17,color:#1F2A24;
-    classDef legProc fill:#F1F8F1,stroke:#1B5E20,color:#1F2A24;
-    classDef legStore fill:#FFF1C2,stroke:#F2B705,color:#1F2A24;
 ```
 
 ---
 
 ## 3. Diagram Legend & Symbol Guide
 
-| DFD Element Shape | Gane & Sarson / Yourdon Notation | Technical Role | MinSU System Implementation |
+| Visual Symbol | Syntax / Style | DFD Concept | MinSU Implementation |
 |---|---|---|---|
-| `[Rectangle]` | External Entity | Source or sink outside the process boundary | Students, Staff Coordinator, Campus Director, Accounting, CHED Agency |
-| `(("((Double Circle))"))` | Context Process (Level 0) | Top-level system boundary | Entire MinSU DocTrack system |
-| `["1.0 Process"]` | Operational Process (Level 1) | Data transformation or business logic step | Intake Applications, Validate Annexes, Executive Review, Financials |
-| `[("[(Cylinder)]")]` | Persistent Data Store | Relational table or permanent data repository | Users & Sessions, Applications, Documents, Transmittals, Audit Logs |
-| `-->|Data Flow|` | Named Flow Arrow | In-transit data packet or payload | Forms, tracking codes, financial records, audit rows |
-| 🟢 Green Box | Process Node | Active workflow processing unit | Core backend services and transaction coordinators |
-| 🟨 Gold Cylinder | Data Store Node | Persistent PostgreSQL / File store | Secure database tables with RLS and foreign key integrity |
-
+| `[Entity]` | `["Name"]` | External Source or Sink | Accounting Officer, LandBank of the Philippines |
+| `(Process)` | `["N.0\nName"]` | Data transformation logic | Reconcile fund utilization, validate zero-variance |
+| `[(Data Store)]` | `[("DN: table")]` | Relational table | PostgreSQL tables (`documents`, `status_history`, `audit_log`) |
+| `-->` | Directed Arrow | Flow of financial data | Allocation sums, debit notices, Excel streams |
 
 ---
 
-## 4. Data Dictionary
+## 4. Data Flow Descriptions
 
-- **CHED Grant Allocation Sums**: Total monetary grant transferred to MinSU for TDP scholarship coverage.
-- **ADA Debit Notices & Bank Statements**: Official bank confirmations indicating digital account credits.
-- **Check Serial Numbers & Payees**: Registry entries for manual checks issued to unbanked student grantees.
-- **Grantee Stipend Roster**: Individual student stipend records (`₱10,000.00` per grantee).
-- **Balanced Payroll Summary**: Complete verified payroll total matching the bank debit authorization.
+- **1.0 Reconcile Fund Utilization**: Captures CHED grant allotments against campus expenditures for Annex 6.
+- **2.0 Catalog Advice to Debit**: Records Landbank electronic debit account notices for Annex 7.
+- **3.0 Catalog Checks Issued**: Logs MDS checking numbers and signatories for Annex 8.
+- **4.0 Compile Beneficiary Payroll**: Ingests student stipend rosters for Annex 9 across dual-term tiers.
+- **5.0 Validate Zero-Variance Balance**: Computes net line item variance; permits submission only when variance is ₱0.00.
+- **6.0 Stream Multi-Tab ExcelJS Workbook**: Formats monetary cells in Philippine Peso (`₱#,##0.00`) and streams native `.xlsx` files.

@@ -2,13 +2,13 @@
 
 > **Role:** `DIRECTOR`  
 > **Diagram Type:** Profile Diagram  
-> **Target Domain:** Executive Endorsement & Review Turnaround Governance
+> **Target Domain:** Executive Endorsement, 2FA Protection, and Review Turnaround Governance
 
 ---
 
 ## 1. Purpose
 
-The Profile Diagram defines domain-specific UML stereotypes and constraints governing the Campus Director's endorsement authority, review queues, and turnaround SLAs.
+The Profile Diagram defines domain-specific UML stereotypes and constraints governing the Campus Director's endorsement authority, two-factor authentication gates, verification oversight, and 48-hour review turnaround SLAs.
 
 ---
 
@@ -26,16 +26,22 @@ flowchart TD
     end
 
     subgraph PROFILE["<<profile>> MinSU_Director_Profile"]
-        ExecutiveSignatory["<<stereotype>><br/>ExecutiveSignatory<br/>+roleAuthority: Role = DIRECTOR<br/>+isLegalSignatory: Boolean = true"]:::stereoStyle
+        ExecutiveSignatory["<<stereotype>><br/>ExecutiveSignatory<br/>+roleAuthority: Role = DIRECTOR<br/>+isSoleEndorser: Boolean = true"]:::stereoStyle
 
-        ReviewQueueItem["<<stereotype>><br/>ReviewQueueItem<br/>+eligibleStatuses: List~DocumentStatus~<br/>+requiresDirectorReview: Boolean = true"]:::stereoStyle
+        ReviewQueueItem["<<stereotype>><br/>ReviewQueueItem<br/>+eligibleStatuses: List~String~ = ['SUBMITTED','RESUBMITTED']<br/>+requiresVerificationSignOff: Boolean = true"]:::stereoStyle
 
         SLAEnforced["<<stereotype>><br/>SLAEnforced<br/>+maxTurnaroundHours: Int = 48<br/>+alertOnBreach: Boolean = true"]:::stereoStyle
+
+        VerificationOversight["<<stereotype>><br/>VerificationOversight<br/>+requiresZeroDiscrepancy: Boolean = true<br/>+auditTrailMandatory: Boolean = true"]:::stereoStyle
+
+        TwoFactorProtected["<<stereotype>><br/>TwoFactorProtected<br/>+method: String = 'TOTP'<br/>+enforcedForApproval: Boolean = true"]:::stereoStyle
     end
 
     ExecutiveSignatory -- "<<extension>>" --> MetaOp
     ReviewQueueItem -- "<<extension>>" --> MetaClass
     SLAEnforced -- "<<extension>>" --> MetaClass
+    VerificationOversight -- "<<extension>>" --> MetaClass
+    TwoFactorProtected -- "<<extension>>" --> MetaClass
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph LEGEND ["📌 Diagram Legend"]
@@ -52,54 +58,17 @@ flowchart TD
 
 | Visual Symbol | Syntax / Style | UML Profile Mechanism | MinSU Governance Application |
 |---|---|---|---|
-| `<<metaclass>>` Box | `fill:#F6F8F6, stroke:#55645B` | Core UML base meta-element | Standard UML `Class` or `Component` |
-| `<<stereotype>>` Box | `fill:#DCEFDD, stroke:#1B5E20` | Domain-specific extension | `<<TDPAnnex>>`, `<<FinancialAnnex>>`, `<<AuditedEntity>>`, `<<ExecutiveReviewable>>` |
-| `+taggedValue: Type` | Tagged Value Attribute | Metadata property attached to stereotype | `annexNumber`, `signatoryRole`, `slaHours = 48`, `requiresDisbursementCheck` |
-| `-- "<<extension>>" -->` | Extension Relationship | Extends metaclass semantics | Connects custom TDP stereotype to standard UML metaclass |
-| `-- "<<generalization>>" -->` | Specialization Hierarchy | Stereotype inheritance | `FinancialAnnex` inherits all properties of `TDPAnnex` |
-
+| `<<metaclass>>` Box | `fill:#F6F8F6, stroke:#55645B` | Core UML base meta-element | Standard UML `Class` or `Operation` |
+| `<<stereotype>>` Box | `fill:#DCEFDD, stroke:#1B5E20` | Domain-specific extension | `<<ExecutiveSignatory>>`, `<<SLAEnforced>>`, `<<TwoFactorProtected>>` |
+| `+taggedValue: Type` | Tagged Value Attribute | Metadata property attached to stereotype | `maxTurnaroundHours = 48`, `method = 'TOTP'`, `isSoleEndorser = true` |
+| `-- "<<extension>>" -->` | Extension Relationship | Extends metaclass semantics | Connects custom director stereotype to standard UML metaclass |
 
 ---
 
-## 4. PlantUML Profile Diagram
+## 4. Stereotype Tagged Values & Rules
 
-```plantuml
-@startuml
-skinparam packageBackgroundColor #FFFFFF
-skinparam packageBorderColor #1B5E20
-
-package "<<profile>> MinSU_Director_Profile" {
-  class "Class" <<metaclass>> as MetaClass
-  class "Operation" <<metaclass>> as MetaOp
-
-  class "ExecutiveSignatory" <<stereotype>> {
-    + roleAuthority : Role = DIRECTOR
-    + isLegalSignatory : Boolean = true
-  }
-
-  class "ReviewQueueItem" <<stereotype>> {
-    + eligibleStatuses : List<DocumentStatus>
-    + requiresDirectorReview : Boolean = true
-  }
-
-  class "SLAEnforced" <<stereotype>> {
-    + maxTurnaroundHours : Integer = 48
-    + alertOnBreach : Boolean = true
-  }
-
-  ExecutiveSignatory -up-> MetaOp : "<<extension>>"
-  ReviewQueueItem -up-> MetaClass : "<<extension>>"
-  SLAEnforced -up-> MetaClass : "<<extension>>"
-}
-@enduml
-```
-
----
-
-## 5. Stereotype Definitions
-
-| Stereotype | Metaclass | Tagged Values | Purpose |
-|---|---|---|---|
-| `<<ExecutiveSignatory>>` | `Operation` | `roleAuthority: Role`, `isLegalSignatory: Boolean` | Identifies endpoints that endorse or return university documents. |
-| `<<ReviewQueueItem>>` | `Class` | `eligibleStatuses: List`, `requiresDirectorReview: Boolean` | Flags documents that must route to `/review`. |
-| `<<SLAEnforced>>` | `Class` | `maxTurnaroundHours: Int`, `alertOnBreach: Boolean` | Enforces the 48-hour executive endorsement velocity window. |
+- **`<<ExecutiveSignatory>>`**: Restricts document endorsement exclusively to authenticated users holding the `CAMPUS_DIRECTOR` role.
+- **`<<ReviewQueueItem>>`**: Dictates that only documents in `SUBMITTED` or `RESUBMITTED` states are visible in the director review queue.
+- **`<<SLAEnforced>>`**: Establishes a strict 48-hour review turnaround window from initial staff submission.
+- **`<<VerificationOversight>>`**: Mandates executive review of tripartite cross-matching stats prior to Annex 4 endorsement.
+- **`<<TwoFactorProtected>>`**: Enforces Microsoft Authenticator TOTP verification prior to executing endorsement operations.

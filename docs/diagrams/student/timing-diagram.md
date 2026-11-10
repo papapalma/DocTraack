@@ -1,53 +1,66 @@
-# Timing Diagram: Student Applicant Domain
+# Student Applicant — Timing Diagram
 
-## 1. Description
-This timing diagram traces the time-based state transitions of a student scholarship application relative to administrative evaluation deadlines and submission cutoff schedules in MinSU DocTrack.
+> **Role:** `STUDENT`  
+> **Diagram Type:** Timing Diagram  
+> **Scope:** Student Intake Schedule, 2FA Verification Windows, Deadlines & SLAs  
+> **Standard:** UML 2.5 Timing & Temporal Specification
 
-## 2. ASD-STE100 Technical Specifications
-- Graph student application states along a defined horizontal timeline.
-- Enforce strict intake closure at the deadline timestamp (Day 30).
-- Trace verification turnarounds by the Staff Coordinator (Days 30-45).
-- Release final award notices upon completion of evaluation (Day 60).
+---
 
-## 3. Timing Diagram (Mermaid)
+## 1. Purpose
+
+The Timing Diagram traces the time-based state transitions and administrative service level agreements (SLAs) governing student scholarship intake, 2FA verification windows, evaluation turnarounds, and award notifications in MinSU DocTrack.
+
+---
+
+## 2. Mermaid Timing Diagram
 
 ```mermaid
 timeline
     title Student Application Lifecycle & Evaluation Timeline
-    section Submission Window (Day 1 - 30)
-        Day 1 : Call Published : Student browses TDP criteria on landing page
-        Day 15 : Application Submitted : Student uploads PDF proofs and receives tracking code
-        Day 30 : Window Closes : Portal intake disabled for new applicants
-    section Coordinator Review (Day 31 - 45)
-        Day 35 : Under Review : Staff coordinator verifies grades and indigency certificates
-        Day 45 : Shortlist Finalized : Staff coordinator moves verified students to Qualified
-    section Executive Approval & Award (Day 46 - 60)
-        Day 50 : Annex 2 Compiled : Masterlist submitted to Campus Director
-        Day 55 : Director Approval : Executive signature endorsed
-        Day 60 : Final Award : Student tracking code displays Awarded badge and payroll schedule
+    section 1. Onboarding & 2FA (Day 1 - 5)
+        Day 1 : Portal Launch : Student browses active TDP calls and campus announcements
+        Day 3 : Account Registration : Student registers email and sets up Microsoft Authenticator
+        Day 5 : 2FA Verification : 30-second TOTP token verified successfully
+    section 2. Application Submission (Day 6 - 30)
+        Day 10 : Form Drafted : Student enters personal, academic, and household demographics
+        Day 20 : Documents Uploaded : Student uploads PDF proofs of COR, grades, and indigency
+        Day 25 : Submission Finalized : Unique tracking code generated and receipt slip printed
+        Day 30 : Window Closes : Portal intake disabled for new applicants at 23:59:00
+    section 3. Evaluation & 3-Way Cross-Match (Day 31 - 45)
+        Day 35 : Coordinator Review : Staff verifies attached proofs against criteria
+        Day 40 : Tripartite Run : System executes 3-way cross-matching with CHED and Registrar datasets
+        Day 45 : Evaluation Finalized : Coordinator accepts qualified applicants and sets identity locks
+    section 4. Executive Endorsement & Award (Day 46 - 60)
+        Day 50 : Annex Compilation : Verified grantees compiled into Annex 1 and Annex 10
+        Day 55 : Director Signature : Campus Director executes 1-click executive approval
+        Day 60 : Official Award : Student tracking code displays Awarded badge and payroll schedule
 
-    section 📌 Diagram Legend & SLAs
-        30 Days : Student Intake Window : Public portal disables submissions after cutoff
-        48 Hours : Executive Review SLA : Campus Director endorsement turnaround
+    section 📌 Operational SLAs & Deadlines
+        30 Seconds : TOTP Window : Valid lifespan of Microsoft Authenticator token
+        30 Days : Intake Window : Maximum duration for student application submissions
+        48 Hours : Executive Review SLA : Maximum turnaround for Campus Director endorsement
         15 Days : Accounting Window : Zero-variance payroll reconciliation
 ```
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
 | Timeline Element | Syntax / Type | Temporal Meaning | MinSU Operational Application |
 |---|---|---|---|
-| `section Phase Name` | Timeline Section | High-level semester operational phase | Intake, Masterlist Eval, Executive Review, Financials, Transmittal |
-| `Day N : Milestone` | Temporal Milestone | Specific calendar threshold or SLA trigger date | Day 1 (Announcement), Day 30 (Intake cutoff), Day 75 (Semester archival) |
-| `[ ACTIVE ]` | Lifeline Active State | Subsystem actively accepting input | Public student intake portal accepting form data and file uploads |
-| `[ IDLE ]` | Lifeline Idle State | Subsystem standing by awaiting upstream completion | Executive queue idle while coordinator evaluates applicants |
-| `[ 48h SLA ]` | Critical Turnaround Window | Strict executive decision-making timeframe | Maximum 48 hours for Campus Director 1-click approval |
-| `[ DISPATCH ]` | Courier Transmittal Milestone | Outbound physical and digital hand-off | Scanned wet-signed documents transmitted to CHED Region IV-B |
+| `section Phase Name` | Timeline Section | High-level operational semester phase | Onboarding, Submission Window, Evaluation, Executive Endorsement |
+| `Day N : Milestone` | Temporal Milestone | Specific calendar threshold or SLA trigger date | Day 1 (Portal Launch), Day 30 (Intake cutoff), Day 60 (Final award release) |
+| `30 Seconds` | Security Token SLA | Ephemeral lifespan of TOTP 2FA code | Time allowed for user to submit Microsoft Authenticator 6-digit code |
+| `30 Days` | Application Intake SLA | Hard intake boundary | Public intake portal accepts form data until Day 30 cutoff |
+| `48 Hours` | Executive Endorsement SLA | Critical executive turnaround | Maximum time for Campus Director to review and endorse masterlists |
 
+---
 
-## 5. Timeline Milestones & Rules
-- **Days 1 to 30 (Submission Window)**: Students can draft, validate, and finalize submissions. The tracking code is issued immediately upon upload.
-- **Day 30 (Hard Cutoff)**: Server actions reject new incoming payloads; existing records become immutable for students.
-- **Days 31 to 45 (Verification)**: Staff Coordinators evaluate student attachments and flag revisions or qualifications.
-- **Day 60 (Notification & Payroll)**: Approved students receive disbursement updates matching Annex 9 beneficiary schedules.
+## 4. Timeline Milestones & Rules
+
+- **Days 1 to 5 (Onboarding & 2FA)**: Students register their institutional email accounts and pair Microsoft Authenticator via standard 30-second TOTP challenges.
+- **Days 6 to 30 (Submission Window)**: Students complete application wizards, upload required proofs, and receive their unique tracking code (`TDP-YYYY-XXXX`).
+- **Day 30 (Hard Cutoff)**: Server actions reject incoming application payloads; student submissions become read-only.
+- **Days 31 to 45 (Evaluation & 3-Way Match)**: Coordinators inspect attachments and run the tripartite verification engine against CHED and Registrar datasets.
+- **Day 60 (Award & Notice Release)**: Approved applicants access digital Notice of Award certificates and view scheduled payroll disbursements.

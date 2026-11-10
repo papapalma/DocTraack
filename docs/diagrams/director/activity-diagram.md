@@ -56,8 +56,8 @@ flowchart TD
         L_App["Approved / Success Flow"]:::legApp
         L_Ret["Returned / Revision Flow"]:::legRet
         L_Start -.-> L_Act -.-> L_Dec
-        L_Dec -.->|Condition Met| L_App
-        L_Dec -.->|Revision Needed| L_Ret
+        L_Dec -.->|Yes| L_App
+        L_Dec -.->|No| L_Ret
     end
     classDef legStart fill:#123F17,stroke:#1B5E20,color:#fff;
     classDef legAct fill:#F1F8F1,stroke:#1B5E20,color:#1F2A24;
@@ -76,7 +76,7 @@ flowchart TD
 | `[Rectangle]` | `["Action"]` | Operational task or software routine | Inspecting forms, computing sums, generating receipt, updating status |
 | `{Diamond}` | `{"Decision"}` | Mutually exclusive condition / guard | "Compliance verified?", "Variance == 0.00?", "Quota available?" |
 | `──▶` | Solid Line `-->` | Sequential flow transition | Standard forward progression between operational activities |
-| `-->|Label|` | Guarded Branch | Conditional execution path | "Yes / Approved", "No / Return with Remarks" |
+| `-->|Label|` | Guarded Branch | Conditional execution path | "Yes", "No" |
 | 🔲 Subgraph | `subgraph Lane` | Departmental Swimlane Boundary | Segregates duties across roles and authority boundaries |
 | 🟢 Green Tone | `#DCEFDD` / `#1B5E20` | Approved State / Forward Flow | Validated submissions, executive approvals, zero-variance checks |
 | 🟡 Gold Tone | `#FFF1C2` / `#B88A00` | Evaluation / Inspection Gate | Review queues, quota verification, decision checkpoints |

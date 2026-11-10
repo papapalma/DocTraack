@@ -2,13 +2,14 @@
 
 > **Role:** `DIRECTOR`  
 > **Diagram Type:** Sequence Diagram  
-> **Scenario:** Document Endorsement & Rejection Message Sequences
+> **Scenario:** Executive Review, Endorsement, and Return Decisions  
+> **Standard:** UML 2.5 Sequence Specification
 
 ---
 
 ## 1. Purpose
 
-The Sequence Diagram shows the messages exchanged in chronological order when the Campus Director endorses or returns a submitted Annex document.
+The Sequence Diagram shows the messages exchanged in chronological order when the Campus Director reviews, approves, or returns a submitted Annex document. All conditional decisions evaluate strictly to binary Yes and No paths.
 
 ---
 
@@ -19,7 +20,7 @@ sequenceDiagram
     autonumber
     actor Director as Campus Director
     participant UI as Review Queue UI (/review)
-    participant Guard as RBAC Middleware
+    participant Guard as RBAC Guard
     participant API as Document Action API
     participant Prisma as Prisma ORM Client
     participant Notifier as Notification Service
@@ -29,51 +30,59 @@ sequenceDiagram
     %% ─── 📌 VISUAL LEGEND ───
     Note over Director,DB: ─── 📌 DIAGRAM LEGEND: Solid Line (->>) = Request/Command | Dashed Line (-->>) = Response/Data | Rect = Phase Boundary ───
 
+    Director->>UI: Selects pending document from /review queue
+    UI->>API: GET /api/documents/:id (Fetch metadata, grantee list, calculation totals)
+    API-->>UI: 200 OK (Document Payload & Verification Status)
+    UI-->>Director: Render interactive review modal with PDF preview
 
-    Director->>UI: Clicks "Approve Annex" button on document doc_889
-    UI->>Guard: POST /api/documents/doc_889/approve
-    
-    activate Guard
-    Guard->>Guard: Verify session token & check role == DIRECTOR
-    alt Non-Director Attempt
-        Guard-->>UI: 403 Forbidden (Unauthorized signatory)
-        UI-->>Director: Show authorization failure alert
-    else Authorized
-        Guard->>API: Dispatch endorsement action
+    alt Does Director Approve Document? -- Yes
+        Director->>UI: Clicks "Approve Annex"
+        UI->>Guard: POST /api/documents/:id/approve
+        activate Guard
+        Guard->>Guard: Verify session token & check role == DIRECTOR
+        
+        alt Is User Authorized as Director? -- Yes
+            Guard->>API: Forward approval request
+            activate API
+            API->>Prisma: $transaction(UPDATE status = 'APPROVED', INSERT status_history)
+            activate Prisma
+            Prisma->>DB: Commit document status and history row
+            DB-->>Prisma: Transaction confirmed
+            deactivate Prisma
+
+            API->>Notifier: notifyPreparer(preparerId, "Document Approved")
+            Notifier->>DB: INSERT INTO notifications
+            API->>Audit: logAuditEvent(directorId, "DOCUMENT_APPROVED", docId)
+            Audit->>DB: INSERT INTO audit_log
+            API-->>UI: 200 OK { success: true, status: "APPROVED" }
+            deactivate API
+            UI-->>Director: Display green confirmation toast & refresh queue
+        else Is User Authorized as Director? -- No
+            Guard-->>UI: 403 Forbidden (Unauthorized signatory)
+            UI-->>Director: Display access denied alert
+        end
+        deactivate Guard
+
+    else Does Director Approve Document? -- No
+        Director->>UI: Clicks "Return Document"
+        UI-->>Director: Display Return Confirmation modal with mandatory comments
+        Director->>UI: Enters required revision instructions and clicks "Confirm Return"
+        UI->>API: POST /api/documents/:id/return { comments }
         activate API
-        
-        API->>Prisma: Begin database transaction ($transaction)
+        API->>Prisma: $transaction(UPDATE status = 'RETURNED', INSERT comment, INSERT status_history)
         activate Prisma
-        
-        Prisma->>DB: UPDATE documents SET status = 'APPROVED' WHERE id = 'doc_889'
-        DB-->>Prisma: Status updated to APPROVED
-        
-        Prisma->>DB: INSERT INTO status_history (doc_889, 'SUBMITTED', 'APPROVED', directorId)
-        DB-->>Prisma: History recorded
-        
-        API->>Notifier: createNotification(preparerId, "Document Approved", "/documents/doc_889")
-        activate Notifier
-        Notifier->>DB: INSERT INTO notifications (userId, title, message, link)
-        DB-->>Notifier: Notification persisted
-        deactivate Notifier
-        
-        API->>Audit: logAuditEvent(directorId, "DOCUMENT_APPROVED", "DOCUMENT", "doc_889")
-        activate Audit
-        Audit->>DB: INSERT INTO audit_log (...)
-        DB-->>Audit: Audit record stored
-        deactivate Audit
-        
-        Prisma-->>API: Transaction committed successfully
+        Prisma->>DB: Commit return transaction
+        DB-->>Prisma: Transaction confirmed
         deactivate Prisma
-        
-        API-->>UI: 200 OK { success: true, newStatus: "APPROVED" }
-        deactivate API
-        
-        UI-->>Director: Display green toast: "Annex Endorsed Successfully"
-        UI->>UI: Remove document from active /review pending queue
-    end
-    deactivate Guard
 
+        API->>Notifier: notifyPreparer(preparerId, "Document Returned: Revisions Required")
+        Notifier->>DB: INSERT INTO notifications
+        API->>Audit: logAuditEvent(directorId, "DOCUMENT_RETURNED", docId)
+        Audit->>DB: INSERT INTO audit_log
+        API-->>UI: 200 OK { success: true, status: "RETURNED" }
+        deactivate API
+        UI-->>Director: Display return confirmation toast & refresh queue
+    end
 ```
 
 ---
@@ -82,23 +91,17 @@ sequenceDiagram
 
 | Visual / Symbol | Element Type | Technical Role | MinSU DocTrack Context |
 |---|---|---|---|
-| 👤 `actor` | Human Actor | External user role triggering system operations | Student Applicant, Staff Coordinator, Campus Director, Accounting Officer |
-| 🔲 `participant` | System Component | Internal software subsystem or persistence boundary | Web UI, API Endpoint, Workflow Engine, Prisma/PostgreSQL, PDF Compiler |
-| ──▶ `->>` | Solid Arrow | Synchronous invocation or command message | Submitting forms, verifying tokens, invoking database writes |
-| - - ▷ `-->>` | Dashed Arrow | Return response or data payload | Confirmation slips, tracking codes, PDF binary buffers, query results |
-| 🔲 `activate / deactivate` | Activation Lifeline | Period during which a component executes logic | Active request execution on API controllers or PDF engines |
-| 🔲 `alt / else` | Conditional Fragment | Decision tree handling alternative workflow paths | Approval vs. Return branching, SLA compliance checks |
-
+| `Actor` | Human User | Initiator of operational procedures | Campus Director executing executive reviews |
+| `Participant` | System Component | Boundary, controller, or data store | Review UI, RBAC Guard, Prisma Client, PostgreSQL |
+| `->>` | Synchronous Message | Command or method invocation | Approve document, verify token, notify author |
+| `-->>` | Return Message | Response data or confirmation payload | Status payload, HTTP 200 OK confirmation |
+| `alt / else` | Conditional Frame | Guarded execution path (**Yes** / **No**) | Does Director Approve? Yes -> Approve; No -> Return |
 
 ---
 
-## 4. Sequence Details
+## 4. Execution Sequence Steps
 
-1. Director triggers endorsement for a pending document.
-2. RBAC Guard verifies that the authenticated user possesses the `DIRECTOR` role.
-3. API executes an atomic PostgreSQL transaction:
-   - Updates document status to `APPROVED`.
-   - Records the state transition in `status_history`.
-   - Generates an in-app notification for the preparer (`STAFF` or `ACCOUNTING`).
-   - Writes an immutable audit entry documenting the endorsement.
-4. Transaction commits, and the UI removes the item from the pending list.
+1. Director navigates to `/review` and selects a pending document.
+2. System displays structured tables, fiscal math totals, and 3-way verification badges.
+3. If Director approves (**Yes**), system verifies authorization, marks document `APPROVED`, and alerts the preparer.
+4. If Director returns (**No**), system prompts for required comments, marks document `RETURNED`, and unlocks the form for corrections.

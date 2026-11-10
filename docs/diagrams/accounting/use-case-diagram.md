@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-The Use Case Diagram shows all financial operations executed by the Accounting Officer for Annexes 6, 7, 8, and 9.
+The Use Case Diagram shows all financial operations executed by the Accounting Officer for Annexes 6, 7, 8, and 9, including balance reconciliation and multi-tab native ExcelJS export.
 
 ---
 
@@ -29,9 +29,11 @@ flowchart LR
         UC_Annex8(["Prepare Annex 8: Checks Issued (RCI)"]):::ucStyle
         UC_Annex9(["Compile Annex 9: Beneficiary Payroll"]):::ucStyle
         UC_ValidateBank(["Validate LandBank Account Numbers"]):::inclStyle
-        UC_ReconcileTotals(["Reconcile Grant Allocation & Balance"]):::inclStyle
+        UC_ReconcileTotals(["Reconcile Grant Allocation & Zero Variance"]):::inclStyle
         UC_SubmitReview(["Submit Financial Report for Review"]):::ucStyle
         UC_ReviewHistory(["Inspect Fiscal Revision History"]):::ucStyle
+        UC_ExportExcel(["Export Native Multi-Tab Excel (.xlsx)"]):::ucStyle
+        UC_UploadScans(["Upload Scanned Signed Financial PDF"]):::ucStyle
     end
 
     Accounting --- UC_Annex6
@@ -40,10 +42,16 @@ flowchart LR
     Accounting --- UC_Annex9
     Accounting --- UC_SubmitReview
     Accounting --- UC_ReviewHistory
+    Accounting --- UC_ExportExcel
+    Accounting --- UC_UploadScans
 
     UC_Annex6 -.->|<<include>>| UC_ReconcileTotals
     UC_Annex7 -.->|<<include>>| UC_ValidateBank
     UC_Annex9 -.->|<<include>>| UC_ReconcileTotals
+    UC_Annex6 -.->|<<extend>>| UC_ExportExcel
+    UC_Annex7 -.->|<<extend>>| UC_ExportExcel
+    UC_Annex8 -.->|<<extend>>| UC_ExportExcel
+    UC_Annex9 -.->|<<extend>>| UC_ExportExcel
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph Legend ["📌 Diagram Legend"]
@@ -51,7 +59,7 @@ flowchart LR
         L_Actor["[Actor]: User Role"]:::legActor
         L_UC(["(Use Case Action)"]):::legUC
         L_Actor --> L_UC
-        L_UC -.->|<<include>>| L_Audit(["(Audit Logging)"]):::legUC
+        L_UC -.->|<<include>>| L_Audit(["(Sub-Action)"]):::legUC
     end
     classDef legActor fill:#F6F8F6,stroke:#1B5E20,color:#1F2A24;
     classDef legUC fill:#FFFFFF,stroke:#1B5E20,color:#1F2A24;
@@ -63,13 +71,10 @@ flowchart LR
 
 | Visual Symbol | Syntax / Style | UML Use Case Concept | MinSU System Implementation |
 |---|---|---|---|
-| `actor` / `[Actor]` | External Role | User or external system triggering use cases | Student, Staff Coordinator, Campus Director, Accounting, Admin, CHED Agency |
-| `usecase` / `(["(Action)"])` | Use Case Unit | Distinct capability or user goal | Browse Calls, Submit Application, 1-Click Endorsement, Reconcile Financials |
-| `-->` Solid Arrow | Actor Association | User initiates or receives data from the use case | Student initiates application, Director approves, Staff dispatches |
-| `..>` / `-.->` Dashed Arrow | Stereotyped Dependency | Relationship between two use cases | `<<include>>` (Mandatory invocation) or `<<extend>>` (Optional augmentation) |
-| `<<include>>` | Mandatory Inclusion | Always executed as part of base use case | Every mutation includes `Record Immutable Audit Log` & `Authenticate` |
-| `<<extend>>` | Optional Extension | Conditionally extends base use case | Payroll compilation optionally triggers `Export Printable PDF` |
-
+| `actor` / `[Actor]` | External Role | Financial officer responsible for accounts | Accounting Officer |
+| `usecase` / `(["(Action)"])` | Use Case Unit | Financial operation or report | Prepare Annex 6/7/8/9, Reconcile Totals, Export Excel |
+| `-->` Solid Arrow | Actor Association | User initiates financial action | Accounting submits reports, exports workbooks, uploads scans |
+| `..>` / `-.->` Dashed Arrow | Stereotyped Dependency | Relationship between use cases | `<<include>>` (Mandatory reconciliation) or `<<extend>>` (Optional Excel export) |
 
 ---
 
@@ -84,37 +89,30 @@ skinparam usecaseBorderColor #1B5E20
 
 actor "Accounting Officer" as Accounting
 
-rectangle "MinSU Financial Operations Subsystem" {
-  usecase "Prepare Annex 6 (Fund Utilization)" as UC_A6
-  usecase "Prepare Annex 7 (ADA Debit Register)" as UC_A7
-  usecase "Prepare Annex 8 (Checks Issued)" as UC_A8
-  usecase "Compile Annex 9 (Beneficiary Payroll)" as UC_A9
-  usecase "Reconcile Peso Balances" as UC_Reconcile
-  usecase "Validate Bank Numbers" as UC_Bank
-  usecase "Submit Financial Annex" as UC_Submit
-  usecase "View Revision History" as UC_History
+rectangle "Financial Operations Boundary" {
+  usecase "Prepare Annex 6: FUR" as UC_6
+  usecase "Prepare Annex 7: RADAI" as UC_7
+  usecase "Prepare Annex 8: RCI" as UC_8
+  usecase "Compile Annex 9: Payroll" as UC_9
+  usecase "Validate LandBank Accounts" as UC_Bank
+  usecase "Reconcile Zero Variance" as UC_Zero
+  usecase "Submit Financial Report" as UC_Submit
+  usecase "Export Native Excel (.xlsx)" as UC_Excel
+  usecase "Upload Signed Scan" as UC_Scan
 }
 
-Accounting --> UC_A6
-Accounting --> UC_A7
-Accounting --> UC_A8
-Accounting --> UC_A9
+Accounting --> UC_6
+Accounting --> UC_7
+Accounting --> UC_8
+Accounting --> UC_9
 Accounting --> UC_Submit
-Accounting --> UC_History
+Accounting --> UC_Excel
+Accounting --> UC_Scan
 
-UC_A6 ..> UC_Reconcile : <<include>>
-UC_A7 ..> UC_Bank : <<include>>
-UC_A9 ..> UC_Reconcile : <<include>>
-
+UC_6 ..> UC_Zero : <<include>>
+UC_7 ..> UC_Bank : <<include>>
+UC_9 ..> UC_Zero : <<include>>
+UC_6 ..> UC_Excel : <<extend>>
+UC_9 ..> UC_Excel : <<extend>>
 @enduml
 ```
-
----
-
-## 5. Use Case Specifications
-
-- **Prepare Annex 6**: Records subsidy allocations received from CHED against total disbursements made to students.
-- **Prepare Annex 7**: Catalogs LandBank Advice to Debit Account (ADA) entries with account numbers and debit dates.
-- **Prepare Annex 8**: Logs physical checks issued to unbanked student grantees with serial numbers and amounts.
-- **Compile Annex 9**: Aggregates grantee payroll sheets with individual grant stipends (`₱#,##0.00`) and student signatures.
-- **Submit Financial Report**: Submits the verified fiscal document to the Campus Director's review queue.

@@ -1,56 +1,73 @@
-# Class Diagram: Student Applicant Domain
+# Student Applicant — Class Diagram
 
-## 1. Description
-This class diagram details the object-oriented data structures, enums, attributes, and associations supporting scholarship application submissions, document verifications, and applicant tracking.
+> **Role:** `STUDENT`  
+> **Diagram Type:** Class Diagram  
+> **Standard:** UML 2.5 Class Specification
 
-## 2. ASD-STE100 Technical Specifications
-- Define unique tracking codes for every scholarship application record.
-- Associate applications with an active applicant call cycle.
-- Link applicant records optionally with a registered user entity.
-- Store file attachments with verified file hashes and MIME types.
+---
 
-## 3. Class Diagram (Mermaid)
+## 1. Purpose
+
+The Class Diagram shows the domain models, attributes, operations, and relationships governing student online applications, Microsoft Authenticator 2FA, RA 10173 identity locks, tracking code lookups, and announcement feeds.
+
+---
+
+## 2. Mermaid Class Diagram
 
 ```mermaid
 classDiagram
     direction TB
 
+    class RegistrationStatus {
+        <<enumeration>>
+        PENDING
+        ACCEPTED
+        REJECTED
+    }
+
+    class User {
+        +String id
+        +String email
+        +String name
+        +String role
+        +Boolean twoFactorEnabled
+        +String twoFactorSecret
+        +registerAccount() User
+        +setupTwoFactor(totpCode) Boolean
+    }
+
+    class Registration {
+        +String id
+        +String studentIdNumber
+        +String fullName
+        +Float gwa
+        +String mobileNumber
+        +String residentialAddress
+        +String parentContact
+        +RegistrationStatus status
+        +Boolean identityLocked
+        +updateProfile(gwa, contacts) Void
+        +isIdentityLocked() Boolean
+    }
+
     class ApplicantCall {
         +String id
         +String title
-        +String academicYear
-        +String semester
-        +Int slotQuota
-        +DateTime openDate
-        +DateTime closeDate
+        +DateTime deadline
         +Boolean isActive
         +isOpen() Boolean
-        +getApplications() List~Application~
+        +getPublishedSchema() Json
     }
 
     class Application {
         +String id
         +String callId
-        +String studentNumber
-        +String fullName
-        +String email
-        +String course
-        +Int yearLevel
+        +String studentId
         +String trackingCode
-        +ApplicationStatus status
+        +Json formData
         +DateTime submittedAt
-        +DateTime updatedAt
         +generateTrackingCode() String
-        +updateStatus(newStatus: ApplicationStatus, notes: String) void
-    }
-
-    class ApplicationStatus {
-        <<enumeration>>
-        SUBMITTED
-        UNDER_REVIEW
-        QUALIFIED
-        DISQUALIFIED
-        AWARDED
+        +downloadReceiptSlip() Buffer
     }
 
     class Attachment {
@@ -59,56 +76,45 @@ classDiagram
         +String documentType
         +String fileUrl
         +Int fileSizeBytes
-        +String mimeType
-        +DateTime uploadedAt
-        +verifyFileSize() Boolean
+        +validateMimeAndSize() Boolean
     }
 
-    class TrackingLookupResult {
-        +String trackingCode
-        +String applicantName
-        +String callTitle
-        +ApplicationStatus status
-        +DateTime submittedDate
-        +String remarks
-    }
-
-    class Notification {
+    class Announcement {
         +String id
-        +String email
-        +String subject
-        +String messageContent
-        +DateTime sentAt
+        +String title
+        +String content
+        +String audience
+        +Boolean pinned
+        +getStudentAnnouncements() List~Announcement~
     }
 
-    ApplicantCall "1" o-- "*" Application : contains
-    Application "1" *-- "1" ApplicationStatus : state
-    Application "1" *-- "*" Attachment : requires
-    Application "1" ..> TrackingLookupResult : provides
-    Application "1" ..> Notification : generates
+    User "1" -- "0..1" Registration : owns student profile
+    User "1" -- "0..*" Application : submits
+    ApplicantCall "1" *-- "0..*" Application : receives
+    Application "1" *-- "1..*" Attachment : includes proof documents
+    User "1" ..> Announcement : views feed
 
     %% ─── 📌 VISUAL LEGEND ───
     note "<b>📌 DIAGRAM LEGEND & UML NOTATION</b>\n+ Public Attribute / Operation\n- Private / Internal Field\n*-- Strong Composition (Cascade Delete)\no-- Aggregation (Reference)\n-- Multiplicity Association\n..> Dependency / State Transition\n&lt;&lt;enumeration&gt;&gt; Strict Enum Domain"
-
 ```
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
 | Symbol / UML Notation | Meaning & Syntax | Technical Function | MinSU Domain Example |
 |---|---|---|---|
-| `+` | Public Visibility | Readable attribute or callable method | `+id`, `+title`, `+submitDocument()`, `+validateZeroVariance()` |
-| `-` | Private Visibility | Encapsulated field | Password hashes, system flags, sensitive session tokens |
-| `<<enumeration>>` | Enum Classifier | Strict closed set of categorical values | `Role` (`DIRECTOR`, `STAFF`), `DocumentStatus` (`APPROVED`, `SUBMITTED`) |
-| `*--` | Strong Composition | Lifecycle containment (child deleted on parent deletion) | `Document *-- StatusHistory`, `Document *-- Comment` |
-| `o--` | Weak Aggregation | Referenced association without ownership | `Document o-- User` (Document references author) |
-| `--` | Association (`"1" -- "*"`) | Multiplicity mapping between database entities | One user creates many documents or receives notifications |
-| `..>` | Dependency | Usage or transition relationship | Domain model transitioning document lifecycle states |
+| `+` | Public Visibility | Readable attribute or callable method | `+generateTrackingCode()`, `+updateProfile()` |
+| `-` | Private Visibility | Encapsulated field | `twoFactorSecret`, session hashes |
+| `<<enumeration>>` | Enum Classifier | Strict closed set of categorical values | `RegistrationStatus` (`PENDING`, `ACCEPTED`, `REJECTED`) |
+| `*--` | Strong Composition | Lifecycle containment (child deleted on parent deletion) | `Application *-- Attachment` |
+| `--` | Multiplicity Association | Association relationship between classes | One student user owns one official registration profile |
 
+---
 
-## 5. Class Responsibilities
-- **ApplicantCall**: Represents an administrative call for scholarship applicants under Annex 2.
-- **Application**: The core entity storing student personal data, academic standing, and submission status.
-- **Attachment**: Represents uploaded evidence files (Certificate of Registration, Grades Slip, Certificate of Indigency).
-- **TrackingLookupResult**: DTO returned to students searching by tracking code in the public portal.
+## 4. Operations & Domain Rules
+
+- `isIdentityLocked()` returns true when an applicant is marked `ACCEPTED`, permanently preventing modification of `studentIdNumber` and `fullName` under RA 10173.
+- `updateProfile()` permits students to maintain dynamic attributes (GWA, residential address, mobile number, parent contacts).
+- `generateTrackingCode()` creates a unique 12-character lookup identifier formatted as `TDP-YYYY-XXXX`.
+- `validateMimeAndSize()` restricts document attachments strictly to PDF or image files 5 MB or smaller.

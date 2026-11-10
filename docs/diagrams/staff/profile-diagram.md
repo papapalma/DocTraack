@@ -2,13 +2,13 @@
 
 > **Role:** `STAFF`  
 > **Diagram Type:** Profile Diagram  
-> **Target Domain:** Annex Operations & Transmittal Tracking
+> **Target Domain:** Annex Operations, Verification, and Transmittal Tracking
 
 ---
 
 ## 1. Purpose
 
-The Profile Diagram defines domain-specific UML extensions for Staff operational management, including scan artifact properties, transmittal manifests, and call form builders.
+The Profile Diagram defines domain-specific UML stereotypes and tagged values for the Staff Coordinator domain, including 3-way verification rules, RA 10173 identity locks, certificate layouts, and transmittal manifests.
 
 ---
 
@@ -26,14 +26,23 @@ flowchart TD
     end
 
     subgraph PROFILE["<<profile>> MinSU_Staff_Profile"]
-        AnnexBuilder["<<stereotype>><br/>AnnexBuilder<br/>+supportedAnnexes: List~Int~ = [1..10]<br/>+requiresValidation: Boolean = true"]:::stereoStyle
+        TripartiteVerified["<<stereotype>><br/>TripartiteVerified<br/>+fuzzyThreshold: Float = 0.85<br/>+datasets: List~String~ = ['CHED','REGISTRAR','SYSTEM']<br/>+manualResolutionRequired: Boolean = true"]:::stereoStyle
+
+        LockedIdentity["<<stereotype>><br/>LockedIdentity<br/>+statute: String = 'RA 10173'<br/>+lockedFields: List~String~ = ['studentIdNumber','fullName']<br/>+studentEditable: List~String~ = ['gwa','contacts']"]:::stereoStyle
+
+        ExportableWorkbook["<<stereotype>><br/>ExportableWorkbook<br/>+library: String = 'ExcelJS'<br/>+tabCount: Int = 3<br/>+autoFormulas: Boolean = true"]:::stereoStyle
+
+        CertificateTemplateDef["<<stereotype>><br/>CertificateTemplateDef<br/>+paperSizes: List~String~ = ['A4','LETTER','FOLIO','LEGAL']<br/>+minSignatories: Int = 1<br/>+exportFormat: String = '.doc'"]:::stereoStyle
 
         SignedScanArtifact["<<stereotype>><br/>SignedScanArtifact<br/>+maxFileSizeBytes: Int = 15728640<br/>+allowedMime: String = 'application/pdf'"]:::stereoStyle
 
         TransmittalManifest["<<stereotype>><br/>TransmittalManifest<br/>+courierRequired: Boolean = true<br/>+gdriveBackupMandatory: Boolean = true"]:::stereoStyle
     end
 
-    AnnexBuilder -- "<<extension>>" --> MetaOp
+    TripartiteVerified -- "<<extension>>" --> MetaClass
+    LockedIdentity -- "<<extension>>" --> MetaClass
+    ExportableWorkbook -- "<<extension>>" --> MetaClass
+    CertificateTemplateDef -- "<<extension>>" --> MetaClass
     SignedScanArtifact -- "<<extension>>" --> MetaClass
     TransmittalManifest -- "<<extension>>" --> MetaClass
 
@@ -52,54 +61,16 @@ flowchart TD
 
 | Visual Symbol | Syntax / Style | UML Profile Mechanism | MinSU Governance Application |
 |---|---|---|---|
-| `<<metaclass>>` Box | `fill:#F6F8F6, stroke:#55645B` | Core UML base meta-element | Standard UML `Class` or `Component` |
-| `<<stereotype>>` Box | `fill:#DCEFDD, stroke:#1B5E20` | Domain-specific extension | `<<TDPAnnex>>`, `<<FinancialAnnex>>`, `<<AuditedEntity>>`, `<<ExecutiveReviewable>>` |
-| `+taggedValue: Type` | Tagged Value Attribute | Metadata property attached to stereotype | `annexNumber`, `signatoryRole`, `slaHours = 48`, `requiresDisbursementCheck` |
+| `<<metaclass>>` Box | `fill:#F6F8F6, stroke:#55645B` | Core UML base meta-element | Standard UML `Class` or `Operation` |
+| `<<stereotype>>` Box | `fill:#DCEFDD, stroke:#1B5E20` | Domain-specific extension | `<<TripartiteVerified>>`, `<<LockedIdentity>>`, `<<ExportableWorkbook>>` |
+| `+taggedValue: Type` | Tagged Value Attribute | Metadata property attached to stereotype | `fuzzyThreshold = 0.85`, `statute = 'RA 10173'`, `library = 'ExcelJS'` |
 | `-- "<<extension>>" -->` | Extension Relationship | Extends metaclass semantics | Connects custom TDP stereotype to standard UML metaclass |
-| `-- "<<generalization>>" -->` | Specialization Hierarchy | Stereotype inheritance | `FinancialAnnex` inherits all properties of `TDPAnnex` |
-
 
 ---
 
-## 4. PlantUML Profile Diagram
+## 4. Stereotype Tagged Values & Rules
 
-```plantuml
-@startuml
-skinparam packageBackgroundColor #FFFFFF
-skinparam packageBorderColor #1B5E20
-
-package "<<profile>> MinSU_Staff_Profile" {
-  class "Class" <<metaclass>> as MetaClass
-  class "Operation" <<metaclass>> as MetaOp
-
-  class "AnnexBuilder" <<stereotype>> {
-    + supportedAnnexes : List<Integer> = [1..10]
-    + requiresValidation : Boolean = true
-  }
-
-  class "SignedScanArtifact" <<stereotype>> {
-    + maxFileSizeBytes : Integer = 15728640
-    + allowedMime : String = "application/pdf"
-  }
-
-  class "TransmittalManifest" <<stereotype>> {
-    + courierRequired : Boolean = true
-    + gdriveBackupMandatory : Boolean = true
-  }
-
-  AnnexBuilder -up-> MetaOp : "<<extension>>"
-  SignedScanArtifact -up-> MetaClass : "<<extension>>"
-  TransmittalManifest -up-> MetaClass : "<<extension>>"
-}
-@enduml
-```
-
----
-
-## 5. Stereotype Definitions
-
-| Stereotype | Metaclass | Tagged Values | Description |
-|---|---|---|---|
-| `<<AnnexBuilder>>` | `Operation` | `supportedAnnexes: List`, `requiresValidation: Boolean` | Flags form compilation methods for Annexes 1 through 10. |
-| `<<SignedScanArtifact>>` | `Class` | `maxFileSizeBytes: Int`, `allowedMime: String` | Constrains physical document scans to PDF under 15MB. |
-| `<<TransmittalManifest>>` | `Class` | `courierRequired: Boolean`, `gdriveBackupMandatory: Boolean` | Mandates courier airway bill logging and Google Drive backup URLs. |
+- **`<<TripartiteVerified>>`**: Enforces strict tripartite cross-matching using Jaro-Winkler distance scoring with a default threshold of 0.85.
+- **`<<LockedIdentity>>`**: Prevents alteration of the scholar's student ID number and legal name once marked `ACCEPTED`.
+- **`<<ExportableWorkbook>>`**: Dictates that billing spreadsheets generate native multi-tab `ExcelJS` files with dynamic administrative cost formulas.
+- **`<<CertificateTemplateDef>>`**: Specifies permitted dimensions (A4, Short Letter, Long Folio, Legal) and Word output generation.

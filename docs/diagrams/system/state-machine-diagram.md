@@ -1,10 +1,10 @@
 # State Machine Diagram: MinSU DocTrack Whole System
 
 ## 1. Description
-This state machine diagram details the state transitions, triggers, guard conditions, and actions governing both the TDP Document lifecycle and the Student Scholarship Application lifecycle within MinSU DocTrack.
+This state machine diagram details the state transitions, triggers, guard conditions, and actions governing the TDP Document lifecycle, the Student Scholarship Application lifecycle, and the 3-Way Cross-Matching Verification lifecycle within MinSU DocTrack.
 
 ## 2. ASD-STE100 Technical Specifications
-- Define separate state regions for documents and student applications.
+- Define separate state regions for documents, student applications, and verification runs.
 - Enforce explicit guard conditions on all transitions.
 - Lock documents against edits once they reach the `Approved` or `Sent to Agency` state.
 - Transition records to `Archived` at the conclusion of the academic cycle.
@@ -61,7 +61,7 @@ stateDiagram-v2
         state "Student Application Lifecycle Region" as AppRegion {
             [*] --> App_Submitted : Submit Application & Scanned Proofs
 
-            App_Submitted --> App_UnderReview : Coordinator Opens Application
+            App_Submitted --> App_UnderReview : Coordinator Opens Validation Queue
 
             state App_UnderReview {
                 [*] --> CheckingGrades
@@ -71,9 +71,45 @@ stateDiagram-v2
             App_UnderReview --> App_Disqualified : Reject [ineligibleCriteria]
             App_UnderReview --> App_Qualified : Accept [withinQuota && verified]
 
+            state App_Qualified {
+                [*] --> ProfileIdentityLocked : RA 10173 Lock
+                ProfileIdentityLocked --> ReadyForBilling
+            }
+
             App_Qualified --> App_Awarded : Annex 9 Payroll Approved
             App_Disqualified --> [*]
             App_Awarded --> [*]
+        }
+
+        --
+
+        %% 3-Way Tripartite Verification Lifecycle Region
+        state "Verification Run Lifecycle Region" as VerifyRegion {
+            [*] --> Verify_FilesUploaded : Upload CHED & Registrar CSVs
+
+            state Verify_FilesUploaded {
+                [*] --> ValidatingCsvHeaders
+                ValidatingCsvHeaders --> ParsingBuffers
+            }
+
+            Verify_FilesUploaded --> Verify_Matching : Execute Run
+
+            state Verify_Matching {
+                [*] --> JaroWinklerScoring
+                JaroWinklerScoring --> TripartiteClassification
+            }
+
+            Verify_Matching --> Verify_ResultsReady : Cross-Match Completed
+
+            state Verify_ResultsReady {
+                [*] --> FullyVerifiedState
+                FullyVerifiedState --> ReviewingDiscrepancies
+                ReviewingDiscrepancies --> ManuallyResolving : Coordinator Action (CONFIRM / DISMISS)
+                ManuallyResolving --> ReviewingDiscrepancies
+            }
+
+            Verify_ResultsReady --> Verify_Exported : Export Excel Audit Report
+            Verify_Exported --> [*]
         }
     }
 
@@ -92,14 +128,14 @@ stateDiagram-v2
 
 ## 4. Diagram Legend & Symbol Guide
 
-| Visual Symbol / Syntax | UML State Machine Concept | Technical Meaning | MinSU Document & Student Lifecycle |
+| Visual Symbol / Syntax | UML State Machine Concept | Technical Meaning | MinSU Document, Student & Verification Lifecycle |
 |---|---|---|---|
-| `● [*]` | Initial State Node | Point of entry into a lifecycle region | Annex creation begins or student application submitted |
-| `◎ [*]` | Terminal State Node | Final conclusion of lifecycle | Document permanently archived or student awarded/disqualified |
-| `state "Name"` | Composite State | Container holding nested sub-states | `Doc_Draft`, `Doc_Submitted`, `Doc_Approved`, `App_UnderReview` |
-| `-->` | Transition Arrow | Movement from one state to another triggered by an event | `Director Opens`, `Author Re-edits`, `1-Click Approve` |
+| `● [*]` | Initial State Node | Point of entry into a lifecycle region | Annex creation begins, student registers, or CSV files uploaded |
+| `◎ [*]` | Terminal State Node | Final conclusion of lifecycle | Document archived, student awarded, or verification export finalized |
+| `state "Name"` | Composite State | Container holding nested sub-states | `Doc_Draft`, `App_UnderReview`, `Verify_Matching`, `Verify_ResultsReady` |
+| `-->` | Transition Arrow | Movement from one state to another triggered by an event | `Submit`, `Execute Run`, `1-Click Approve`, `Manually Resolving` |
 | `[guardCondition]` | Transition Guard | Boolean condition that must evaluate to TRUE | `[zeroVariance]`, `[directorSignatureVerified]`, `[scannedPdfAttached]` |
-| `--` | Concurrent Regions | Orthogonal regions running in parallel | Document Lifecycle runs concurrently with Student Application Lifecycle |
+| `--` | Concurrent Regions | Orthogonal regions running in parallel | Document Lifecycle, Student Application Lifecycle, and Verification Run Lifecycle |
 
 ---
 
@@ -107,4 +143,4 @@ stateDiagram-v2
 - **`[hasPermission && zeroVariance]`**: Required to transition a document from `Draft` to `Submitted`. Financial annexes must balance to ₱0.00 discrepancy.
 - **`[directorSignatureVerified]`**: Required to transition from `Submitted` to `Approved`. Locks the document metadata against further modifications.
 - **`[scannedPdfAttached]`**: Required to move an approved document to `Sent to Agency`. Guarantees that wet-signed physical copies are digitized before courier dispatch.
-- **`[withinQuota && verified]`**: Moves student applications from `Under Review` to `Qualified`, indexing them for inclusion in the official Annex 2 TDP Masterlist.
+- **`[withinQuota && verified]`**: Moves student applications from `Under Review` to `Qualified`, triggering the RA 10173 permanent lock on student identity fields and indexing the student into official billing rosters.

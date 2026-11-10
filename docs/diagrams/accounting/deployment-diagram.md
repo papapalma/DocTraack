@@ -1,71 +1,97 @@
-# Deployment Diagram: Accounting Officer Domain
+# Accounting Officer — Deployment Diagram
 
-## 1. Description
-This deployment diagram maps the runtime hardware, network topologies, and containerized environments for the Accounting Officer subsystem. It illustrates the encrypted connection between the university workstation, the ingress proxy, the Next.js server instance, and the managed PostgreSQL database.
+> **Role:** `ACCOUNTING_OFFICER`  
+> **Diagram Type:** Deployment Diagram  
+> **Standard:** UML 2.5 Deployment Specification
 
-## 2. ASD-STE100 Technical Specifications
-- Connect accounting client browsers through encrypted HTTPS connections.
-- Terminate TLS certificates at the edge proxy container.
-- Run the Next.js application inside an isolated Docker node.
-- Store transactional ledger records in a secured database cluster.
+---
 
-## 3. Deployment Diagram (Mermaid)
+## 1. Purpose
+
+The Deployment Diagram shows the hardware devices, Docker container nodes, network protocols, and storage volumes supporting the Accounting Officer financial subsystem.
+
+---
+
+## 2. Mermaid Deployment Diagram
 
 ```mermaid
-graph TB
-    subgraph ClientNode ["Accounting Workstation Node"]
-        Browser["Modern Web Browser<br/>(Chromium / Firefox / Safari)<br/>[Client UI & TLS 1.3 Client]"]
+flowchart TB
+    classDef deviceNode fill:#F6F8F6,stroke:#1B5E20,stroke-width:2px,color:#1F2A24
+    classDef dockerNode fill:#F1F8F1,stroke:#164D1C,stroke-width:2px,color:#164D1C
+    classDef runtimeNode fill:#FFFFFF,stroke:#2E7D32,stroke-width:1.5px,color:#1F2A24
+    classDef artifactStyle fill:#DCEFDD,stroke:#1B5E20,stroke-width:1px,color:#123F17
+    classDef dbNode fill:#FFF1C2,stroke:#F2B705,stroke-width:2px,color:#1F2A24
+
+    subgraph CLIENT_STATION["«device» Accounting Officer Workstation"]
+        subgraph WEB_BROWSER["«executionEnvironment» Modern Web Browser"]
+            ACCOUNTING_SPA["«artifact» Financial Dashboard Bundle<br/>• /documents (Annexes 6, 7, 8, 9)<br/>• Real-Time Ledger Table<br/>• Zero-Variance Indicator"]
+        end
     end
 
-    subgraph EdgeNode ["Edge / Reverse Proxy Node (Linux Server)"]
-        Nginx["Nginx Ingress Proxy<br/>[Port 443 HTTPS / TLS Termination]"]
+    subgraph SERVER_HOST["«device» MinSU Campus Server Host"]
+        subgraph DOCKER_ENGINE["«executionEnvironment» Docker Runtime"]
+
+            subgraph PROXY_BOX["«node» Container: reverse-proxy"]
+                NGINX["«executionEnvironment» Nginx 1.25 Alpine<br/>• TLS 1.3 Termination<br/>• Reverse Proxy / Port 3000"]
+            end
+
+            subgraph APP_BOX["«node» Container: web-application"]
+                NODEJS["«executionEnvironment» Node.js 20 LTS"]
+                FINANCIAL_APIS["«artifact» Financial Route Handlers<br/>• /api/documents/:id/submit<br/>• /api/annex-*/export-excel (ExcelJS)<br/>• /api/documents/:id/upload"]
+                PRISMA["«artifact» Prisma Query Engine"]
+            end
+
+            subgraph DB_BOX["«node» Container: postgres-database"]
+                PG_ENGINE["«executionEnvironment» PostgreSQL 16<br/>Database: minsu_doctrack"]
+            end
+
+        end
+
+        subgraph STORAGE_VOLS["«storage» Persistent Host Volumes"]
+            SCANS_VOL["Volume: ./storage/uploads/scans/<br/>(Wet-Signed Financial PDF Scans)"]
+            DB_VOL["Volume: ./docker/data/postgres/<br/>(Relational State & Audit Logs)"]
+        end
     end
 
-    subgraph AppNode ["Application Host Node (Docker Environment)"]
-        NodeServer["Node.js v20 Runtime<br/>Next.js 16 App Server<br/>[Port 3000 Internal]"]
-        PrismaClient["Prisma ORM Client Layer"]
-    end
+    ACCOUNTING_SPA -->|"HTTPS (TLS 1.3) / Port 443"| NGINX
+    NGINX -->|"HTTP / Port 3000"| FINANCIAL_APIS
+    FINANCIAL_APIS --> PRISMA
+    PRISMA -->|"TCP / Port 5432"| PG_ENGINE
+    PG_ENGINE -->|"Disk Block I/O"| DB_VOL
+    FINANCIAL_APIS -->|"Write Signed Scans"| SCANS_VOL
 
-    subgraph DatabaseNode ["Database Node (Managed Cloud / Dedicated Instance)"]
-        PostgresInstance["PostgreSQL 16 Engine<br/>[Port 5432 Internal]"]
-        DiskVolume[("Persistent NVMe Storage<br/>Encrypted Tablespace")]
-    end
-
-    Browser -->|HTTPS / WSS / Port 443| Nginx
-    Nginx -->|Reverse Proxy / HTTP| NodeServer
-    NodeServer -->|Internal Calls| PrismaClient
-    PrismaClient -->|Connection Pool / SSL| PostgresInstance
-    PostgresInstance -->|Read / Write Blocks| DiskVolume
+    class ACCOUNTING_SPA,FINANCIAL_APIS,PRISMA artifactStyle
+    class NGINX,NODEJS runtimeNode
+    class PG_ENGINE dbNode
+    class SCANS_VOL,DB_VOL deviceNode
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Dev["<<device>> Physical / Virtual Server"]:::deviceNode
-        L_Env["<<executionEnvironment>> Runtime Engine"]:::runtimeNode
-        L_Art["<<artifact>> Software Executable / Bundle"]:::artifactStyle
-        L_Db["<<executionEnvironment>> PostgreSQL Database"]:::dbNode
-        L_Art -->|Network Protocol & Port| L_Env
-        L_Env -.->|File Mount / Binding| L_Dev
+        L_Device["«device»: Physical Machine"]:::deviceNode
+        L_Node["«node»: Container Host"]:::runtimeNode
+        L_Art["«artifact»: Code Artifact"]:::artifactStyle
+        L_Store["«storage»: Host Mounted Volume"]:::deviceNode
+        L_Device -.-> L_Node -.-> L_Art -.-> L_Store
     end
 ```
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | UML Deployment Role | MinSU Infrastructure Context |
+| Visual Symbol | Syntax / Style | UML Deployment Concept | MinSU Implementation |
 |---|---|---|---|
-| `<<device>>` Box | `fill:#F6F8F6, stroke:#1B5E20` | Physical hardware or operating system host | Client Workstation, Ubuntu Linux Server |
-| `<<node>>` Container | `fill:#F1F8F1, stroke:#164D1C` | Isolated containerized execution node | Docker containers: reverse-proxy, web-application, postgres-database |
-| `<<executionEnvironment>>` | `fill:#FFFFFF, stroke:#2E7D32` | Application runtime or software engine | Node.js 20 LTS, Nginx 1.25 Alpine, Headless Chromium |
-| `<<artifact>>` | `fill:#DCEFDD, stroke:#1B5E20` | Packaged deployable binary or file | Next.js standalone build, Prisma engine, nginx.conf |
-| 🟨 Database Engine | `fill:#FFF1C2, stroke:#F2B705` | Relational database runtime | PostgreSQL 16 Alpine Server |
-| `-->` Solid Arrow | Network Communication Link | Transport protocol and network port | Port 443 (HTTPS), Port 3000 (Internal HTTP), Port 5432 (Internal TCP) |
-| `-.->` Dashed Arrow | Storage Mount / Stream | Host volume bind mount or disk I/O | `./uploads` (Signed PDF scans) and `pgdata` (PostgreSQL WAL files) |
+| `«device»` | Double Angle Bracket | Hardware computational machine | Accounting Workstation, MinSU Linux Server |
+| `«node»` | Container Box | Virtualized runtime environment | Reverse proxy, Node.js web application, PostgreSQL |
+| `«artifact»` | Shaded Component | Executable software code or bundle | Financial SPA, ExcelJS exporter, Prisma engine |
+| `«storage»` | Volume Node | File system partition on host | Mounted scans volume, PostgreSQL database blocks |
 
+---
 
-## 5. Hardware and Network Nodes
-- **Accounting Workstation Node**: Standard university workstation with authenticated session cookie.
-- **Edge Node**: Reverse proxy handling security headers (`X-Frame-Options`, `X-Content-Type-Options`) and rate limiting.
-- **Application Host Node**: Executes server-side financial business logic, PDF generation, and access control.
-- **Database Node**: Encrypted relational store holding financial documents, beneficiary payrolls, and audit logs.
+## 4. Deployment Specifications
+
+- **Accounting Workstation**: Executes client-side currency math and renders real-time balanced indicators.
+- **Reverse Proxy**: Handles HTTPS encryption and proxies requests to the Next.js application container.
+- **Application Container**: Runs the in-memory zero-variance calculator and streams native multi-tab `ExcelJS` files.
+- **Database Container**: Persists financial ledger line items, approval transitions, and audit records with disk volume mounting.

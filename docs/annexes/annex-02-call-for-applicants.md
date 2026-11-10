@@ -66,6 +66,14 @@ export interface DynamicApplicantField {
 }
 ```
 
+### Student Profile & RA 10173 Data Privacy Protection Rules
+
+1. **Self-Service Registration & 2FA Setup:** Students register with institutional emails and have the option to configure Microsoft Authenticator (TOTP) two-factor authentication, generating backup recovery codes.
+2. **Selective Grantee Profile Lock:** To ensure masterlist data integrity under RA 10173 (Data Privacy Act of 2012):
+   - Once a student applicant is officially marked **ACCEPTED** by the Staff Coordinator, their core identity attributes (**Student ID Number** and **Full Legal Name**) are permanently locked from further student editing.
+   - Non-static student attributes—including **GWA**, contact phone number, residential home address, and parent/guardian contact details—remain editable by the student at `/portal/profile` to facilitate renewal verification and institutional communication.
+
+
 ---
 
 ## 5. Prerequisite Documents & Supporting Attachments

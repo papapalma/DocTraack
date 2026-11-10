@@ -2,13 +2,14 @@
 
 > **Role:** `STUDENT`  
 > **Diagram Type:** Sequence Diagram  
-> **Scenario:** Application Submission, Tracking Code Generation & Receipt Retrieval
+> **Scenario:** 2FA Setup, Online Application, Tracking Code Generation & Receipt Retrieval  
+> **Standard:** UML 2.5 Sequence Specification
 
 ---
 
 ## 1. Purpose
 
-The Sequence Diagram shows the chronological exchange of messages when a Student Applicant submits an online scholarship application and receives an official tracking code and receipt.
+The Sequence Diagram shows the chronological exchange of messages when a Student Applicant signs up with Microsoft Authenticator 2FA, submits an online application, receives an official tracking code, and downloads a receipt slip. All decision alternatives evaluate strictly to binary Yes and No paths.
 
 ---
 
@@ -18,56 +19,65 @@ The Sequence Diagram shows the chronological exchange of messages when a Student
 sequenceDiagram
     autonumber
     actor Student as Student Applicant
-    participant UI as Portal Application View (/portal)
-    participant API as Application Endpoint (/api/portal/apply)
+    participant UI as Portal View (/portal)
+    participant AuthAPI as /api/auth/2fa/verify
+    participant ApplyAPI as /api/registrations
     participant CodeGen as Tracking Code Generator
     participant Prisma as Prisma ORM Client
-    participant PDF as Receipt Slip Compiler
     participant DB as PostgreSQL Database
 
     %% ─── 📌 VISUAL LEGEND ───
     Note over Student,DB: ─── 📌 DIAGRAM LEGEND: Solid Line (->>) = Request/Command | Dashed Line (-->>) = Response/Data | Rect = Phase Boundary ───
 
+    rect rgb(241, 248, 241)
+        Note over Student,DB: Phase 1: 2FA Microsoft Authenticator Verification
+        Student->>UI: Inputs 6-digit TOTP code from Microsoft Authenticator
+        UI->>AuthAPI: POST /api/auth/2fa/verify { token: "492019" }
+        activate AuthAPI
+        AuthAPI->>AuthAPI: Verify RFC 6238 TOTP against stored secret
+        alt Is 2FA Code Valid? -- Yes
+            AuthAPI-->>UI: 200 OK { authenticated: true }
+            UI-->>Student: Grant access to Student Portal (/portal)
+        else Is 2FA Code Valid? -- No
+            AuthAPI-->>UI: 401 Unauthorized { error: "Invalid TOTP code" }
+            UI-->>Student: Display invalid code alert
+        end
+        deactivate AuthAPI
+    end
 
-    Student->>UI: Fills form fields and uploads COR (cor_2026.pdf)
-    Student->>UI: Agrees to privacy consent and clicks "Submit"
-    
-    UI->>API: POST /api/portal/apply { callId: "call_1", formData: { ... } }
-    activate API
-    
-    API->>Prisma: Verify call exists and isActive == true
-    Prisma->>DB: SELECT * FROM applicant_calls WHERE id = 'call_1'
-    DB-->>Prisma: Return call (deadline in future)
-    
-    API->>CodeGen: generateUniqueTrackingCode("TDP-2026")
-    activate CodeGen
-    CodeGen->>CodeGen: Generate cryptographically secure slug: TDP-2026-X9B2
-    CodeGen-->>API: Return trackingCode
-    deactivate CodeGen
-    
-    API->>Prisma: INSERT INTO applications (callId, studentId, formData, trackingCode, status)
-    activate Prisma
-    Prisma->>DB: Write application row with status = SUBMITTED
-    DB-->>Prisma: Insert confirmed
-    deactivate Prisma
-    
-    API-->>UI: 201 Created { success: true, trackingCode: "TDP-2026-X9B2" }
-    deactivate API
-    
-    UI-->>Student: Display congratulations modal with code: TDP-2026-X9B2
-    
-    Student->>UI: Clicks "Download Receipt Slip"
-    UI->>API: GET /api/portal/receipt/TDP-2026-X9B2
-    activate API
-    API->>PDF: renderReceiptSlip({ studentName, trackingCode, timestamp })
-    activate PDF
-    PDF-->>API: Return PDF binary buffer
-    deactivate PDF
-    API-->>UI: 200 OK (Content-Type: application/pdf)
-    deactivate API
-    
-    UI-->>Student: Browser initiates download of TDP-Receipt-X9B2.pdf
+    rect rgb(255, 241, 194)
+        Note over Student,DB: Phase 2: Application Submission & Deadline Validation
+        Student->>UI: Selects active scholarship call and inputs biodata
+        UI->>ApplyAPI: Check deadline status
+        activate ApplyAPI
+        ApplyAPI->>Prisma: Query active call deadline
+        Prisma->>DB: SELECT * FROM applicant_calls WHERE id = :callId
+        DB-->>Prisma: Return call record
+        deactivate ApplyAPI
 
+        alt Is Call Deadline Open? -- Yes
+            Student->>UI: Attaches Certificate of Registration (COR.pdf)
+            alt Are Attachments Valid (<= 5MB PDF/Image)? -- Yes
+                Student->>UI: Agrees to RA 10173 Privacy Notice & clicks Submit
+                UI->>ApplyAPI: POST /api/registrations (multipart/form-data)
+                activate ApplyAPI
+                ApplyAPI->>CodeGen: generateUniqueTrackingCode("TDP-2026")
+                CodeGen-->>ApplyAPI: Return "TDP-2026-X9B2"
+                ApplyAPI->>Prisma: INSERT INTO registrations & applications
+                Prisma->>DB: Commit student registration row
+                DB-->>Prisma: Confirmed commit
+                ApplyAPI-->>UI: 201 Created { trackingCode: "TDP-2026-X9B2" }
+                deactivate ApplyAPI
+                UI-->>Student: Display success modal with Tracking Code: TDP-2026-X9B2
+                Student->>UI: Clicks "Download Official Receipt Slip"
+                UI-->>Student: Stream downloadable PDF receipt
+            else Are Attachments Valid (<= 5MB PDF/Image)? -- No
+                UI-->>Student: Display file validation alert: "Exceeds 5MB limit or invalid MIME"
+            end
+        else Is Call Deadline Open? -- No
+            UI-->>Student: Display alert: "Scholarship call is closed for submissions"
+        end
+    end
 ```
 
 ---
@@ -76,21 +86,21 @@ sequenceDiagram
 
 | Visual / Symbol | Element Type | Technical Role | MinSU DocTrack Context |
 |---|---|---|---|
-| 👤 `actor` | Human Actor | External user role triggering system operations | Student Applicant, Staff Coordinator, Campus Director, Accounting Officer |
-| 🔲 `participant` | System Component | Internal software subsystem or persistence boundary | Web UI, API Endpoint, Workflow Engine, Prisma/PostgreSQL, PDF Compiler |
-| ──▶ `->>` | Solid Arrow | Synchronous invocation or command message | Submitting forms, verifying tokens, invoking database writes |
-| - - ▷ `-->>` | Dashed Arrow | Return response or data payload | Confirmation slips, tracking codes, PDF binary buffers, query results |
-| 🔲 `activate / deactivate` | Activation Lifeline | Period during which a component executes logic | Active request execution on API controllers or PDF engines |
-| 🔲 `alt / else` | Conditional Fragment | Decision tree handling alternative workflow paths | Approval vs. Return branching, SLA compliance checks |
-
+| `Actor` | Human User | Initiator of operational procedures | Student Applicant submitting credentials |
+| `Participant` | System Component | Boundary, controller, or data store | Portal UI, 2FA Controller, Prisma ORM, PostgreSQL |
+| `->>` | Synchronous Message | Command or method invocation | Verify TOTP, check deadline, commit registration |
+| `-->>` | Return Message | Response data or confirmation payload | Returns 200 OK, tracking code, downloadable receipt |
+| `alt / else` | Conditional Frame | Guarded execution path (**Yes** / **No**) | Is Code Valid? Yes -> proceed; No -> alert |
 
 ---
 
-## 4. Sequence Details
+## 4. Execution Sequence Steps
 
-1. Student completes personal information and attaches documentary files.
-2. API confirms that the target scholarship call is currently active.
-3. Code Generator constructs a unique uppercase alphanumeric tracking code.
-4. Database records the application in `SUBMITTED` status.
-5. Student receives visual confirmation and clicks to download the official receipt.
-6. PDF Engine compiles the verification slip containing the university seal and timestamp.
+1. Student enters the 6-digit TOTP code from Microsoft Authenticator.
+2. If the 2FA code is valid (**Yes**), system grants session access to `/portal`.
+3. If invalid (**No**), system halts with an authentication error.
+4. Student selects an active scholarship call.
+5. If deadline is open (**Yes**), system validates document size and MIME types.
+6. If attachments are valid (**Yes**), system saves the application, issues a tracking code, and generates a printable receipt.
+7. If attachments are invalid (**No**), system prompts for compliant files.
+8. If the deadline has elapsed (**No**), system displays a call closed banner.

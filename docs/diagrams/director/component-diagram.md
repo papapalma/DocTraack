@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-The Component Diagram shows the software modules, provided interfaces, and required dependencies within the executive review subsystem.
+The Component Diagram shows the software modules, provided interfaces, and required dependencies within the executive review, verification oversight, and analytics subsystem.
 
 ---
 
@@ -23,57 +23,74 @@ flowchart LR
 
     subgraph PRESENTATION["Presentation Layer"]
         ReviewUI["<<component>><br/>Executive Review Queue View"]:::compStyle
-        AnalyticsUI["<<component>><br/>Executive Analytics Dashboard"]:::compStyle
+        AnalyticsUI["<<component>><br/>Executive KPI Analytics View"]:::compStyle
+        VerifyOversightUI["<<component>><br/>Verification Oversight View"]:::compStyle
+        CertEndorseUI["<<component>><br/>Certificate Endorsement View"]:::compStyle
+        AnnounceUI["<<component>><br/>Campus Announcement View"]:::compStyle
     end
 
     subgraph SECURITY["Security Layer"]
-        SignatoryGuard["<<component>><br/>Signatory RBAC Guard"]:::compStyle
+        DirectorGuard["<<component>><br/>Director Signatory RBAC Guard"]:::compStyle
     end
 
     subgraph SERVICES["Executive Review Services"]
         QueueService["<<component>><br/>Review Queue Service"]:::compStyle
         EndorsementService["<<component>><br/>Document Endorsement Engine"]:::compStyle
-        RevisionService["<<component>><br/>Revision Comment Service"]:::compStyle
-        AnalyticsService["<<component>><br/>Velocity Analytics Aggregator"]:::compStyle
+        RevisionService["<<component>><br/>Revision Feedback Service"]:::compStyle
+        VerifyOversightService["<<component>><br/>Verification Oversight Service"]:::compStyle
+        AnalyticsService["<<component>><br/>Velocity & SLA Analytics Engine"]:::compStyle
+        AnnounceService["<<component>><br/>Announcement Service"]:::compStyle
     end
 
     subgraph DATA["Data Access"]
-        PrismaClient["<<component>><br/>Prisma ORM Adapter"]:::dataComp
+        PrismaClient["<<component>><br/>Prisma ORM Client"]:::dataComp
     end
 
     %% Interfaces
-    ISignatory(["ISignatoryGuard"]):::ifaceStyle
+    IDirector(["IDirectorGuard"]):::ifaceStyle
     IQueue(["IReviewQueue"]):::ifaceStyle
     IEndorse(["IEndorsement"]):::ifaceStyle
+    IVerifyOversight(["IVerificationOversight"]):::ifaceStyle
     IAnalytics(["IVelocityAnalytics"]):::ifaceStyle
+    IAnnounce(["IAnnouncementHub"]):::ifaceStyle
     IData(["IDataAccess"]):::ifaceStyle
 
-    %% Connections
-    ReviewUI --> ISignatory
-    ReviewUI --> IQueue
-    ReviewUI --> IEndorse
-    AnalyticsUI --> IAnalytics
+    %% Presentation to Security
+    ReviewUI --> IDirector
+    AnalyticsUI --> IDirector
+    VerifyOversightUI --> IDirector
+    CertEndorseUI --> IDirector
 
-    SignatoryGuard -- provides --> ISignatory
-    QueueService -- provides --> IQueue
-    EndorsementService -- provides --> IEndorse
-    AnalyticsService -- provides --> IAnalytics
+    IDirector --> DirectorGuard
+    DirectorGuard --> QueueService
+    DirectorGuard --> EndorsementService
+    DirectorGuard --> VerifyOversightService
+    DirectorGuard --> AnalyticsService
 
+    %% Services to Interfaces
+    QueueService --> IQueue
+    EndorsementService --> IEndorse
+    VerifyOversightService --> IVerifyOversight
+    AnalyticsService --> IAnalytics
+    AnnounceService --> IAnnounce
+
+    %% Services to Data Access
     QueueService --> IData
     EndorsementService --> IData
     RevisionService --> IData
+    VerifyOversightService --> IData
     AnalyticsService --> IData
+    AnnounceService --> IData
 
-    PrismaClient -- provides --> IData
+    IData --> PrismaClient
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Comp["<<component>><br/>Software Subsystem"]:::compStyle
-        L_Iface(["(Iface): Interface Contract"]):::ifaceStyle
-        L_Data["<<component>><br/>Persistence Adapter"]:::dataComp
-        L_Comp -- "depends on" --> L_Iface
-        L_Data -- "provides" --> L_Iface
+        L_Comp["[Component Box]: Software Module"]:::compStyle
+        L_Iface(["(Round Pin): Provided Interface"]):::ifaceStyle
+        L_Data["[Gold Box]: Data Store / Storage"]:::dataComp
+        L_Comp --> L_Iface --> L_Data
     end
 ```
 
@@ -81,73 +98,18 @@ flowchart LR
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | Technical Role | MinSU Architecture Mapping |
+| Visual Symbol | Syntax / Style | UML Component Meaning | MinSU Implementation |
 |---|---|---|---|
-| `<<component>>` Box | `fill:#FFFFFF, stroke:#1B5E20` | Architectural subsystem or service module | Views, Controllers, Auth Services, Document Engines |
-| `([Interface Circle])` | `fill:#DCEFDD, stroke:#123F17` | Provided / Required Interface Contract | `IAuthSession`, `IRBACGuard`, `IDocumentWorkflow`, `IDataAccess` |
-| 🟨 Data Component | `fill:#FFF1C2, stroke:#F2B705` | Persistence & Storage adapter component | Prisma ORM Client, Local Storage Volume, Google Drive Client |
-| `-->` Solid Arrow | Dependency / Consumer | Module calls or requires the interface | View components requiring workflow and auth interfaces |
-| `-- provides -->` | Realization / Provider | Module implements or provides the interface | Service layer realizing database or workflow contracts |
-| Boundary Subgraph | `subgraph LAYER` | Architectural tier / layer grouping | Presentation, Security, Domain Logic, and Persistence Layers |
-
+| `[Component]` | `["<<component>>\nName"]` | Autonomous modular unit with internal logic | Endorsement Engine, Verification Oversight, Velocity Analytics |
+| `(Interface)` | `(["IName"])` | Formal contract or API boundary | `IEndorsement`, `IVerificationOversight`, `IVelocityAnalytics` |
+| `Solid Arrow` | `-->` | Direct dependency or communication invocation | Review views invoke endorsement operations via interfaces |
+| `Data Component` | Gold Tone `#FFF1C2` | Persistence or storage component | Prisma ORM client adapter |
 
 ---
 
-## 4. PlantUML Component Diagram
+## 4. Component Responsibilities
 
-```plantuml
-@startuml
-skinparam componentStyle uml2
-skinparam backgroundColor #FFFFFF
-skinparam componentBackgroundColor #F1F8F1
-skinparam componentBorderColor #1B5E20
-
-package "Executive Presentation" {
-  [Review Queue Page] as QueueUI
-  [Analytics Page] as AnalyticsUI
-}
-
-package "Executive Guards" {
-  [Signatory Guard] as Guard
-  interface "ISignatory" as ISig
-}
-
-package "Review Services" {
-  [Queue Service] as QueueSvc
-  [Endorsement Engine] as EndorseEngine
-  [Analytics Aggregator] as AnalyticsSvc
-  interface "IQueue" as IQ
-  interface "IEndorse" as IEnd
-  interface "IAnalytics" as IAna
-}
-
-package "Database" {
-  [Prisma Adapter] as Prisma
-  interface "IDB" as IDB
-}
-
-Guard - ISig
-QueueSvc - IQ
-EndorseEngine - IEnd
-AnalyticsSvc - IAna
-Prisma - IDB
-
-QueueUI ..> ISig
-QueueUI ..> IQ
-QueueUI ..> IEnd
-AnalyticsUI ..> IAna
-
-QueueSvc ..> IDB
-EndorseEngine ..> IDB
-AnalyticsSvc ..> IDB
-
-@enduml
-```
-
----
-
-## 5. Component Rules
-
-- The `Signatory RBAC Guard` enforces executive permissions before processing approval or return actions.
-- The `Velocity Analytics Aggregator` parses historical timestamps without performing mutating operations.
-- The `Document Endorsement Engine` updates status and emits notifications within an atomic transaction.
+- **Executive Review Queue View (`ReviewUI`)**: Provides 1-click approval and return modals with dynamic PDF previews.
+- **Verification Oversight Service (`VerifyOversightService`)**: Permits executive inspection of tripartite matching results and discrepancy metrics before signing.
+- **Document Endorsement Engine (`EndorsementService`)**: Applies cryptographic timestamps and transitions documents to `APPROVED`.
+- **Velocity & SLA Analytics Engine (`AnalyticsService`)**: Computes campus approval velocities and 48-hour SLA metrics.

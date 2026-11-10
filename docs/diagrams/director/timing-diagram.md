@@ -9,7 +9,7 @@
 
 ## 1. Purpose
 
-The Timing Diagram shows the lifecycle states of documents in the review queue and the strict 48-hour executive endorsement SLA.
+The Timing Diagram shows the lifecycle states of documents in the executive review queue and the strict 48-hour endorsement SLA monitored by the Campus Director.
 
 ---
 
@@ -28,7 +28,7 @@ concise "Turnaround SLA Status" as SLAState
 DirAct is Idle
 DocState is SUBMITTED
 SLAState is WithinTarget
-note bottom of DocState : Document Enters Queue
+note bottom of DocState : Document Enters Executive Queue
 
 @12
 DirAct is Inspecting
@@ -39,7 +39,7 @@ SLAState is WithinTarget
 DirAct is Idle
 DocState is SUBMITTED
 SLAState is WarningThreshold
-note bottom of SLAState : 24h Advisory Reminder
+note bottom of SLAState : 24h Advisory Reminder Emitted
 
 @36
 DirAct is Inspecting
@@ -55,9 +55,10 @@ note bottom of DocState : Approved at Hour 42 (Within 48h SLA)
 @48
 SLAState is TargetMet
 
-@0 <-> @24 : {Optimal Review <= 24 hours}
-@24 <-> @48 : {SLA Grace Period = 24 hours}
-@0 <-> @42 : {Actual Turnaround = 42 hours}
+@0 <-> @24 : {Optimal Review Window <= 24 hours}
+@24 <-> @48 : {SLA Escalation Window <= 24 hours}
+@0 <-> @42 : {Actual Turnaround Duration = 42 hours}
+@0 <-> @48 : {Hard Policy SLA Limit = 48 hours}
 
 legend right
   <b>📌 DIAGRAM LEGEND & TIMING NOTATION</b>
@@ -66,7 +67,6 @@ legend right
   @N : Time tick offset in hours
   @A <-> @B : Strict interval SLA constraint
 endlegend
-
 @enduml
 ```
 
@@ -74,21 +74,18 @@ endlegend
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Notation / Element | Type / Syntax | Temporal Role | MinSU Operational Application |
+| Visual Symbol | Syntax / Style | UML Timing Concept | MinSU Implementation Context |
 |---|---|---|---|
-| `robust "Lifeline"` | Discrete State Lifeline | Tracks operational state transitions over time | `DirAct` (Director Review Activity), `DocState` (Submitted vs. Approved) |
-| `concise "Status"` | Status Interval Bar | Tracks SLA compliance threshold | `SLAState` (`WithinTarget`, `WarningThreshold`, `TargetMet`) |
-| `@N` | Time Tick Offset | Elapsed hour marker from document submission | `@0` (Queue entry), `@24` (24h advisory warning), `@42` (Approved), `@48` (SLA limit) |
-| `@A <-> @B : {Rule}` | Time Constraint Interval | Hard institutional deadline or turnaround window | Optimal Review (<= 24h), Grace Period (24h), Total SLA (48h) |
-| `note bottom of ...` | Event Milestone Callout | Operational trigger annotation | 24h advisory reminder, approval timestamp within 48h SLA |
+| Lifeline Wave | `robust "Name"` | Continuous state value of an entity | Director Activity, Document Status |
+| State Label | `Lifeline is STATE` | Active discrete status during interval | `IDLE`, `INSPECTING`, `SUBMITTED`, `APPROVED` |
+| SLA State Bar | `concise "Name"` | Qualitative operational condition | `WithinTarget`, `WarningThreshold`, `TargetMet` |
+| Time Constraint | `@A <-> @B : {Label}` | Enforced operational deadline (SLA) | 48-hour maximum director review limit |
 
 ---
 
-## 4. Timeline & SLA Constraints
+## 4. Timeline Milestones & Turnaround Constraints
 
-| Timestamp | Document State | SLA Window | Description |
-|---|---|---|---|
-| `0 hours` | `SUBMITTED` | `WithinTarget` | Document lands in Director review queue. |
-| `24 hours` | `SUBMITTED` | `WarningThreshold` | System issues a 24-hour reminder alert if unreviewed. |
-| `42 hours` | `APPROVED` | `TargetMet` | Director completes endorsement before 48-hour breach. |
-| `> 48 hours` | Unreviewed | `Breached` | Triggers executive escalation flag in analytics dashboard. |
+- **Hour 0**: Document transitions to `SUBMITTED`; SLA countdown begins on the Director dashboard.
+- **Hour 24**: System emits an amber warning badge if the document remains unreviewed.
+- **Hour 42**: Director inspects grantee rosters, verifies zero discrepancies, and clicks "Approve Annex".
+- **Hour 48**: Hard policy SLA ceiling; any document unreviewed at 48 hours is flagged as overdue in `/analytics`.

@@ -2,13 +2,14 @@
 
 > **Role:** `SYSTEM_ADMIN`  
 > **Diagram Type:** Sequence Diagram  
-> **Scenario:** Modifying User Institutional Role & Audit Trail Generation
+> **Scenario:** Modifying User Role, 2FA Management, and Audit Trail Generation  
+> **Standard:** UML 2.5 Sequence Specification
 
 ---
 
 ## 1. Purpose
 
-The Sequence Diagram shows the messages exchanged during an account role change. It traces validation, database modification, and audit log generation in chronological order.
+The Sequence Diagram shows the messages exchanged in chronological order when the System Administrator updates an institutional user's role or resets 2FA security credentials. All decision branches evaluate strictly to binary Yes and No paths.
 
 ---
 
@@ -18,7 +19,7 @@ The Sequence Diagram shows the messages exchanged during an account role change.
 sequenceDiagram
     autonumber
     actor Admin as System Admin
-    participant UI as Users Dashboard UI
+    participant UI as Users Dashboard UI (/users)
     participant Middleware as Next.js RBAC Guard
     participant API as /api/users/[id] Route
     participant Prisma as Prisma ORM Client
@@ -28,43 +29,41 @@ sequenceDiagram
     %% ─── 📌 VISUAL LEGEND ───
     Note over Admin,DB: ─── 📌 DIAGRAM LEGEND: Solid Line (->>) = Request/Command | Dashed Line (-->>) = Response/Data | Rect = Phase Boundary ───
 
-
     Admin->>UI: Selects user and chooses new Role: DIRECTOR
     Admin->>UI: Clicks "Save Role Changes"
-    UI->>Middleware: PATCH /api/users/usr_123 { role: "DIRECTOR" }
+    UI->>Middleware: PATCH /api/users/:id { role: "DIRECTOR" }
     
     activate Middleware
     Middleware->>Middleware: Verify session cookie & ensure role == SYSTEM_ADMIN
-    alt Unauthorized
-        Middleware-->>UI: 403 Forbidden (Admin privileges required)
-        UI-->>Admin: Show error notification toast
-    else Authorized
+
+    alt Is User Authorized as System Admin? -- Yes
         Middleware->>API: Forward authenticated request
         activate API
         
-        API->>Prisma: Fetch existing user by ID (usr_123)
-        Prisma->>DB: SELECT * FROM users WHERE id = 'usr_123'
+        API->>Prisma: Fetch existing user by ID
+        Prisma->>DB: SELECT * FROM users WHERE id = :id
         DB-->>Prisma: Return existing User row (role: STAFF)
         
-        API->>Prisma: Update user role in database transaction
+        API->>Prisma: $transaction(UPDATE role, INSERT audit_log)
         activate Prisma
-        Prisma->>DB: UPDATE users SET role = 'DIRECTOR' WHERE id = 'usr_123'
+        Prisma->>DB: UPDATE users SET role = 'DIRECTOR' WHERE id = :id
         DB-->>Prisma: Update acknowledged
         
-        API->>Audit: logAuditEvent(actorId, "ROLE_UPDATED", "USER", "usr_123", { from: "STAFF", to: "DIRECTOR" })
+        API->>Audit: logAuditEvent(actorId, "USER_ROLE_UPDATED", "USER", :id, { from: "STAFF", to: "DIRECTOR" })
         activate Audit
         Audit->>DB: INSERT INTO audit_log (actorId, action, entity, entityId, details)
         DB-->>Audit: Confirm audit record inserted
         deactivate Audit
         
         deactivate Prisma
-        API-->>UI: 200 OK { success: true, user: { id: "usr_123", role: "DIRECTOR" } }
+        API-->>UI: 200 OK { success: true, updatedRole: "DIRECTOR" }
         deactivate API
-        
-        UI-->>Admin: Display success toast and update badge to "DIRECTOR"
+        UI-->>Admin: Display green toast: "User role updated successfully"
+    else Is User Authorized as System Admin? -- No
+        Middleware-->>UI: 403 Forbidden (System Administrator role required)
+        UI-->>Admin: Display access denied alert banner
     end
     deactivate Middleware
-
 ```
 
 ---
@@ -73,22 +72,18 @@ sequenceDiagram
 
 | Visual / Symbol | Element Type | Technical Role | MinSU DocTrack Context |
 |---|---|---|---|
-| 👤 `actor` | Human Actor | External user role triggering system operations | Student Applicant, Staff Coordinator, Campus Director, Accounting Officer |
-| 🔲 `participant` | System Component | Internal software subsystem or persistence boundary | Web UI, API Endpoint, Workflow Engine, Prisma/PostgreSQL, PDF Compiler |
-| ──▶ `->>` | Solid Arrow | Synchronous invocation or command message | Submitting forms, verifying tokens, invoking database writes |
-| - - ▷ `-->>` | Dashed Arrow | Return response or data payload | Confirmation slips, tracking codes, PDF binary buffers, query results |
-| 🔲 `activate / deactivate` | Activation Lifeline | Period during which a component executes logic | Active request execution on API controllers or PDF engines |
-| 🔲 `alt / else` | Conditional Fragment | Decision tree handling alternative workflow paths | Approval vs. Return branching, SLA compliance checks |
-
+| `Actor` | Human User | Initiator of operational procedures | System Administrator provisioning user accounts |
+| `Participant` | System Component | Boundary, controller, or data store | Users UI, RBAC Guard, Prisma ORM, PostgreSQL DB |
+| `->>` | Synchronous Message | Command or method invocation | Patch user, verify session, commit database write |
+| `-->>` | Return Message | Response data or confirmation payload | Returns 200 OK update payload or 403 Forbidden |
+| `alt / else` | Conditional Frame | Guarded execution path (**Yes** / **No**) | Is User Authorized? Yes -> update; No -> reject |
 
 ---
 
-## 4. Sequence Steps
+## 4. Execution Sequence Steps
 
-1. Admin selects a user on the dashboard and chooses a new role.
-2. Admin submits the role modification.
-3. Edge middleware verifies that the session belongs to a `SYSTEM_ADMIN`.
-4. API loads the current user record to verify existence.
-5. Database updates the user role to `DIRECTOR`.
-6. Audit Log Service writes an immutable record capturing the role transition.
-7. System returns confirmation to the UI and updates the badge.
+1. Admin selects a user on `/users` and chooses a new role.
+2. Admin clicks "Save Role Changes".
+3. Middleware evaluates session identity.
+4. If authorized as System Admin (**Yes**), system executes the update inside an atomic transaction with audit logging.
+5. If unauthorized (**No**), system returns HTTP 403 Forbidden and displays an access denied warning.

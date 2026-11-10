@@ -21,12 +21,12 @@ graph TD
 
     Decision_Variance -->|Yes| Frame_Submit["sd: SubmitToExecutiveQueue<br/>- Update status to SUBMITTED<br/>- Write audit event<br/>- Dispatch director notification"]
 
-    Frame_Submit --> Decision_Director{"Director Decision"}
+    Frame_Submit --> Decision_Director{"Does Director Approve Document?"}
 
-    Decision_Director -->|Return with Comments| Frame_Revision["sd: ProcessRevision<br/>- Read director comments<br/>- Reopen ledger for correction"]
+    Decision_Director -->|No| Frame_Revision["sd: ProcessRevision<br/>- Read director comments<br/>- Reopen ledger for correction"]
     Frame_Revision --> Frame_Draft
 
-    Decision_Director -->|Approved| Frame_Approve["sd: FinalizeLedger<br/>- Stamp digital endorsement<br/>- Lock record against edit<br/>- Notify CHED coordinator"]
+    Decision_Director -->|Yes| Frame_Approve["sd: FinalizeLedger<br/>- Stamp digital endorsement<br/>- Lock record against edit<br/>- Notify CHED coordinator"]
 
     Frame_Approve --> EndNode([End: Financial Workflow Complete])
 
@@ -37,7 +37,7 @@ graph TD
         L_Dec{"{Decision Node}"}:::legDec
         L_Term(["([Terminal / End])"]):::legTerm
         L_Frame --> L_Dec
-        L_Dec -->|Approved / Success| L_Term
+        L_Dec -->|Yes| L_Term
     end
     classDef legFrame fill:#F1F8F1,stroke:#1B5E20,color:#1F2A24;
     classDef legDec fill:#FFF1C2,stroke:#B88A00,color:#1F2A24;
@@ -54,7 +54,7 @@ graph TD
 | `{Decision}` | `{"Decision"}` | Activity decision branch point | Critical decision gate (e.g., approval vs. return, variance check) |
 | `([Pill Node])` | `([Start / End])` | Lifecycle start or terminal archive node | Initiating semester operations or locking final records in archive |
 | `-->` Solid Arrow | Control Flow Connector | Sequential hand-off between frames | Passing control from one interaction frame to the next |
-| `-->|Label|` | Guarded Branch | Conditional scenario path | "Yes: Approved", "No: Discrepancy", "Return with Remarks" |
+| `-->|Label|` | Guarded Branch | Conditional scenario path | "Yes", "No" |
 | 🟢 Green Box | `#F1F8F1` / `#1B5E20` | Successful Workflow Phase | Forward operational processing and executive approval |
 | 🟡 Gold Diamond | `#FFF1C2` / `#B88A00` | Institutional Checkpoint | Evaluation queue and zero-variance fiscal math check |
 

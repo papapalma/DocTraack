@@ -1,15 +1,15 @@
 # Accounting Officer — Timing Diagram
 
-> **Role:** `ACCOUNTING`  
+> **Role:** `ACCOUNTING_OFFICER`  
 > **Diagram Type:** Timing Diagram  
-> **Scenario:** Semester Disbursement & Liquidation Compliance Deadlines  
+> **Scenario:** Financial Reconciliation, Zero-Variance Assertion, and Liquidation Deadlines  
 > **Standard:** UML 2.5 Timing Specification
 
 ---
 
 ## 1. Purpose
 
-The Timing Diagram shows how the states of financial documents and liquidation windows change over an exact timeline. It shows time constraints mandated by university policy and CHED liquidation guidelines.
+The Timing Diagram shows the lifecycle states of financial documents, zero-variance calculation intervals, and liquidation deadlines mandated by CHED and university fiscal policies.
 
 ---
 
@@ -20,9 +20,9 @@ The Timing Diagram shows how the states of financial documents and liquidation w
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
 
-robust "Accounting Officer" as Accounting
-robust "Document State" as DocState
-concise "CHED Compliance Status" as Compliance
+robust "Accounting Officer Activity" as Accounting
+robust "Financial Document State" as DocState
+concise "CHED Liquidation Compliance" as Compliance
 
 @0
 Accounting is Idle
@@ -33,44 +33,45 @@ Compliance is ActiveWindow
 Accounting is Reconciling
 DocState is DRAFT
 Compliance is ActiveWindow
+note bottom of Accounting : Line items reconciled (0.00 PHP Variance verified)
 
 @7
 Accounting is Ready
 DocState is SUBMITTED
 Compliance is ActiveWindow
-note bottom of DocState : Submitted for Review
+note bottom of DocState : Submitted for Executive Review
 
 @9
 Accounting is Idle
 DocState is APPROVED
 Compliance is ActiveWindow
-note bottom of DocState : 48h SLA Endorsement
+note bottom of DocState : 48h Director SLA Endorsement Granted
 
 @12
 DocState is UPLOADED
 Compliance is GracePeriod
+note bottom of DocState : Stamped wet-signed PDF uploaded
 
 @14
 DocState is TRANSMITTED
 Compliance is Liquidated
-note bottom of Compliance : Full Compliance Achieved
+note bottom of Compliance : Full CHED Liquidation Achieved (14-day window)
 
 @15
 Compliance is Closed
 
-@0 <-> @7 : {Preparation <= 7 days}
-@7 <-> @9 : {Director Review <= 48 hours}
-@9 <-> @14 : {Disbursement & Transmittal <= 5 days}
-@0 <-> @14 : {Total Liquidation Window <= 14 days}
+@0 <-> @7 : {Reconciliation & Balancing <= 7 days}
+@7 <-> @9 : {Executive Review SLA <= 48 hours}
+@9 <-> @14 : {Physical Signatures & Liquidation <= 5 days}
+@0 <-> @14 : {Total Liquidation Window = 14 days}
 
 legend right
   <b>📌 DIAGRAM LEGEND & TIMING NOTATION</b>
   robust : Discrete operational state lifeline
-  concise : Status bar indicating compliance state
+  concise : Status bar indicating condition / SLA
   @N : Time tick offset in days
   @A <-> @B : Strict interval SLA constraint
 endlegend
-
 @enduml
 ```
 
@@ -78,31 +79,19 @@ endlegend
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Notation / Element | Type / Syntax | Temporal Role | MinSU Operational Application |
+| Visual Symbol | Syntax / Style | UML Timing Concept | MinSU Implementation Context |
 |---|---|---|---|
-| `robust "Lifeline"` | Discrete State Lifeline | Tracks operational state transitions over time | `Accounting` (Officer activity), `DocState` (Draft, Submitted, Approved, Transmitted) |
-| `concise "Status"` | Status Interval Bar | Tracks statutory compliance phase | `Compliance` (`ActiveWindow`, `GracePeriod`, `Liquidated`, `Closed`) |
-| `@N` | Time Tick Offset | Calendar day marker from grant allocation release | `@0` (Grant release), `@7` (Submission), `@9` (Approval), `@14` (Liquidation) |
-| `@A <-> @B : {Rule}` | Time Constraint Interval | Hard regulatory turnaround window | Preparation (<= 7d), Review (<= 48h), Disbursement (<= 5d), Total Window (<= 14d) |
-| `note bottom of ...` | Event Milestone Callout | Operational trigger annotation | Submitted for review, 48h SLA endorsement, full liquidation achieved |
+| Lifeline Wave | `robust "Name"` | Continuous state value of an entity | Accounting Activity, Financial Document State |
+| State Label | `Lifeline is STATE` | Active discrete status during interval | `IDLE`, `RECONCILING`, `DRAFT`, `SUBMITTED`, `APPROVED` |
+| Compliance Bar | `concise "Name"` | Regulatory status during interval | `ActiveWindow`, `GracePeriod`, `Liquidated` |
+| SLA Constraint | `@A <-> @B : {Label}` | Strict timing deadline or window | 14-day total liquidation window, 48h review SLA |
 
 ---
 
-## 4. Timeline & State Transitions
+## 4. Timeline Milestones & Liquidation Deadlines
 
-| Milestone | Time (Days) | Document State | Accounting State | Time Constraint & Description |
-|---|---|---|---|---|
-| **Allocation Release** | `T + 0d` | `DRAFT` | `Idle` | Grant allocation arrives in university LandBank account. |
-| **Data Ingestion** | `T + 5d` | `DRAFT` | `Reconciling` | Accounting compiles payroll and bank debit vouchers. |
-| **Review Submission** | `T + 7d` | `SUBMITTED` | `Ready` | Document submitted within 7-day preparation target. |
-| **Director Approval** | `T + 9d` | `APPROVED` | `Idle` | Executive endorsement completed within 48-hour SLA. |
-| **Hardcopy Scan** | `T + 12d` | `UPLOADED` | `Idle` | Signed hardcopy uploaded into DocTrack. |
-| **Agency Liquidation** | `T + 14d` | `TRANSMITTED` | `Idle` | Package dispatched to CHED within 14-day liquidation deadline. |
-
----
-
-## 5. STE Rules Applied
-
-- The horizontal time axis uses days as the standard unit.
-- State transitions are clearly aligned to timeline milestones.
-- Time constraints show exact durations (for example, `<= 48 hours`).
+- **Day 0 to 5**: Accounting Officer ingests bank statements and verifies zero variance down to 0.00 Philippine Pesos.
+- **Day 7**: Balanced financial annex submitted to Director review queue.
+- **Day 9**: Campus Director endorses document within 48-hour SLA.
+- **Day 12**: Wet-ink stamped physical document scan is uploaded.
+- **Day 14**: Hard liquidation deadline; package dispatched to CHED and logged in outgoing transmittals.

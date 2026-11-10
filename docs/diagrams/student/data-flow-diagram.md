@@ -1,79 +1,99 @@
-# Data Flow Diagram (DFD): Student Applicant Domain
+# Student Applicant — Data Flow Diagram (DFD)
 
-## 1. Description
-This Level 1 Data Flow Diagram traces information flow through the student portal subsystem. It maps how student applicants submit application data, upload documentary proofs, generate tracking codes, retrieve application statuses, and download official receipt slips.
+> **Role:** `STUDENT`  
+> **Diagram Type:** Data Flow Diagram (Level 1)  
+> **Focus:** 2FA Setup, Application Intake, Tracking Codes, and Profile Maintenance
 
-## 2. ASD-STE100 Technical Specifications
-- Trace all input data flows from the external student entity.
-- Store submission records in secure application and file data stores.
-- Provide tracking code resolution with read-only access.
-- Restrict student modification once an application enters the submitted state.
+---
 
-## 3. Data Flow Diagram (Mermaid)
+## 1. Purpose
+
+The Data Flow Diagram shows how student biodata, 2FA credentials, proof attachments, and tracking queries flow through portal processes to database tables and persistent storage volumes.
+
+---
+
+## 2. Mermaid Data Flow Diagram (Level 1)
 
 ```mermaid
-graph TD
-    Student[("External Entity:<br/>Student Applicant")]
+flowchart TD
+    %% Styling Classes
+    classDef entityStyle fill:#F1F8F1,stroke:#1B5E20,stroke-width:2px,color:#1F2A24;
+    classDef processStyle fill:#FFFFFF,stroke:#1B5E20,stroke-width:2px,color:#1F2A24;
+    classDef storeStyle fill:#FFF1C2,stroke:#F2B705,stroke-width:2px,color:#1F2A24;
 
-    subgraph Processes ["Portal Processes"]
-        P1["1.0<br/>Browse Active Calls"]
-        P2["2.0<br/>Submit Application & Upload Proofs"]
-        P3["3.0<br/>Generate Tracking Code & Receipt"]
-        P4["4.0<br/>Inquire Application Status"]
+    Student["Student Applicant<br/>(External Entity)"]:::entityStyle
+
+    subgraph PROCESSES["Portal Processes"]
+        P1["1.0<br/>Setup Microsoft Authenticator 2FA"]:::processStyle
+        P2["2.0<br/>Browse Active Calls & Announcements"]:::processStyle
+        P3["3.0<br/>Submit Application & Upload Proofs"]:::processStyle
+        P4["4.0<br/>Inquire Application Status via Code"]:::processStyle
+        P5["5.0<br/>Maintain Profile (RA 10173 Locked)"]:::processStyle
     end
 
-    subgraph DataStores ["Data Stores"]
-        DS_Calls[("D1: Applicant Calls Store")]
-        DS_Apps[("D2: Applications Store")]
-        DS_Files[("D3: Proof Attachments Store")]
+    subgraph DATA_STORES["Data Stores"]
+        D1[("D1: users Table (2FA Secrets)")]:::storeStyle
+        D2[("D2: registrations Table")]:::storeStyle
+        D3[("D3: applicant_calls Table")]:::storeStyle
+        D4[("D4: applications Table")]:::storeStyle
+        D5[("D5: /uploads/proofs Volume")]:::storeStyle
+        D6[("D6: announcements Table")]:::storeStyle
     end
 
-    DS_Calls -->|Published Call Details| P1
-    P1 -->|Call Listings & Deadlines| Student
+    %% Flows from Student
+    Student -->|Scan QR & Verify 6-digit TOTP| P1
+    Student -->|Query Open Quotas & Updates| P2
+    Student -->|Biodata, Academic Info & Attachments| P3
+    Student -->|Input Tracking Code (TDP-YYYY-XXXX)| P4
+    Student -->|Updated GWA, Address, Contacts| P5
 
-    Student -->|Personal Data, Academic Info| P2
-    Student -->|Scanned Documents| P2
-    P2 -->|Save Scanned Proofs| DS_Files
-    P2 -->|Validated Application Data| P3
-    
-    P3 -->|Persist New Application| DS_Apps
-    P3 -->|Tracking Code & Printable Receipt| Student
+    %% Flows to Student
+    P1 -->|2FA Activation Status| Student
+    P2 -->|Active Call Listings & Broadcasts| Student
+    P3 -->|Issued Tracking Code & PDF Receipt| Student
+    P4 -->|Real-Time Evaluation Milestone| Student
+    P5 -->|Locked Identity Fields & Updated Profile| Student
 
-    Student -->|Input Tracking Code| P4
-    DS_Apps -->|Read Status & Remarks| P4
-    P4 -->|Current Review Status & Milestone| Student
+    %% Data Store Interactions
+    P1 -->|Save TOTP Secret Hash| D1
+    D3 -->|Fetch Open Calls| P2
+    D6 -->|Fetch Student Announcements| P2
+
+    P3 -->|Write Application Packet| D4
+    P3 -->|Write Profile Baseline| D2
+    P3 -->|Store Proof Attachments| D5
+
+    D4 -->|Read Status & Remarks| P4
+    P5 -->|Assert Identity Locked (RA 10173)| D2
+    P5 -->|Update Dynamic Contacts & GWA| D2
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Ent["[Square]: External Entity"]:::legEnt
-        L_Proc["1.0 [Box]: Process"]:::legProc
-        L_Store[("[(Cylinder)]: Data Store")]:::legStore
-        L_Ent -->|Data Flow Payload| L_Proc
-        L_Proc -->|Data Mutation| L_Store
+        L_Ent["[Square]: External Entity"]:::entityStyle
+        L_Proc["(Circle / Rounded): Process Step"]:::processStyle
+        L_Store[("[(Cylinder)]: Data Store")]:::storeStyle
+        L_Ent -->|Data Flow| L_Proc -->|Storage Flow| L_Store
     end
-    classDef legEnt fill:#FFFFFF,stroke:#123F17,color:#1F2A24;
-    classDef legProc fill:#F1F8F1,stroke:#1B5E20,color:#1F2A24;
-    classDef legStore fill:#FFF1C2,stroke:#F2B705,color:#1F2A24;
 ```
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
-| DFD Element Shape | Gane & Sarson / Yourdon Notation | Technical Role | MinSU System Implementation |
+| Visual Symbol | Syntax / Style | DFD Concept | MinSU Implementation |
 |---|---|---|---|
-| `[Rectangle]` | External Entity | Source or sink outside the process boundary | Students, Staff Coordinator, Campus Director, Accounting, CHED Agency |
-| `(("((Double Circle))"))` | Context Process (Level 0) | Top-level system boundary | Entire MinSU DocTrack system |
-| `["1.0 Process"]` | Operational Process (Level 1) | Data transformation or business logic step | Intake Applications, Validate Annexes, Executive Review, Financials |
-| `[("[(Cylinder)]")]` | Persistent Data Store | Relational table or permanent data repository | Users & Sessions, Applications, Documents, Transmittals, Audit Logs |
-| `-->|Data Flow|` | Named Flow Arrow | In-transit data packet or payload | Forms, tracking codes, financial records, audit rows |
-| 🟢 Green Box | Process Node | Active workflow processing unit | Core backend services and transaction coordinators |
-| 🟨 Gold Cylinder | Data Store Node | Persistent PostgreSQL / File store | Secure database tables with RLS and foreign key integrity |
+| `[Entity]` | `["Name"]` | External Source or Sink | Student Applicant |
+| `(Process)` | `["N.0\nName"]` | Data transformation logic | 2FA setup, application intake, profile maintenance |
+| `[(Data Store)]` | `[("DN: table")]` | Relational table or storage volume | PostgreSQL tables (`registrations`, `applications`), proof storage |
+| `-->` | Directed Arrow | Flow of applicant information | TOTP tokens, tracking codes, downloadable receipts |
 
+---
 
-## 5. Flow Details
-- **Process 1.0 (Browse Active Calls)**: Delivers active scholarship announcements, quotas, and deadline timetables to prospective applicants.
-- **Process 2.0 (Submit Application & Upload Proofs)**: Ingests student profiles and scans, validating format compliance before dispatching.
-- **Process 3.0 (Generate Tracking Code & Receipt)**: Issues a verified unique token (`TDP-YYYY-XXXX`) and produces a confirmation slip.
-- **Process 4.0 (Inquire Application Status)**: Queries the database using the unique token and displays current qualification status without requiring a login account.
+## 4. Data Flow Descriptions
+
+- **1.0 Setup Microsoft Authenticator 2FA**: Generates RFC 6238 TOTP secrets and saves encrypted keys in `users`.
+- **2.0 Browse Active Calls & Announcements**: Delivers open TDP application forms and student announcements.
+- **3.0 Submit Application & Upload Proofs**: Stores attachments in `./storage/uploads/proofs/` and issues a unique tracking code.
+- **4.0 Inquire Application Status via Code**: Resolves `trackingCode` without exposing other students' private data.
+- **5.0 Maintain Profile (RA 10173 Locked)**: Prevents modification of official Student ID and legal name once marked `ACCEPTED`, while saving current contacts and GWA.

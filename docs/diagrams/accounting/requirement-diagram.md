@@ -1,14 +1,14 @@
 # Accounting Officer — Requirement Diagram (SysML)
 
-> **Role:** `ACCOUNTING`  
+> **Role:** `ACCOUNTING_OFFICER`  
 > **Diagram Type:** Requirement Diagram (SysML)  
-> **Focus:** Fiscal Accuracy, Currency Standards, and Liquidation Timelines
+> **Focus:** Fiscal Accuracy, Currency Standards, Zero-Variance Balancing, and Excel Exports
 
 ---
 
 ## 1. Purpose
 
-The Requirement Diagram maps accounting regulations and fiscal accuracy rules to the software blocks that implement them and the test cases that verify them.
+The Requirement Diagram maps accounting regulations, currency standards, and zero-variance balancing rules to the software architecture blocks that satisfy them and the test suites that verify them.
 
 ---
 
@@ -19,103 +19,96 @@ requirementDiagram
 
     requirement REQ_ACC_01 {
         id: REQ-ACC-01
-        text: All currency amounts must be formatted in Philippine Peso (PHP) with 2 decimal places.
+        text: All financial figures shall be formatted in Philippine Peso (PHP) with 2 decimal precision.
         risk: Medium
         verifymethod: Test
     }
 
     requirement REQ_ACC_02 {
         id: REQ-ACC-02
-        text: Total disbursements must balance with the CHED allocation before submission is allowed.
-        risk: High
+        text: Total disbursements shall balance exactly with CHED grant allocations with 0.00 PHP variance.
+        risk: Critical
         verifymethod: Test
     }
 
     requirement REQ_ACC_03 {
         id: REQ-ACC-03
-        text: LandBank Advice to Debit Account (ADA) entries must enforce standard account number length.
-        risk: Medium
+        text: The system shall stream native multi-tab ExcelJS workbooks with live sum formulas.
+        risk: High
         verifymethod: Test
     }
 
     requirement REQ_ACC_04 {
         id: REQ-ACC-04
-        text: The system must enforce a 14-day liquidation transmittal deadline alert.
+        text: Beneficiary payroll shall support dynamic stipend tiers of 7500 PHP, 10000 PHP, or custom amounts.
+        risk: High
+        verifymethod: Test
+    }
+
+    requirement REQ_ACC_05 {
+        id: REQ-ACC-05
+        text: The system shall catalog Landbank ADA debit notices and MDS check registers.
+        risk: Medium
+        verifymethod: Test
+    }
+
+    requirement REQ_ACC_06 {
+        id: REQ-ACC-06
+        text: Stamped physical scans shall be persisted to uploads storage with immutable audit logging.
         risk: Low
-        verifymethod: Analysis
+        verifymethod: Inspection
     }
 
     element CurrencyFormatter {
         type: block
     }
 
-    element AllocationReconciliationEngine {
+    element ZeroVarianceValidator {
         type: block
     }
 
-    element BankAccountValidator {
+    element ExcelJSExporter {
         type: block
     }
 
-    element LiquidationTimerService {
+    element StipendTierResolver {
         type: block
     }
 
-    element TestCurrencyPrecision {
-        type: testCase
+    element BankReconciliationModule {
+        type: block
     }
 
-    element TestZeroVarianceCheck {
-        type: testCase
+    element ScanUploadAuditLogger {
+        type: block
     }
 
-    element TestBankAccountFormat {
-        type: testCase
-    }
-
-    element TestLiquidationAlert {
-        type: testCase
-    }
-
-    %% Satisfy Relations
     CurrencyFormatter - satisfies -> REQ_ACC_01
-    AllocationReconciliationEngine - satisfies -> REQ_ACC_02
-    BankAccountValidator - satisfies -> REQ_ACC_03
-    LiquidationTimerService - satisfies -> REQ_ACC_04
-
-    %% Verify Relations
-    TestCurrencyPrecision - verifies -> REQ_ACC_01
-    TestZeroVarianceCheck - verifies -> REQ_ACC_02
-    TestBankAccountFormat - verifies -> REQ_ACC_03
-    TestLiquidationAlert - verifies -> REQ_ACC_04
-
-    %% ─── 📌 VISUAL LEGEND ───
-    element legend_guide {
-        type: "LEGEND: -contains-> Hierarchy | -satisfies-> Software Block | -verifies-> Test Suite"
-    }
+    ZeroVarianceValidator - satisfies -> REQ_ACC_02
+    ExcelJSExporter - satisfies -> REQ_ACC_03
+    StipendTierResolver - satisfies -> REQ_ACC_04
+    BankReconciliationModule - satisfies -> REQ_ACC_05
+    ScanUploadAuditLogger - satisfies -> REQ_ACC_06
 ```
 
 ---
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol / Relationship | SysML Syntax | Engineering Purpose | MinSU Implementation Mapping |
+| Visual Symbol / Syntax | SysML Concept | Technical Function | MinSU Domain Meaning |
 |---|---|---|---|
-| `requirement req_id` | Requirement Block | Formal system specification with risk level & verify method | `REQ-SEC-01`, `REQ-AUD-01`, `REQ-FIN-01`, `REQ-DIR-01` |
-| `element name { type: block }` | Architecture Block | Implementation software module fulfilling the requirement | `src/lib/rbac.ts`, `src/lib/audit.ts`, `src/lib/validation.ts` |
-| `element name { type: testCase }` | Test Case Block | Automated test suite ensuring requirement compliance | Unit & E2E role tests, zero-variance math test suite |
-| `- contains ->` | Hierarchy Containment | Decomposes high-level goal into specific domain requirements | Root requirement decomposes into security, audit, finance, and SLA |
-| `- satisfies ->` | Satisfaction Link | Proves a software block implements the requirement | Architectural blocks satisfying regulatory and functional constraints |
-| `- verifies ->` | Verification Link | Proves a test suite validates the requirement | Automated test suites ensuring requirement verification |
-
+| `requirement NAME` | Requirement Block | Declares functional or regulatory constraint | `REQ-ACC-02` (Zero-Variance Balancing) |
+| `element NAME` | Architecture Element | Block or component satisfying requirement | `ZeroVarianceValidator`, `ExcelJSExporter` |
+| `- satisfies ->` | Satisfy Relationship | Traceability link from component to requirement | Component satisfies explicit business specification |
+| `verifymethod` | Verification Attribute | Method of verifying compliance | `Test` (`npm run test:all`), `Inspection` |
 
 ---
 
-## 4. Requirements Traceability Matrix
+## 4. Requirements Traceability
 
-| Requirement ID | Statement | Satisfying Element | Verification Test Case |
-|---|---|---|---|
-| `REQ-ACC-01` | Philippine Peso formatting (`₱#,##0.00`). | `src/lib/formatters.ts` (`CurrencyFormatter`) | `TestCurrencyPrecision` |
-| `REQ-ACC-02` | Zero-variance check between allocation & stipend. | `src/components/documents` (`ReconciliationEngine`) | `TestZeroVarianceCheck` |
-| `REQ-ACC-03` | LandBank account number validation. | `src/lib/validation.ts` (`BankAccountValidator`) | `TestBankAccountFormat` |
-| `REQ-ACC-04` | 14-day liquidation deadline alert. | `src/lib/liquidation.ts` (`LiquidationTimerService`) | `TestLiquidationAlert` |
+- **`REQ-ACC-01`**: Satisfied by `CurrencyFormatter` in `src/lib/formatters.ts`, tested across all table views.
+- **`REQ-ACC-02`**: Satisfied by `ZeroVarianceValidator`, blocking submission if variance deviates from 0.00.
+- **`REQ-ACC-03`**: Satisfied by `ExcelJSExporter`, verified by automated workbook stream tests.
+- **`REQ-ACC-04`**: Satisfied by `StipendTierResolver`, verified by `tests/student-data-integrity.test.ts`.
+- **`REQ-ACC-05`**: Satisfied by `BankReconciliationModule`, cataloging ADA entries for Annex 7 and checks for Annex 8.
+- **`REQ-ACC-06`**: Satisfied by `ScanUploadAuditLogger`, creating tamper-evident records on signed scan upload.

@@ -2,13 +2,13 @@
 
 > **Role:** `DIRECTOR`  
 > **Diagram Type:** Data Flow Diagram (Level 1)  
-> **Focus:** Review Queue Ingestion, Endorsement Updates & Analytics Data Flow
+> **Focus:** Review Queue Ingestion, Endorsement Updates, Verification Oversight, and Analytics
 
 ---
 
 ## 1. Purpose
 
-The Data Flow Diagram shows how submitted document records move through executive review processes to data stores and outbound notification streams.
+The Data Flow Diagram shows how submitted Annex records, tripartite verification cohorts, and executive decisions flow through Director processes to data stores and notification streams.
 
 ---
 
@@ -26,90 +26,86 @@ flowchart TD
 
     subgraph PROCESSES["Review Subsystem Processes"]
         P1["1.0<br/>Load Pending Review Queue"]:::processStyle
-        P2["2.0<br/>Inspect Annex Data & Totals"]:::processStyle
-        P3["3.0<br/>Execute Endorsement"]:::processStyle
-        P4["4.0<br/>Return with Revision Notes"]:::processStyle
-        P5["5.0<br/>Aggregate Velocity Analytics"]:::processStyle
+        P2["2.0<br/>Inspect Annex Data & Verification Results"]:::processStyle
+        P3["3.0<br/>Execute Executive Endorsement"]:::processStyle
+        P4["4.0<br/>Return with Revision Feedback"]:::processStyle
+        P5["5.0<br/>Oversee Verification Cohorts"]:::processStyle
+        P6["6.0<br/>Aggregate Velocity Analytics"]:::processStyle
     end
 
     subgraph DATA_STORES["Data Stores"]
         D1[("D1: documents Table")]:::storeStyle
         D2[("D2: status_history Table")]:::storeStyle
         D3[("D3: comments Table")]:::storeStyle
-        D4[("D4: notifications Table")]:::storeStyle
-        D5[("D5: audit_log Table")]:::storeStyle
+        D4[("D4: verification_runs Table")]:::storeStyle
+        D5[("D5: notifications Table")]:::storeStyle
+        D6[("D6: audit_log Table")]:::storeStyle
     end
 
     %% Flows from Director
     DirectorEntity -->|Review Request Filter| P1
-    DirectorEntity -->|Selection ID| P2
-    DirectorEntity -->|Approve Action Command| P3
+    DirectorEntity -->|Select Document ID| P2
+    DirectorEntity -->|1-Click Approve Command| P3
     DirectorEntity -->|Return Command & Comments| P4
-    DirectorEntity -->|Analytics Date Range Query| P5
+    DirectorEntity -->|Sign-Off Verification Run| P5
+    DirectorEntity -->|Query Analytics Range| P6
 
     %% Flows to Director
     P1 -->|Pending Document Roster| DirectorEntity
-    P2 -->|Structured Data & PDF Stream| DirectorEntity
-    P3 -->|Endorsement Confirmation| DirectorEntity
-    P4 -->|Return Confirmation| DirectorEntity
-    P5 -->|Velocity KPIs & Charts| DirectorEntity
+    P2 -->|Structured Data & Cross-Match Status| DirectorEntity
+    P3 -->|Endorsement Confirmation Toast| DirectorEntity
+    P4 -->|Return Acknowledgment| DirectorEntity
+    P5 -->|Discrepancy Breakdown Metrics| DirectorEntity
+    P6 -->|Velocity KPIs & Turnaround Charts| DirectorEntity
 
     %% Data Store Movements
-    D1 -->|Query SUBMITTED / RESUBMITTED| P1
-    D1 -->|Read Full JSON Form Payload| P2
+    D1 -->|Query SUBMITTED Documents| P1
+    D1 -->|Read Form Data & Signatories| P2
+    D4 -->|Read Matching Statistics| P2
+    P3 -->|UPDATE status = 'APPROVED'| D1
+    P3 -->|INSERT History Row| D2
+    P3 -->|Audit: DOCUMENT_APPROVED| D6
+    P3 -->|Send Notification| D5
+    D5 -->|Alert: Document Approved| PreparerEntity
 
-    P3 -->|Update Status: APPROVED| D1
-    P3 -->|Insert APPROVED Transition| D2
-    P3 -->|Insert Approval Alert| D4
-    P3 -->|Write Action Event| D5
+    P4 -->|UPDATE status = 'RETURNED'| D1
+    P4 -->|INSERT History Row| D2
+    P4 -->|INSERT Feedback Row| D3
+    P4 -->|Audit: DOCUMENT_RETURNED| D6
+    P4 -->|Send Revision Alert| D5
+    D5 -->|Alert: Revisions Required| PreparerEntity
 
-    P4 -->|Update Status: RETURNED| D1
-    P4 -->|Insert RETURNED Transition| D2
-    P4 -->|Insert Revision Feedback| D3
-    P4 -->|Insert Revision Alert| D4
-    P4 -->|Write Action Event| D5
-
-    D2 -->|Read Timestamps for SLA| P5
-    D1 -->|Read Status Counts| P5
-
-    %% Preparer Notifications
-    D4 -.->|Stream In-App Alert| PreparerEntity
+    P5 -->|Sign-Off Cohort| D4
+    D2 -->|Fetch Timestamps & Durations| P6
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Ent["[Square]: External Entity"]:::legEnt
-        L_Proc["1.0 [Box]: Process"]:::legProc
-        L_Store[("[(Cylinder)]: Data Store")]:::legStore
-        L_Ent -->|Data Flow Payload| L_Proc
-        L_Proc -->|Data Mutation| L_Store
+        L_Ent["[Square]: External Entity"]:::entityStyle
+        L_Proc["(Circle / Rounded): Process Step"]:::processStyle
+        L_Store[("[(Cylinder)]: Data Store")]:::storeStyle
+        L_Ent -->|Data Flow| L_Proc -->|Storage Flow| L_Store
     end
-    classDef legEnt fill:#FFFFFF,stroke:#123F17,color:#1F2A24;
-    classDef legProc fill:#F1F8F1,stroke:#1B5E20,color:#1F2A24;
-    classDef legStore fill:#FFF1C2,stroke:#F2B705,color:#1F2A24;
 ```
 
 ---
 
 ## 3. Diagram Legend & Symbol Guide
 
-| DFD Element Shape | Gane & Sarson / Yourdon Notation | Technical Role | MinSU System Implementation |
+| Visual Symbol | Syntax / Style | DFD Concept | MinSU Implementation |
 |---|---|---|---|
-| `[Rectangle]` | External Entity | Source or sink outside the process boundary | Students, Staff Coordinator, Campus Director, Accounting, CHED Agency |
-| `(("((Double Circle))"))` | Context Process (Level 0) | Top-level system boundary | Entire MinSU DocTrack system |
-| `["1.0 Process"]` | Operational Process (Level 1) | Data transformation or business logic step | Intake Applications, Validate Annexes, Executive Review, Financials |
-| `[("[(Cylinder)]")]` | Persistent Data Store | Relational table or permanent data repository | Users & Sessions, Applications, Documents, Transmittals, Audit Logs |
-| `-->|Data Flow|` | Named Flow Arrow | In-transit data packet or payload | Forms, tracking codes, financial records, audit rows |
-| 🟢 Green Box | Process Node | Active workflow processing unit | Core backend services and transaction coordinators |
-| 🟨 Gold Cylinder | Data Store Node | Persistent PostgreSQL / File store | Secure database tables with RLS and foreign key integrity |
-
+| `[Entity]` | `["Name"]` | External Source or Sink | Campus Director, Document Preparer |
+| `(Process)` | `["N.0\nName"]` | Transformation of data packets | Review queue ingestion, endorsement, SLA computation |
+| `[(Data Store)]` | `[("DN: table")]` | Relational database table | PostgreSQL tables (`documents`, `verification_runs`, `status_history`) |
+| `-->` | Directed Arrow | Flow of structured data | Approvals, return comments, turnaround charts |
 
 ---
 
-## 4. Data Dictionary
+## 4. Data Flow Descriptions
 
-- **Review Request Filter**: Optional campus department or Annex type criteria.
-- **Pending Document Roster**: List of documents awaiting executive decision.
-- **Approve Action Command**: Cryptographically signed confirmation to transition status to `APPROVED`.
-- **Return Command & Comments**: Text instructions detailing required corrections.
-- **Velocity KPIs & Charts**: Calculated mean turnaround hours and status distribution counts.
+- **1.0 Load Pending Review Queue**: Filters `documents` by `status = 'SUBMITTED'` and calculates SLA urgency badges.
+- **2.0 Inspect Annex Data & Verification Results**: Retrieves form payloads, grantee masterlists, and tripartite cross-match status.
+- **3.0 Execute Executive Endorsement**: Updates status to `APPROVED`, writes history, emits audit event, and alerts the preparer.
+- **4.0 Return with Revision Feedback**: Unlocks document with `RETURNED` status and stores required comments for staff/accounting.
+- **5.0 Oversee Verification Cohorts**: Allows director review of discrepancy percentages before official billing approval.
+- **6.0 Aggregate Velocity Analytics**: Computes average turnaround duration in hours against the 48-hour SLA benchmark.

@@ -2,13 +2,13 @@
 
 > **Role:** `STAFF`  
 > **Diagram Type:** System Architecture Diagram  
-> **Focus:** Operations Subsystem, Dynamic Call Builder, Scan Upload & Registry
+> **Focus:** Operations Subsystem, 3-Way Matcher, Validation Queue, and Certificate Designer
 
 ---
 
 ## 1. Purpose
 
-The System Architecture Diagram shows the operational subsystem used by the Staff Coordinator, including document preparation forms, applicant call engines, disk file volumes, and outgoing transmittal registries.
+The System Architecture Diagram shows the multi-tier architecture used by the Staff Coordinator, including client interfaces, edge routing, application services, persistence layers, and external agency links.
 
 ---
 
@@ -24,64 +24,64 @@ flowchart TB
     classDef extStyle fill:#F6F8F6,stroke:#55645B,stroke-width:2px,stroke-dasharray: 5 5,color:#1F2A24;
 
     subgraph CLIENT_TIER["Staff Client Tier"]
-        StaffBrowser["Staff Coordinator<br/>(Desktop Browser /documents)"]:::clientStyle
+        StaffBrowser["Staff Coordinator Workstation<br/>• /documents (Annexes 1-5, 10)<br/>• /registrations (Validation Queue)<br/>• /verification (3-Way Matching)<br/>• /certificate-editor (Designer)"]:::clientStyle
     end
 
     subgraph EDGE_TIER["Edge Gateway & Security"]
-        NginxProxy["Reverse Proxy / Nginx"]:::edgeStyle
-        StaffRBAC["Staff RBAC Guard<br/>(Verifies role == STAFF)"]:::edgeStyle
+        NginxProxy["Reverse Proxy / Nginx<br/>(TLS 1.3 Termination & Static Buffers)"]:::edgeStyle
+        StaffRBAC["Staff RBAC Guard<br/>(Verifies role == STAFF_COORDINATOR)"]:::edgeStyle
     end
 
     subgraph APP_TIER["Staff Operations Subsystem"]
-        DocBuilder["Annex Form Builder<br/>(Annexes 1 to 10 Forms)"]:::appStyle
-        CallBuilder["Dynamic Call Form Builder<br/>(Annex 2 Applicant Calls)"]:::appStyle
-        AppEvaluator["Student Application Reviewer<br/>(COR & Grade Validation)"]:::appStyle
-        ScanUploader["Signed Scan Upload Handler<br/>(PDF Validation & Disk Storage)"]:::appStyle
-        RegistryManager["Outgoing Transmittal Manager<br/>(Courier Logging & Archive)"]:::appStyle
+        DocBuilder["Annex Form Builder<br/>(Annexes 1 to 5, 10 Forms)"]:::appStyle
+        VerifyEngine["3-Way Verification Engine<br/>(Jaro-Winkler Matching & Discrepancies)"]:::appStyle
+        RegValidator["Student Validation Service<br/>(Profile Reviews & RA 10173 Lock)"]:::appStyle
+        CertDesigner["Certificate Designer Engine<br/>(Layout Canvas & Word Docx Exporter)"]:::appStyle
+        ExcelExporter["Native ExcelJS Exporter<br/>(3-Tab Workbooks & Management Fees)"]:::appStyle
+        RegistryManager["Outgoing Transmittal Manager<br/>(Courier Logging & Hardcopy Scans)"]:::appStyle
     end
 
     subgraph DATA_TIER["Storage & Persistence Tier"]
-        PostgresDB[("PostgreSQL Database<br/>(documents, calls, transmittals)")]:::dataStyle
-        UploadsStorage[("Local Disk Volume<br/>(/uploads/scans/)")]:::dataStyle
+        PostgresDB[("PostgreSQL Database<br/>(documents, verification_runs, registrations)")]:::dataStyle
+        UploadsStorage[("Local Disk Volume<br/>(/uploads/scans/ & /uploads/logos/)")]:::dataStyle
     end
 
     subgraph EXTERNAL_TIER["External Services"]
-        GoogleDrive["External Google Drive Storage<br/>(Transmittal Package Links)"]:::extStyle
+        GoogleDrive["External Google Drive Storage<br/>(Transmittal Backup Folders)"]:::extStyle
         CHEDUniFAST["CHED / UniFAST Regional Office<br/>(Physical Transmittal Delivery)"]:::extStyle
     end
 
-    %% Connections
+    %% Network Connections
     StaffBrowser -->|HTTPS TLS 1.3| NginxProxy
     NginxProxy -->|HTTP 3000| StaffRBAC
     StaffRBAC --> DocBuilder
-    StaffRBAC --> CallBuilder
-    StaffRBAC --> AppEvaluator
-    StaffRBAC --> ScanUploader
+    StaffRBAC --> VerifyEngine
+    StaffRBAC --> RegValidator
+    StaffRBAC --> CertDesigner
     StaffRBAC --> RegistryManager
 
-    DocBuilder --> PostgresDB
-    CallBuilder --> PostgresDB
-    AppEvaluator --> PostgresDB
-    RegistryManager --> PostgresDB
-    ScanUploader --> PostgresDB
-    ScanUploader -->|Stream PDF Binary| UploadsStorage
+    DocBuilder --> ExcelExporter
+    VerifyEngine --> ExcelExporter
+    CertDesigner --> PostgresDB
 
-    RegistryManager -.->|Logs Shared Link| GoogleDrive
-    StaffBrowser -.->|Uploads Scanned PDF| GoogleDrive
-    StaffBrowser -.->|Dispatches Hardcopy| CHEDUniFAST
+    DocBuilder --> PostgresDB
+    VerifyEngine --> PostgresDB
+    RegValidator --> PostgresDB
+    RegistryManager --> PostgresDB
+
+    RegistryManager --> UploadsStorage
+    CertDesigner --> UploadsStorage
+    RegistryManager --> GoogleDrive
+    RegistryManager --> CHEDUniFAST
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Client["Client Tier Actor / UI"]:::clientStyle
-        L_Edge["Edge / Gateway Tier"]:::edgeStyle
-        L_App["Application Tier Service"]:::appStyle
-        L_Data[("Data Tier Persistence")]:::dataStyle
-        L_Ext["External Stakeholder"]:::extStyle
-        L_Client -->|Network Protocol| L_Edge
-        L_Edge --> L_App
-        L_App --> L_Data
-        L_App -.->|External Sync| L_Ext
+        L_Client["[Green Box]: Client Presentation"]:::clientStyle
+        L_Edge["[Gold Box]: Gateway & RBAC"]:::edgeStyle
+        L_App["[White Box]: Application Logic"]:::appStyle
+        L_Data[("[(Cylinder)]: Persistence Store")]:::dataStyle
+        L_Client --> L_Edge --> L_App --> L_Data
     end
 ```
 
@@ -89,21 +89,18 @@ flowchart TB
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | Architectural Tier | MinSU System Implementation |
+| Visual Symbol | Syntax / Style | Tier Concept | MinSU Implementation |
 |---|---|---|---|
-| 🟩 Soft Green Box | `fill:#F1F8F1, stroke:#1B5E20` | Client Presentation Tier | Browser clients for Student, Staff, Director, Accounting, and Admin |
-| 🟨 Gold Box | `fill:#FFF1C2, stroke:#F2B705` | Edge & Security Gateway Tier | Nginx TLS termination reverse-proxy and Next.js edge RBAC middleware |
-| ⬜ White Box | `fill:#FFFFFF, stroke:#1B5E20` | Core Application Tier | Next.js Server Components, Document Engine, Auth Controller, PDF Compiler |
-| 🟩 Dark Green Cylinder | `fill:#DCEFDD, stroke:#123F17` | Persistent Data Tier | PostgreSQL 16 relational database (Port 5432) and local storage volumes |
-| ◻️ Dashed Border Box | `stroke-dasharray: 5 5` | External Stakeholder / Boundary | CHED/UniFAST regional office and external Google Drive transmittal archive |
-| `-->` Solid Arrow | Network & Internal Call | Synchronous HTTPS, WSS, HTTP (port 3000), or TCP (port 5432) |
-| `-.->` Dashed Arrow | Out-of-Band Integration | Physical courier shipment or external cloud drive URL synchronization |
-
+| Client Tier | `#F1F8F1` Box | User Workstation Presentation | Next.js browser views for staff operations |
+| Edge Tier | `#FFF1C2` Box | Gateway & Authorization | Reverse proxy and `StaffRBAC` token validator |
+| Application Tier | `#FFFFFF` Box | Domain Services | 3-Way Matcher, ExcelJS exporter, Word docx engine |
+| Persistence Tier | Cylinder Shape | Relational & Disk Storage | PostgreSQL database and host-mounted uploads volume |
 
 ---
 
-## 4. Architecture Rules
+## 4. Tier Responsibilities
 
-- The `Staff Operations Subsystem` controls preparation for all 10 TDP Annexes.
-- Wet-ink signed PDF scans stream directly into the local `/uploads` volume.
-- The `Outgoing Transmittal Manager` logs courier tracking numbers and Google Drive links.
+- **Client Tier**: Delivers responsive forms, interactive discrepancy tables, and drag-and-drop certificate signatory editors.
+- **Edge Tier**: Blocks unauthenticated requests and restricts execution strictly to `STAFF_COORDINATOR` sessions.
+- **Application Tier**: Processes multipart CSV uploads, executes cross-matching algorithms, and compiles Annex billing statements.
+- **Persistence Tier**: Ensures ACID compliance for registration records and saves wet-signed PDF scans.

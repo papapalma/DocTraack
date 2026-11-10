@@ -1,73 +1,97 @@
-# Deployment Diagram: Student Applicant Domain
+# Student Applicant — Deployment Diagram
 
-## 1. Description
-This deployment diagram models the runtime execution environment and hardware topology for student interactions. It documents the network routes connecting external student smartphones, laptops, content delivery networks, application containers, and databases.
+> **Role:** `STUDENT`  
+> **Diagram Type:** Deployment Diagram  
+> **Standard:** UML 2.5 Deployment Specification
 
-## 2. ASD-STE100 Technical Specifications
-- Allow open public access to portal routes through standard HTTPS Port 443.
-- Enforce strict DDoS mitigations and IP rate limiting at the reverse proxy.
-- Deploy the Next.js portal application inside a scalable containerized node.
-- Isolate student uploaded files in an authenticated static storage volume.
+---
 
-## 3. Deployment Diagram (Mermaid)
+## 1. Purpose
+
+The Deployment Diagram shows the hardware devices, mobile clients, Docker container boundaries, and network topologies supporting the Student Portal, Microsoft Authenticator 2FA, and application intake.
+
+---
+
+## 2. Mermaid Deployment Diagram
 
 ```mermaid
-graph TB
-    subgraph StudentDevices ["Student Device Nodes (Public Internet)"]
-        SmartPhone["Student Smartphone<br/>[Mobile Browser / iOS / Android]"]
-        PersonalLaptop["Student Personal Computer<br/>[Chrome / Firefox / Edge]"]
+flowchart TB
+    classDef deviceNode fill:#F6F8F6,stroke:#1B5E20,stroke-width:2px,color:#1F2A24
+    classDef dockerNode fill:#F1F8F1,stroke:#164D1C,stroke-width:2px,color:#164D1C
+    classDef runtimeNode fill:#FFFFFF,stroke:#2E7D32,stroke-width:1.5px,color:#1F2A24
+    classDef artifactStyle fill:#DCEFDD,stroke:#1B5E20,stroke-width:1px,color:#123F17
+    classDef dbNode fill:#FFF1C2,stroke:#F2B705,stroke-width:2px,color:#1F2A24
+
+    subgraph STUDENT_DEVICES["«device» Student Hardware Nodes (Public Internet)"]
+        MOBILE["Smartphone (iOS / Android)<br/>• Mobile Browser (/portal)<br/>• Microsoft Authenticator App (2FA)"]
+        LAPTOP["Personal Computer / Laptop<br/>• Chrome / Edge / Firefox"]
     end
 
-    subgraph EdgeNode ["Reverse Proxy & Edge Gateway"]
-        NginxProxy["Nginx Gateway Server<br/>[Port 443 HTTPS / SSL Termination]<br/>Rate Limit: 20 req/min/IP for tracking"]
+    subgraph SERVER_HOST["«device» MinSU Campus Server Host"]
+        subgraph DOCKER_ENGINE["«executionEnvironment» Docker Runtime"]
+
+            subgraph PROXY_BOX["«node» Container: reverse-proxy"]
+                NGINX["«executionEnvironment» Nginx 1.25 Alpine<br/>• HTTPS TLS 1.3 Termination<br/>• Rate Limit: 10 applies/hr/IP, 20 status/min"]
+            end
+
+            subgraph APP_BOX["«node» Container: web-application"]
+                NODEJS["«executionEnvironment» Node.js 20 LTS"]
+                PORTAL_BUNDLE["«artifact» Student Portal Bundle<br/>• /portal (Active Calls & Applications)<br/>• /portal/profile (RA 10173 Locked Editor)<br/>• /api/registrations (Intake API)<br/>• /api/auth/2fa (TOTP Auth Route)"]
+                PRISMA["«artifact» Prisma Query Engine"]
+            end
+
+            subgraph DB_BOX["«node» Container: postgres-database"]
+                PG_ENGINE["«executionEnvironment» PostgreSQL 16<br/>Database: minsu_doctrack"]
+            end
+
+        end
+
+        subgraph STORAGE_VOLS["«storage» Persistent Host Volumes"]
+            PROOFS_VOL["Volume: ./storage/uploads/proofs/<br/>(Applicant Scanned Attachments <= 5MB)"]
+            DB_VOL["Volume: ./docker/data/postgres/<br/>(Relational State & Registrations)"]
+        end
     end
 
-    subgraph AppHostNode ["Application Host Node (Docker Container)"]
-        NextServer["Node.js 20 Runtime<br/>Next.js 16 Web Application<br/>[Port 3000 Internal]"]
-        PrismaORM["Prisma Client v5.x"]
-    end
+    MOBILE -->|"HTTPS (TLS 1.3) / Port 443"| NGINX
+    LAPTOP -->|"HTTPS (TLS 1.3) / Port 443"| NGINX
+    NGINX -->|"HTTP Forward / Port 3000"| PORTAL_BUNDLE
+    PORTAL_BUNDLE --> PRISMA
+    PRISMA -->|"TCP / Port 5432"| PG_ENGINE
+    PG_ENGINE -->|"Disk Block I/O"| DB_VOL
+    PORTAL_BUNDLE -->|"Write Proof Buffers"| PROOFS_VOL
 
-    subgraph StorageNodes ["Data Storage Infrastructure"]
-        PostgresInstance["PostgreSQL 16 Cluster<br/>[Port 5432 Internal SSL]"]
-        AttachmentVolume[("Encrypted File Volume<br/>/var/data/uploads")]
-    end
-
-    SmartPhone -->|HTTPS TLS 1.3| NginxProxy
-    PersonalLaptop -->|HTTPS TLS 1.3| NginxProxy
-    NginxProxy -->|HTTP Forward| NextServer
-    NextServer -->|Data Access| PrismaORM
-    NextServer -->|Store Files| AttachmentVolume
-    PrismaORM -->|SQL Queries| PostgresInstance
+    class MOBILE,LAPTOP,PROOFS_VOL,DB_VOL deviceNode
+    class NGINX,NODEJS runtimeNode
+    class PORTAL_BUNDLE,PRISMA artifactStyle
+    class PG_ENGINE dbNode
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Dev["<<device>> Physical / Virtual Server"]:::deviceNode
-        L_Env["<<executionEnvironment>> Runtime Engine"]:::runtimeNode
-        L_Art["<<artifact>> Software Executable / Bundle"]:::artifactStyle
-        L_Db["<<executionEnvironment>> PostgreSQL Database"]:::dbNode
-        L_Art -->|Network Protocol & Port| L_Env
-        L_Env -.->|File Mount / Binding| L_Dev
+        L_Device["«device»: Physical Machine"]:::deviceNode
+        L_Node["«node»: Container Host"]:::runtimeNode
+        L_Art["«artifact»: Code Artifact"]:::artifactStyle
+        L_Store["«storage»: Host Mounted Volume"]:::deviceNode
+        L_Device -.-> L_Node -.-> L_Art -.-> L_Store
     end
 ```
 
 ---
 
-## 4. Diagram Legend & Symbol Guide
+## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | UML Deployment Role | MinSU Infrastructure Context |
+| Visual Symbol | Syntax / Style | UML Deployment Concept | MinSU Implementation |
 |---|---|---|---|
-| `<<device>>` Box | `fill:#F6F8F6, stroke:#1B5E20` | Physical hardware or operating system host | Client Workstation, Ubuntu Linux Server |
-| `<<node>>` Container | `fill:#F1F8F1, stroke:#164D1C` | Isolated containerized execution node | Docker containers: reverse-proxy, web-application, postgres-database |
-| `<<executionEnvironment>>` | `fill:#FFFFFF, stroke:#2E7D32` | Application runtime or software engine | Node.js 20 LTS, Nginx 1.25 Alpine, Headless Chromium |
-| `<<artifact>>` | `fill:#DCEFDD, stroke:#1B5E20` | Packaged deployable binary or file | Next.js standalone build, Prisma engine, nginx.conf |
-| 🟨 Database Engine | `fill:#FFF1C2, stroke:#F2B705` | Relational database runtime | PostgreSQL 16 Alpine Server |
-| `-->` Solid Arrow | Network Communication Link | Transport protocol and network port | Port 443 (HTTPS), Port 3000 (Internal HTTP), Port 5432 (Internal TCP) |
-| `-.->` Dashed Arrow | Storage Mount / Stream | Host volume bind mount or disk I/O | `./uploads` (Signed PDF scans) and `pgdata` (PostgreSQL WAL files) |
+| `«device»` | Double Angle Bracket | Hardware computational machine | Student Mobile / PC, MinSU Server Host |
+| `«node»` | Container Box | Virtualized runtime environment | Reverse proxy, Node.js web application, PostgreSQL |
+| `«artifact»` | Shaded Component | Executable software code or bundle | Student Portal SPA, Registration API, Prisma engine |
+| `«storage»` | Volume Node | File system partition on host | Mounted proofs storage volume, PostgreSQL data blocks |
 
+---
 
-## 5. Node Responsibilities
-- **Student Device Nodes**: External clients accessing public portal routes without university intranet constraints.
-- **Reverse Proxy & Edge Gateway**: Filters malicious requests, terminates SSL certificates, and applies rate limits.
-- **Application Host Node**: Serves React Server Components, executes form parsing, and computes tracking tokens.
-- **Storage Infrastructure**: Stores structured relational data and encrypted PDF attachments.
+## 4. Deployment Specifications
+
+- **Student Devices**: Interacts via responsive mobile browsers and generates 6-digit TOTP codes with Microsoft Authenticator.
+- **Reverse Proxy**: Enforces anti-brute-force rate limiting (maximum 10 public submissions per IP per hour) and shields against DDoS attacks.
+- **Application Container**: Sanitizes multipart proof uploads, validates 5 MB size thresholds, and issues cryptographic tracking codes.
+- **Persistent Volumes**: Stores student attachments on dedicated disk mounts and commits registration rows to PostgreSQL.

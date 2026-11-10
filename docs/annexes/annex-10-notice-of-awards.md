@@ -19,6 +19,7 @@ Unlike the multi-column financial ledgers and billing spreadsheets of earlier an
 
 Under MinSU DocTrack, Annex 10 is implemented as an Apple-inspired fluid interactive suite supporting:
 - **Individual Scholar Customization:** In-line editing of individual student award parameters and instant letter canvas preview.
+- **Certificate Designer Integration (`/certificate-editor`):** Customization of layout, typography, paper dimensions (Letter, A4, Legal, Folio), orientation (Portrait, Landscape), and dynamic institutional signatories for companion certificates.
 - **Cohort Batch Generation & Auto-Sync:** 1-click import from approved Annex 3 / Annex 4 billing packages to generate personalized award notices for entire student cohorts.
 - **Batch Print Mode:** Sequential multi-page print layout formatted for standard 8.5" × 11" letter sheets.
 - **Microsoft Word (.doc) Export:** Dedicated export endpoint producing fully formatted Word documents matching `Annex10.docx`.

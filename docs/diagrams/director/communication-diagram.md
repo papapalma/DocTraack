@@ -2,14 +2,14 @@
 
 > **Role:** `DIRECTOR`  
 > **Diagram Type:** Communication Diagram  
-> **Scenario:** Document Endorsement & Notification Dispatch  
+> **Scenario:** Document Endorsement, Verification Sign-Off, and Notification Collaboration  
 > **Standard:** UML 2.5 Communication Specification
 
 ---
 
 ## 1. Purpose
 
-The Communication Diagram shows the structural relationships and numbered message sequences during an executive document endorsement.
+The Communication Diagram shows the structural links and numbered message invocations during an executive document endorsement, verification sign-off, and notification dispatch.
 
 ---
 
@@ -23,6 +23,7 @@ flowchart LR
 
     Director["director : CampusDirector"]:::actorStyle
     UI["ui : ReviewQueueView"]:::objStyle
+    VerifyMod["verify : VerificationOversight"]:::objStyle
     Service["service : EndorsementService"]:::objStyle
     Doc["doc : Document"]:::objStyle
     History["history : StatusHistory"]:::objStyle
@@ -30,16 +31,19 @@ flowchart LR
     Audit["audit : AuditService"]:::objStyle
     DB["db : PrismaClient"]:::objStyle
 
+    %% Object Links and Numbered Messages
     Director ---|1: approveDocument(docId)| UI
-    UI ---|2: POST /api/documents/docId/approve| Service
-    Service ---|3: lockAndSetStatus(APPROVED)| Doc
-    Service ---|4: createTransitionEntry(SUBMITTED, APPROVED)| History
-    Service ---|5: dispatchAlert(preparerId, 'Endorsed')| Notif
-    Service ---|6: logAuditEvent(DOCUMENT_APPROVED)| Audit
-    Service ---|7: executeAtomicTransaction()| DB
-    DB ---|8: confirmTransactionCommit()| Service
-    Service ---|9: 200 OK (Endorsement Confirmed)| UI
-    UI ---|10: removeCardFromQueue()| Director
+    UI ---|2: verifyZeroDiscrepancies(runId)| VerifyMod
+    VerifyMod ---|3: confirmCohortClean()| UI
+    UI ---|4: POST /api/documents/docId/approve| Service
+    Service ---|5: lockAndSetStatus(APPROVED)| Doc
+    Service ---|6: createTransitionEntry(SUBMITTED, APPROVED)| History
+    Service ---|7: dispatchAlert(preparerId, 'Approved')| Notif
+    Service ---|8: logAuditEvent(DOCUMENT_APPROVED)| Audit
+    Service ---|9: executeAtomicTransaction()| DB
+    DB ---|10: confirmTransactionCommit()| Service
+    Service ---|11: 200 OK (Endorsement Confirmed)| UI
+    UI ---|12: refreshQueueAndShowToast()| Director
 
     %% ─── 📌 VISUAL LEGEND ───
     subgraph Legend ["📌 Diagram Legend"]
@@ -56,57 +60,24 @@ flowchart LR
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Element | Format / Syntax | Technical Meaning | MinSU Implementation Context |
+| Visual Symbol | Syntax / Style | UML Communication Meaning | MinSU Implementation |
 |---|---|---|---|
-| Subsystem Node | `[N: name : Class]` | Structural software participant | Controllers, Workflow Engines, Prisma Client, Storage Adapters |
-| Link Connector | `-- "..." -->` | Directed communication channel | HTTP request, RPC method call, or database query |
-| Numbered Prefix | `1:`, `2:`, `10:` | Chronological message sequence number | Sequential execution order from client event to persistence and UI update |
-| Method Signature | `methodName(params)` | Invoked operation contract | `verifyRole(token)`, `checkVariance()`, `writeAuditLog()` |
-| 🟢 Green Tone | `#F1F8F1` / `#1B5E20` | Core Subsystem Component | Institutional controllers, persistence adapters, and business engines |
-| 🟡 Gold Tone | `#FFF1C2` / `#B88A00` | Guard & Dispatch Relay | Access guards, validation checks, and notification dispatchers |
-
+| `[Object]` | `["instance : Class"]` | Named runtime instance participating in flow | `director`, `verify : VerificationOversight`, `db : PrismaClient` |
+| `---` | Association Line | Structural communication link between objects | Connects Director UI to Endorsement Service |
+| `N: method()` | Sequence Call Number | Chronological order and message invocation | `1: approveDocument()`, `2: verifyZeroDiscrepancies()`, `5: lockAndSetStatus()` |
+| 🟢 Green Tone | `#F1F8F1` / `#1B5E20` | Operational Actor / Authorized Endpoint | Authenticated Campus Director executing executive decisions |
 
 ---
 
-## 4. PlantUML Communication Diagram
+## 4. Message Invocation Sequence
 
-```plantuml
-@startuml
-skinparam objectBackgroundColor #FFFFFF
-skinparam objectBorderColor #1B5E20
-
-object "director : CampusDirector" as Director
-object "ui : ReviewQueueUI" as UI
-object "svc : EndorsementSvc" as Svc
-object "doc : Document" as Doc
-object "hist : StatusHistory" as Hist
-object "notif : NotificationSvc" as Notif
-object "audit : AuditSvc" as Audit
-object "db : PrismaClient" as DB
-
-Director -- UI : 1: approveDocument()\n10: refreshQueue()
-UI -- Svc : 2: dispatchApprove()
-Svc -- Doc : 3: setStatus(APPROVED)
-Svc -- Hist : 4: logTransition()
-Svc -- Notif : 5: notifyPreparer()
-Svc -- Audit : 6: recordAudit()
-Svc -- DB : 7: executeTx()\n8: commitSuccess()
-Svc -- UI : 9: returnSuccess()
-
-@enduml
-```
-
----
-
-## 5. Numbered Message Steps
-
-1. Director clicks "Approve Annex" on the review screen.
-2. UI submits the approval request to the backend.
-3. Service updates document status to `APPROVED` and locks data.
-4. Service instantiates the `StatusHistory` transition entry.
-5. Service prepares the in-app notification for the document's creator.
-6. Service creates an immutable audit record.
-7. Service commits all modifications inside a Prisma database transaction.
-8. Database acknowledges commit.
-9. Service returns HTTP 200 OK.
-10. UI removes the document card from the pending review list.
+1. Director reviews the pending document and clicks "Approve Annex".
+2. UI verifies that the associated 3-way verification cohort has zero unresolved discrepancies.
+3. Verification module confirms that all grantees are validated.
+4. UI calls the endorsement route on the server.
+5. Endorsement service updates status to `APPROVED` and locks the record against edits.
+6. Service records the transition in `StatusHistory`.
+7. Notification service sends an in-app alert to the preparer.
+8. Audit service records an immutable audit log entry.
+9. Database commits all modifications inside a single atomic `$transaction`.
+10. UI removes the document card from the queue and displays a green confirmation toast.

@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-The Profile Diagram defines domain-specific UML extensions for the MinSU Tulong Dunong Program. It defines stereotypes, metaclasses, and tagged values for institutional document governance.
+The Profile Diagram defines domain-specific UML extensions for the MinSU Tulong Dunong Program. It defines stereotypes, metaclasses, and tagged values for institutional document governance, 3-way verification, two-factor security, and multi-format document generation.
 
 ---
 
@@ -33,13 +33,19 @@ flowchart TD
 
         AuditedEntity["<<stereotype>><br/>AuditedEntity<br/>+immutableLog: Boolean = true<br/>+retentionPeriodYears: Int = 7"]:::stereoStyle
 
-        ExecutiveReviewable["<<stereotype>><br/>ExecutiveReviewable<br/>+slaHours: Int = 48<br/>+returnCommentMandatory: Boolean"]:::stereoStyle
+        TripartiteVerified["<<stereotype>><br/>TripartiteVerified<br/>+confidenceScore: Float<br/>+discrepancyStatus: String"]:::stereoStyle
+
+        TwoFactorProtected["<<stereotype>><br/>TwoFactorProtected<br/>+totpRequired: Boolean = true<br/>+allowRecoveryCodes: Boolean"]:::stereoStyle
+
+        Exportable["<<stereotype>><br/>Exportable<br/>+excelJsWorkbook: Boolean = true<br/>+wordDocxLetter: Boolean"]:::stereoStyle
     end
 
     %% Stereotype Extensions
     TDPAnnex -- "<<extension>>" --> MetaClass
     AuditedEntity -- "<<extension>>" --> MetaClass
-    ExecutiveReviewable -- "<<extension>>" --> MetaComponent
+    TripartiteVerified -- "<<extension>>" --> MetaClass
+    TwoFactorProtected -- "<<extension>>" --> MetaComponent
+    Exportable -- "<<extension>>" --> MetaComponent
     FinancialAnnex -- "<<generalization>>" --> TDPAnnex
 
     %% ─── 📌 VISUAL LEGEND ───
@@ -57,61 +63,52 @@ flowchart TD
 
 | Visual Symbol | Syntax / Style | UML Profile Mechanism | MinSU Governance Application |
 |---|---|---|---|
-| `<<metaclass>>` Box | `fill:#F6F8F6, stroke:#55645B` | Core UML base meta-element | Standard UML `Class` or `Component` |
-| `<<stereotype>>` Box | `fill:#DCEFDD, stroke:#1B5E20` | Domain-specific extension | `<<TDPAnnex>>`, `<<FinancialAnnex>>`, `<<AuditedEntity>>`, `<<ExecutiveReviewable>>` |
-| `+taggedValue: Type` | Tagged Value Attribute | Metadata property attached to stereotype | `annexNumber`, `signatoryRole`, `slaHours = 48`, `requiresDisbursementCheck` |
-| `-- "<<extension>>" -->` | Extension Relationship | Extends metaclass semantics | Connects custom TDP stereotype to standard UML metaclass |
-| `-- "<<generalization>>" -->` | Specialization Hierarchy | Stereotype inheritance | `FinancialAnnex` inherits all properties of `TDPAnnex` |
+| `<<metaclass>>` | `fill:#F6F8F6` | Core UML base meta-element | Standard UML `Class` or `Component` |
+| `<<stereotype>>` | `fill:#DCEFDD` | Domain-specific extension | `TDPAnnex`, `FinancialAnnex`, `TripartiteVerified`, `TwoFactorProtected`, `Exportable` |
+| `<<extension>>` | Solid Arrow | Metaclass specialization | Extends basic UML elements with custom TDP compliance metadata |
+| `<<generalization>>` | Open Arrow | Stereotype inheritance | `FinancialAnnex` inherits general `TDPAnnex` properties |
 
 ---
 
-## 4. PlantUML Profile Specification
+## 4. PlantUML Profile Diagram
 
 ```plantuml
 @startuml
-skinparam packageBackgroundColor #FFFFFF
-skinparam packageBorderColor #1B5E20
+skinparam classBackgroundColor #FFFFFF
+skinparam classBorderColor #1B5E20
+
+class "Class" as MetaClass <<metaclass>>
+class "Component" as MetaComponent <<metaclass>>
 
 package "<<profile>> MinSU_TDP_Profile" {
-  class "Class" <<metaclass>> as MetaClass
-  class "Component" <<metaclass>> as MetaComponent
-
-  class "TDPAnnex" <<stereotype>> {
-    + annexNumber : Integer
-    + signatoryRole : Role
-    + chedFormatId : String
+  class "TDPAnnex" as TDPAnnex <<stereotype>> {
+    +annexNumber: Int
+    +signatoryRole: Role
   }
 
-  class "FinancialAnnex" <<stereotype>> {
-    + requiresDisbursementCheck : Boolean
-    + currencyUnit : String = "PHP"
+  class "FinancialAnnex" as FinAnnex <<stereotype>> {
+    +requiresDisbursementCheck: Boolean
+    +currencyUnit: String = "PHP"
   }
 
-  class "AuditedEntity" <<stereotype>> {
-    + immutableLog : Boolean = true
-    + retentionPeriodYears : Integer = 7
+  class "TripartiteVerified" as Verify <<stereotype>> {
+    +confidenceScore: Float
+    +discrepancyStatus: String
   }
 
-  class "ExecutiveReviewable" <<stereotype>> {
-    + slaHours : Integer = 48
-    + returnCommentMandatory : Boolean
+  class "TwoFactorProtected" as 2FA <<stereotype>> {
+    +totpRequired: Boolean
   }
 
-  TDPAnnex -up-> MetaClass : "<<extension>>"
-  AuditedEntity -up-> MetaClass : "<<extension>>"
-  ExecutiveReviewable -up-> MetaComponent : "<<extension>>"
-  FinancialAnnex -up-|> TDPAnnex
+  class "Exportable" as Export <<stereotype>> {
+    +excelJsWorkbook: Boolean
+  }
 }
+
+TDPAnnex -up-> MetaClass : <<extension>>
+Verify -up-> MetaClass : <<extension>>
+2FA -up-> MetaComponent : <<extension>>
+Export -up-> MetaComponent : <<extension>>
+FinAnnex -up-> TDPAnnex : <<generalization>>
 @enduml
 ```
-
----
-
-## 5. Stereotype Definitions & Tagged Values
-
-| Stereotype | Extends | Tagged Values | Description |
-|---|---|---|---|
-| `<<TDPAnnex>>` | `Class` | `annexNumber: Int`, `signatoryRole: Role`, `chedFormatId: String` | Identifies official Tulong Dunong Program regulatory annex forms (Annexes 1–10). |
-| `<<FinancialAnnex>>` | `<<TDPAnnex>>` | `requiresDisbursementCheck: Boolean`, `currencyUnit: String` | Specialized financial forms (Annexes 6, 7, 8, 9) that require peso balance verification. |
-| `<<AuditedEntity>>` | `Class` | `immutableLog: Boolean`, `retentionPeriodYears: Int` | Marks database entities that must write immutable audit log events on every mutation. |
-| `<<ExecutiveReviewable>>` | `Component` | `slaHours: Int`, `returnCommentMandatory: Boolean` | Identifies review queues requiring Campus Director endorsement before external release. |

@@ -24,20 +24,23 @@ flowchart LR
     subgraph CLIENT_COMPONENTS["Frontend Presentation Layer"]
         DashboardUI["<<component>><br/>Admin & Review Dashboard"]:::compStyle
         StudentPortalUI["<<component>><br/>Student Application Portal"]:::compStyle
+        EditorUI["<<component>><br/>CMS & Certificate Editor"]:::compStyle
     end
 
     subgraph SECURITY_LAYER["Security & Access Layer"]
-        AuthService["<<component>><br/>Auth & Session Service"]:::compStyle
-        RBACMiddleware["<<component>><br/>RBAC Middleware"]:::compStyle
+        AuthService["<<component>><br/>Auth & 2FA Service"]:::compStyle
+        RBACMiddleware["<<component>><br/>RBAC & Rate Limit Shield"]:::compStyle
     end
 
     subgraph BUSINESS_LAYER["Core Business Services"]
         DocumentService["<<component>><br/>Document Management Service"]:::compStyle
+        VerifyService["<<component>><br/>3-Way Verification Engine"]:::compStyle
+        CertService["<<component>><br/>Certificate Designer Service"]:::compStyle
         CallService["<<component>><br/>Applicant Call Service"]:::compStyle
+        ExportService["<<component>><br/>ExcelJS & Docx Exporter"]:::compStyle
+        AnnouncementService["<<component>><br/>Announcements Hub Service"]:::compStyle
         TransmittalService["<<component>><br/>Transmittal Registry Service"]:::compStyle
-        PdfService["<<component>><br/>PDF Compilation Service"]:::compStyle
         AuditService["<<component>><br/>Audit Log Service"]:::compStyle
-        NotificationService["<<component>><br/>Notification Center Service"]:::compStyle
     end
 
     subgraph DATA_LAYER["Persistence Layer"]
@@ -46,52 +49,55 @@ flowchart LR
     end
 
     %% Interfaces
-    IAuth(["IAuthSession"]):::ifaceStyle
+    IAuth(["IAuthSession & TOTP"]):::ifaceStyle
     IRBAC(["IRBACGuard"]):::ifaceStyle
     IDoc(["IDocumentWorkflow"]):::ifaceStyle
-    ICall(["ICallApplication"]):::ifaceStyle
-    IPdf(["IPdfRenderer"]):::ifaceStyle
+    IVerify(["IVerificationEngine"]):::ifaceStyle
+    ICert(["ICertificateDesigner"]):::ifaceStyle
+    IExport(["IDocumentExporter"]):::ifaceStyle
+    IAnnounce(["IAnnouncementHub"]):::ifaceStyle
     IAudit(["IAuditLogger"]):::ifaceStyle
     IData(["IDataAccess"]):::ifaceStyle
 
     %% Connections
     DashboardUI --> IRBAC
+    EditorUI --> IRBAC
     StudentPortalUI --> IAuth
-    StudentPortalUI --> ICall
 
-    RBACMiddleware -- provides --> IRBAC
-    RBACMiddleware --> IAuth
-    AuthService -- provides --> IAuth
+    IRBAC --> DocumentService
+    IRBAC --> VerifyService
+    IRBAC --> CertService
+    IRBAC --> AnnouncementService
 
-    DashboardUI --> IDoc
-    DocumentService -- provides --> IDoc
-    DocumentService --> IPdf
+    DocumentService --> IDoc
+    VerifyService --> IVerify
+    CertService --> ICert
+    ExportService --> IExport
+    AnnouncementService --> IAnnounce
+
+    DocumentService --> IExport
+    VerifyService --> IExport
     DocumentService --> IAudit
+    VerifyService --> IAudit
+    CertService --> IAudit
+
     DocumentService --> IData
+    VerifyService --> IData
+    AuthService --> IData
+    AnnouncementService --> IData
+    PrismaService -.-> IData
 
-    CallService -- provides --> ICall
-    CallService --> IData
-    CallService --> IAudit
-
-    PdfService -- provides --> IPdf
-    PdfService --> FileSystemService
-
-    AuditService -- provides --> IAudit
-    AuditService --> IData
-
-    TransmittalService --> IDoc
-    TransmittalService --> IData
-
-    PrismaService -- provides --> IData
+    DocumentService --> FileSystemService
+    EditorUI --> FileSystemService
 
     %% ─── 📌 VISUAL LEGEND ───
-    subgraph LEGEND ["📌 Diagram Legend"]
+    subgraph Legend ["📌 Diagram Legend"]
         direction TB
-        L_Comp["<<component>><br/>Software Subsystem"]:::compStyle
-        L_Iface(["(Iface): Interface Contract"]):::ifaceStyle
-        L_Data["<<component>><br/>Persistence Adapter"]:::dataComp
-        L_Comp -- "depends on" --> L_Iface
-        L_Data -- "provides" --> L_Iface
+        L_Comp["[Component]: Subsystem Unit"]:::compStyle
+        L_Iface(["(Interface): Service Contract"]):::ifaceStyle
+        L_DataComp["[Data Component]: Storage Driver"]:::dataComp
+        L_Comp --> L_Iface
+        L_DataComp -.-> L_Iface
     end
 ```
 
@@ -99,14 +105,11 @@ flowchart LR
 
 ## 3. Diagram Legend & Symbol Guide
 
-| Visual Symbol | Syntax / Style | Technical Role | MinSU Architecture Mapping |
+| Visual Symbol | Syntax / Style | UML Component Concept | MinSU Application |
 |---|---|---|---|
-| `<<component>>` Box | `fill:#FFFFFF, stroke:#1B5E20` | Architectural subsystem or service module | Next.js Views, AuthService, DocumentService, AuditService |
-| `([Interface Circle])` | `fill:#DCEFDD, stroke:#123F17` | Provided / Required Interface Contract | `IAuthSession`, `IRBACGuard`, `IDocumentWorkflow`, `IDataAccess` |
-| 🟨 Data Component | `fill:#FFF1C2, stroke:#F2B705` | Persistence & Storage adapter component | Prisma ORM Client, Local Disk / Cloud Blob Storage |
-| `-->` Solid Arrow | Dependency / Consumer | Module calls or requires the interface | `DashboardUI --> IRBAC`, `CallService --> IData` |
-| `-- provides -->` | Realization / Provider | Module implements or provides the interface | `DocumentService -- provides --> IDoc`, `PrismaService -- provides --> IData` |
-| Boundary Subgraph | `subgraph LAYER` | Architectural tier / layer grouping | Presentation, Security, Core Business, and Persistence Layers |
+| `Component` | `["<<component>> Name"]` | Software module | Verification Engine, Document Service, Auth Service, Exporter |
+| `Interface` | `(["IName"])` | Service API contract | `IVerificationEngine`, `IDocumentWorkflow`, `IAuthSession` |
+| `Dependency` | `-->` / `-.->` | Module dependency | Dashboard relies on RBAC; Document Engine invokes Audit Logger |
 
 ---
 
@@ -115,71 +118,51 @@ flowchart LR
 ```plantuml
 @startuml
 skinparam componentStyle uml2
-skinparam backgroundColor #FFFFFF
-skinparam componentBackgroundColor #F1F8F1
+skinparam componentBackgroundColor #FFFFFF
 skinparam componentBorderColor #1B5E20
-skinparam interfaceBackgroundColor #DCEFDD
-skinparam interfaceBorderColor #123F17
 
-package "Presentation Subsystem" {
-  [Dashboard Client Views] as Dashboard
-  [Student Portal Views] as Portal
+package "Presentation Layer" {
+  [Dashboard UI] as Dashboard
+  [Student Portal UI] as Portal
+  [Visual Designers] as Designers
 }
 
-package "Security Subsystem" {
-  [Auth & Session Service] as Auth
-  [RBAC Enforcement Filter] as RBAC
-  interface "ISessionVerify" as ISession
-  interface "IRoleCheck" as IRole
+package "Security Layer" {
+  [Auth & 2FA Service] as Auth
+  [RBAC & Rate Limit Shield] as RBAC
 }
 
-package "Core Workflow Services" {
-  [Document Management Engine] as DocEngine
-  [Applicant Call Service] as CallEngine
-  [PDF Compilation Engine] as PdfEngine
+package "Business Services" {
+  [Document Service] as Docs
+  [3-Way Verification Engine] as Verify
+  [Certificate Designer Service] as Certs
+  [ExcelJS & Docx Exporter] as Exporter
+  [Announcements Hub] as Announce
   [Audit Log Service] as Audit
-  
-  interface "IDocumentLifecycle" as IDocLifecycle
-  interface "ICallFormEngine" as ICallEngine
-  interface "IPdfCompile" as IPdf
-  interface "IAuditEvent" as IAudit
 }
 
-package "Storage Subsystem" {
-  [Prisma Database Adapter] as Prisma
-  [Local Disk Storage] as Storage
-  interface "IDatabaseClient" as IDB
-}
+database "Prisma Data Layer" as Prisma
+folder "Secure File Storage" as Storage
 
-Auth - ISession
-RBAC - IRole
-DocEngine - IDocLifecycle
-CallEngine - ICallEngine
-PdfEngine - IPdf
-Audit - IAudit
-Prisma - IDB
+Dashboard --> RBAC
+Portal --> Auth
+Designers --> RBAC
 
-Dashboard ..> IRole
-Dashboard ..> IDocLifecycle
-Portal ..> ISession
-Portal ..> ICallEngine
+RBAC --> Docs
+RBAC --> Verify
+RBAC --> Certs
+RBAC --> Announce
 
-DocEngine ..> IPdf
-DocEngine ..> IAudit
-DocEngine ..> IDB
-CallEngine ..> IAudit
-CallEngine ..> IDB
-PdfEngine ..> Storage
-Audit ..> IDB
+Docs --> Exporter
+Verify --> Exporter
+Docs --> Audit
+Verify --> Audit
+Certs --> Audit
 
+Docs --> Prisma
+Verify --> Prisma
+Auth --> Prisma
+Announce --> Prisma
+Docs --> Storage
 @enduml
 ```
-
----
-
-## 5. Component Rules & Coupling
-
-- Modules communicate through explicit TypeScript interfaces and function boundaries.
-- No circular dependencies exist between business services.
-- The `Audit Log Service` records every status modification without coupling to UI components.
-- The `PDF Compilation Engine` accepts pure JSON input data and produces standards-compliant PDF streams.

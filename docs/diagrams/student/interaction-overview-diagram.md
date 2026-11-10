@@ -14,12 +14,12 @@ This interaction overview diagram combines high-level activity decision logic wi
 graph TD
     StartNode([Start: Student Visits MinSU Portal]) --> Frame_Browse["sd: BrowseAnnouncements<br/>- View active Annex 2 calls<br/>- Check eligibility & deadlines"]
 
-    Frame_Browse --> Decision_Action{"Student Intent"}
+    Frame_Browse --> Decision_Action{"Has Existing Tracking Code?"}
 
-    Decision_Action -->|Check Existing Application| Frame_Track["sd: InquireTrackingCode<br/>- Enter TDP code<br/>- View evaluation status"]
+    Decision_Action -->|Yes| Frame_Track["sd: InquireTrackingCode<br/>- Enter TDP code<br/>- View evaluation status"]
     Frame_Track --> EndTrack([End: Status Checked])
 
-    Decision_Action -->|Apply for Scholarship| Frame_Form["sd: CompleteApplicationForm<br/>- Enter personal & academic data<br/>- Attach scanned documents"]
+    Decision_Action -->|No| Frame_Form["sd: CompleteApplicationForm<br/>- Enter personal & academic data<br/>- Attach scanned documents"]
 
     Frame_Form --> Decision_Files{"Are Files Valid?<br/>(<= 5MB, PDF/JPG)"}
 
@@ -37,7 +37,7 @@ graph TD
         L_Dec{"{Decision Node}"}:::legDec
         L_Term(["([Terminal / End])"]):::legTerm
         L_Frame --> L_Dec
-        L_Dec -->|Approved / Success| L_Term
+        L_Dec -->|Yes| L_Term
     end
     classDef legFrame fill:#F1F8F1,stroke:#1B5E20,color:#1F2A24;
     classDef legDec fill:#FFF1C2,stroke:#B88A00,color:#1F2A24;
@@ -54,7 +54,7 @@ graph TD
 | `{Decision}` | `{"Decision"}` | Activity decision branch point | Critical decision gate (e.g., approval vs. return, variance check) |
 | `([Pill Node])` | `([Start / End])` | Lifecycle start or terminal archive node | Initiating semester operations or locking final records in archive |
 | `-->` Solid Arrow | Control Flow Connector | Sequential hand-off between frames | Passing control from one interaction frame to the next |
-| `-->|Label|` | Guarded Branch | Conditional scenario path | "Yes: Approved", "No: Discrepancy", "Return with Remarks" |
+| `-->|Label|` | Guarded Branch | Conditional scenario path | "Yes", "No" |
 | 🟢 Green Box | `#F1F8F1` / `#1B5E20` | Successful Workflow Phase | Forward operational processing and executive approval |
 | 🟡 Gold Diamond | `#FFF1C2` / `#B88A00` | Institutional Checkpoint | Evaluation queue and zero-variance fiscal math check |
 
