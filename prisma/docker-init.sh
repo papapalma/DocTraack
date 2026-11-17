@@ -18,15 +18,15 @@ prisma.user.count()
   .finally(() => prisma.\$disconnect());
 " 2>/dev/null || echo "0")
 
-if [ "$ALLOW_DEMO_SEED" = "true" ]; then
+if [ "$FORCE_SEED" = "true" ] || [ "$USER_COUNT" = "0" ] || [ "$ALLOW_DEMO_SEED" = "true" ]; then
   if [ "$FORCE_SEED" = "true" ] || [ "$USER_COUNT" = "0" ]; then
-    echo "▶ Seeding database (ALLOW_DEMO_SEED=true)..."
+    echo "▶ Seeding database (Initial bootstrap or FORCE_SEED=true)..."
     npx tsx prisma/seed.ts
     echo "✔ Database seeding completed successfully."
   else
     echo "✔ Existing records detected ($USER_COUNT users found). Skipping seed to preserve data."
   fi
 else
-  echo "ℹ ALLOW_DEMO_SEED is not enabled; skipping sample/demo account seed."
+  echo "ℹ Existing records detected ($USER_COUNT users found) and ALLOW_DEMO_SEED is not enabled; skipping seed."
 fi
 

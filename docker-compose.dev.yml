@@ -16,8 +16,8 @@ services:
       target: deps
     command: sh -c "npx prisma generate && npm run dev"
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-dev_postgres_password}@db:5432/${POSTGRES_DB:-db_TDP}?schema=public}
-      SESSION_SECRET: ${SESSION_SECRET:-dev_only_local_session_secret_at_least_32_bytes_long}
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-5mdb02f6}@db:5432/${POSTGRES_DB:-db_TDP}?schema=public}
+      SESSION_SECRET: ${SESSION_SECRET:-minsu_doctrack_secure_session_secret_2026}
       NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-MinSU DocTrack}
       COOKIE_SECURE: "false"
       NODE_ENV: development

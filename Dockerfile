@@ -27,6 +27,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json tsconfig.json ./
 COPY prisma ./prisma
+COPY src ./src
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate
 RUN sed -i 's/\r$//' prisma/docker-init.sh && chmod +x prisma/docker-init.sh
@@ -46,7 +47,7 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
 # Create storage and public directories with correct permissions
-RUN mkdir -p /app/storage/uploads/logos /app/public && \
+RUN mkdir -p /app/storage/uploads/logos /app/storage/uploads/annex-presets /app/storage/uploads/landing /app/public && \
     chown -R nextjs:nodejs /app/storage /app/public
 
 # Copy pre-configured storage assets and templates
