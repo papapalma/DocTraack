@@ -5,23 +5,16 @@ import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { addLogoToLibrary } from "@/lib/branding";
+import { sanitizeText } from "@/lib/validation";
+import {
+  detectImageKindFromBytes,
+  getVerifiedImageMetadata,
+  resolveContainedFilePath,
+  validateSafeSvg,
+} from "@/lib/upload-security";
 import { LogoLibraryItem } from "@/types";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_MIME_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/svg+xml",
-]);
-
-const EXTENSION_MAP: Record<string, string> = {
-  "image/png": ".png",
-  "image/jpeg": ".jpg",
-  "image/webp": ".webp",
-  "image/svg+xml": ".svg",
-};
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
@@ -32,9 +25,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (user.role !== "STAFF" && user.role !== "DIRECTOR" && user.role !== "SYSTEM_ADMIN") {
+    if (
+      user.role !== "STAFF" &&
+      user.role !== "DIRECTOR" &&
+      user.role !== "SYSTEM_ADMIN"
+    ) {
       return NextResponse.json(
-        { error: "Access denied. Only Staff Coordinators, Campus Directors, and System Administrators can upload document logos." },
+        {
+          error:
+            "Access denied. Only Staff Coordinators, Campus Directors, and System Administrators can upload document logos.",
+        },
         { status: 403 }
       );
     }
@@ -48,60 +48,87 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    if (!ALLOWED_MIME_TYPES.has(file.type)) {
+    if (file.size <= 0 || file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: "Invalid image format. Allowed: PNG, JPG, WebP, SVG." },
+        { error: "File exceeds 5MB size limit or is empty." },
         { status: 400 }
       );
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const detectedKind = detectImageKindFromBytes(buffer);
+    if (!detectedKind) {
       return NextResponse.json(
-        { error: "File exceeds 5MB size limit." },
+        {
+          error:
+            "Invalid or unrecognized image content. Allowed: PNG, JPG, WebP, SVG.",
+        },
         { status: 400 }
       );
     }
 
-    // Determine extension
-    let ext = path.extname(file.name).toLowerCase();
-    if (!ext || ext.length < 2) {
-      ext = EXTENSION_MAP[file.type] || ".png";
+    if (detectedKind === "svg") {
+      const svgCheck = validateSafeSvg(buffer);
+      if (!svgCheck.valid) {
+        return NextResponse.json(
+          { error: svgCheck.reason || "Unsafe SVG payload rejected." },
+          { status: 400 }
+        );
+      }
     }
 
-    // Generate safe filename
-    const randomSuffix = crypto.randomBytes(6).toString("hex");
+    const { ext, mime } = getVerifiedImageMetadata(detectedKind);
+    const randomSuffix = crypto.randomBytes(12).toString("hex");
     const filename = `logo-${Date.now()}-${randomSuffix}${ext}`;
 
-    const storageDir = path.join(process.cwd(), "storage", "uploads", "logos");
+    const storageDir = path.resolve(
+      process.cwd(),
+      "storage",
+      "uploads",
+      "logos"
+    );
     await fs.mkdir(storageDir, { recursive: true });
 
-    const filePath = path.join(storageDir, filename);
-    const arrayBuffer = await file.arrayBuffer();
-    await fs.writeFile(filePath, Buffer.from(arrayBuffer));
+    const filePath = resolveContainedFilePath(storageDir, filename);
+    if (!filePath) {
+      return NextResponse.json(
+        { error: "Invalid destination path." },
+        { status: 400 }
+      );
+    }
+
+    await fs.writeFile(filePath, buffer);
 
     const mediaUrl = `/api/media/logo/${filename}`;
+    const safeOriginalName = sanitizeText(file.name, 120) || "logo";
+    const displayName =
+      safeOriginalName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ") ||
+      "Custom Institutional Logo";
 
     const libraryItem: LogoLibraryItem = {
       id: `logo-${Date.now()}-${randomSuffix}`,
-      name: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ") || "Custom Institutional Logo",
+      name: displayName,
       url: mediaUrl,
       uploadedAt: new Date().toISOString(),
-      originalName: file.name,
-      positionPreference: position === "left" || position === "right" ? position : "both",
+      originalName: safeOriginalName,
+      positionPreference:
+        position === "left" || position === "right" ? position : "both",
     };
 
     await addLogoToLibrary(libraryItem);
 
-    // Audit log
     await logAudit({
       actorId: user.id,
       action: "LOGO_UPLOADED",
       entity: "LOGO",
       entityId: filename,
+      req,
       details: {
-        originalName: file.name,
+        originalName: safeOriginalName,
         size: file.size,
-        mimeType: file.type,
+        mimeType: mime,
         documentId,
         position,
         mediaUrl,
@@ -112,7 +139,7 @@ export async function POST(req: NextRequest) {
       success: true,
       url: mediaUrl,
       filename,
-      originalName: file.name,
+      originalName: safeOriginalName,
       libraryItem,
     });
   } catch (error) {
@@ -123,4 +150,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

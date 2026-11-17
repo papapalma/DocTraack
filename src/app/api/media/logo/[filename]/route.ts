@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import fs from "fs/promises";
 import { existsSync } from "fs";
+import { resolveContainedFilePath } from "@/lib/upload-security";
+import { sanitizeDownloadFilename } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
-// Allowed MIME mappings
 const MIME_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -21,37 +22,44 @@ export async function GET(
   try {
     const { filename } = await params;
 
-    // Security check: strict filename sanitization against path traversal
-    if (!filename || filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+    const storageDir = path.resolve(
+      process.cwd(),
+      "storage",
+      "uploads",
+      "logos"
+    );
+    const filePath = resolveContainedFilePath(storageDir, filename);
+    if (!filePath) {
       return NextResponse.json({ error: "Invalid filename" }, { status: 400 });
     }
 
-    const sanitized = path.basename(filename);
+    const sanitized = path.basename(filePath);
     const ext = path.extname(sanitized).toLowerCase();
-
     const mimeType = MIME_TYPES[ext];
     if (!mimeType) {
-      return NextResponse.json({ error: "Unsupported media format" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Unsupported media format" },
+        { status: 400 }
+      );
     }
-
-    const storageDir = path.join(process.cwd(), "storage", "uploads", "logos");
-    const filePath = path.join(storageDir, sanitized);
 
     if (!existsSync(filePath)) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
     const fileBuffer = await fs.readFile(filePath);
+    const safeDispName = sanitizeDownloadFilename(sanitized, "logo");
 
     const headers: Record<string, string> = {
       "Content-Type": mimeType,
       "Cache-Control": "public, max-age=31536000, immutable",
-      "Content-Disposition": `inline; filename="${sanitized}"`,
+      "Content-Disposition": `inline; filename="${safeDispName}"`,
       "X-Content-Type-Options": "nosniff",
     };
 
     if (mimeType === "image/svg+xml") {
-      headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'";
+      headers["Content-Security-Policy"] =
+        "default-src 'none'; style-src 'unsafe-inline'; sandbox";
     }
 
     return new Response(fileBuffer, {
@@ -60,7 +68,9 @@ export async function GET(
     });
   } catch (error) {
     console.error("Stream logo error:", error);
-    return NextResponse.json({ error: "Failed to stream logo" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to stream logo" },
+      { status: 500 }
+    );
   }
 }
-

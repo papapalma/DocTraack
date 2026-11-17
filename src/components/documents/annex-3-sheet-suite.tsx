@@ -4,6 +4,10 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
+import { AnnexPresetConfig } from "@/types/presets";
+import { applyPresetSettingsToAnnexDefaults } from "@/lib/annex-presets";
+import { PresetBuiltinExtrasSection } from "./preset-builtin-extras";
+import { PresetOverlayLayer } from "./preset-overlay-layer";
 import {
   Annex3FormData,
   Annex3Grantee,
@@ -47,6 +51,8 @@ import {
 
 interface Annex3SheetSuiteProps {
   initialData?: Annex3FormData;
+  presetId?: string;
+  presetConfig?: AnnexPresetConfig;
   documentId?: string;
   documentTitle?: string;
   mode: "create" | "view";
@@ -56,6 +62,8 @@ interface Annex3SheetSuiteProps {
 
 export function Annex3SheetSuite({
   initialData,
+  presetId,
+  presetConfig,
   documentId,
   documentTitle,
   mode,
@@ -92,45 +100,45 @@ export function Annex3SheetSuite({
 
   // Default initial values
   const defaultData: Annex3FormData = useMemo(() => {
-    return (
-      initialData || {
-        regionCode: "MIMAROPA",
-        heiCode: "MINSU",
-        heiName: "Mindoro State University - Bongabong Campus",
-        heiAddress: "Labasan, Bongabong, Oriental Mindoro",
-        academicYear: "2024-2025",
-        termCode: "1",
-        trancheNumber: "1",
-        batchNumber: "3",
-        referenceNumber: "MIMAROPA-MINSU-2024-1-1:3",
-        billingDate: "March 4, 2025",
-        isLastBatch: false,
-        totalGrantees: 0,
-        stipendPerGrantee: 7500,
-        stipendTier: "7500",
-        totalSubsidy: 0,
-        managementFeeRate: 0.005,
-        managementFeeAmount: 0,
-        grandTotalBilling: 0,
-        billedGrantees: [],
-        otherGrantees: [],
-        signatories: {
-          accountingHead: { name: "Atty. Juan De Castro", position: "Head, Accounting/Authorized Representative" },
-          president: { name: "Dr. Enya Marie D. Apostol", position: "President/Authorized Representative" },
-          tesFocalPerson: { name: "Prof. Maria Santos", position: "HEI TES Focal Person/Scholarship Coordinator" },
-          registrar: { name: "Dr. Nemo R. San Pedro", position: "HEI Registrar" },
-        },
-        notary: {
-          docNo: "412",
-          pageNo: "84",
-          bookNo: "XII",
-          series: "2025",
-          issuedAt: "Bongabong, Oriental Mindoro",
-          issuedOn: "March 4, 2025",
-        },
-      }
-    );
-  }, [initialData]);
+    if (initialData) return initialData;
+    const baseDefaults: Annex3FormData = {
+      regionCode: "MIMAROPA",
+      heiCode: "MINSU",
+      heiName: "Mindoro State University - Bongabong Campus",
+      heiAddress: "Labasan, Bongabong, Oriental Mindoro",
+      academicYear: "2024-2025",
+      termCode: "1",
+      trancheNumber: "1",
+      batchNumber: "3",
+      referenceNumber: "MIMAROPA-MINSU-2024-1-1:3",
+      billingDate: "March 4, 2025",
+      isLastBatch: false,
+      totalGrantees: 0,
+      stipendPerGrantee: 7500,
+      stipendTier: "7500",
+      totalSubsidy: 0,
+      managementFeeRate: 0.005,
+      managementFeeAmount: 0,
+      grandTotalBilling: 0,
+      billedGrantees: [],
+      otherGrantees: [],
+      signatories: {
+        accountingHead: { name: "Atty. Juan De Castro", position: "Head, Accounting/Authorized Representative" },
+        president: { name: "Dr. Enya Marie D. Apostol", position: "President/Authorized Representative" },
+        tesFocalPerson: { name: "Prof. Maria Santos", position: "HEI TES Focal Person/Scholarship Coordinator" },
+        registrar: { name: "Dr. Nemo R. San Pedro", position: "HEI Registrar" },
+      },
+      notary: {
+        docNo: "412",
+        pageNo: "84",
+        bookNo: "XII",
+        series: "2025",
+        issuedAt: "Bongabong, Oriental Mindoro",
+        issuedOn: "March 4, 2025",
+      },
+    };
+    return applyPresetSettingsToAnnexDefaults(3, baseDefaults as unknown as Record<string, unknown>, presetConfig) as unknown as Annex3FormData;
+  }, [initialData, presetConfig]);
 
   const [formData, setFormData] = useState<Annex3FormData>(defaultData);
   const [isSaving, setIsSaving] = useState(false);
@@ -670,6 +678,7 @@ export function Annex3SheetSuite({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             annexTypeId,
+            ...(presetId ? { presetId } : {}),
             title,
             formData,
             submitDirectly,
@@ -1663,6 +1672,19 @@ export function Annex3SheetSuite({
               </div>
             )}
           </div>
+          <PresetBuiltinExtrasSection
+            presetConfig={presetConfig}
+            formData={formData as unknown as Record<string, unknown>}
+            onCustomFieldChange={(key, value) =>
+              setFormData((prev) => ({
+                ...prev,
+                customFields: {
+                  ...(((prev as unknown as Record<string, unknown>).customFields as Record<string, unknown>) || {}),
+                  [key]: value,
+                },
+              }))
+            }
+          />
         </div>
       )}
 
@@ -1670,7 +1692,19 @@ export function Annex3SheetSuite({
       {/* 3. MODE B: REFINED OFFICIAL DOCUMENT CANVAS (Print-Ready Government Suite) */}
       {/* ========================================================================= */}
       <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
-        <div className="annex-printable-document bg-white text-ink font-sans p-6 sm:p-10 border border-neutral-800 shadow-xl rounded-sm max-w-5xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none">
+        <div className="annex-printable-document relative bg-white text-ink font-sans p-6 sm:p-10 border border-neutral-800 shadow-xl rounded-sm max-w-5xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none">
+          {presetConfig && presetConfig.elements.length > 0 && (
+            <PresetOverlayLayer
+              config={presetConfig}
+              pageId={
+                presetConfig.pages.find((p) => p.tabKey === activeTab)?.id ||
+                presetConfig.pages[0]?.id ||
+                "builtin-a3-tab1"
+              }
+              formData={formData as unknown as Record<string, unknown>}
+              displayMode="view"
+            />
+          )}
           {/* ======================================================================= */}
           {/* TAB 1: FORM 1 – CONSOLIDATED TDP BILLING STATEMENT                      */}
           {/* ======================================================================= */}

@@ -4,6 +4,10 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
+import { AnnexPresetConfig } from "@/types/presets";
+import { applyPresetSettingsToAnnexDefaults } from "@/lib/annex-presets";
+import { PresetBuiltinExtrasSection } from "./preset-builtin-extras";
+import { PresetOverlayLayer } from "./preset-overlay-layer";
 import { Annex9FormData, Annex9GranteePayroll, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { BatchSelectorDropdown } from "./batch-selector-dropdown";
@@ -36,6 +40,8 @@ import {
 
 interface Annex9SheetSuiteProps {
   initialData?: Annex9FormData;
+  presetId?: string;
+  presetConfig?: AnnexPresetConfig;
   documentId?: string;
   documentTitle?: string;
   mode: "create" | "view";
@@ -45,6 +51,8 @@ interface Annex9SheetSuiteProps {
 
 export function Annex9SheetSuite({
   initialData,
+  presetId,
+  presetConfig,
   documentId,
   documentTitle,
   mode,
@@ -86,7 +94,7 @@ export function Annex9SheetSuite({
     }
 
     const defaultCampus = MINSU_CAMPUSES[2]; // Bongabong Campus
-    return {
+    const baseDefaults: Annex9FormData = {
       academicYear: "2024-2025",
       activeSemester: "1",
       campus: defaultCampus.key,
@@ -118,7 +126,12 @@ export function Annex9SheetSuite({
         },
       },
     };
-  }, [initialData]);
+    return applyPresetSettingsToAnnexDefaults(
+      9,
+      baseDefaults as unknown as Record<string, unknown>,
+      presetConfig
+    ) as unknown as Annex9FormData;
+  }, [initialData, presetConfig]);
 
   const [formData, setFormData] = useState<Annex9FormData>(defaultData);
 
@@ -514,6 +527,7 @@ export function Annex9SheetSuite({
         const payload = {
           title: currentTitle,
           annexTypeId: annexTypeId,
+          ...(presetId ? { presetId } : {}),
           formData: formData,
           status: submitDirectly ? "SUBMITTED" : "DRAFT",
         };
@@ -530,9 +544,10 @@ export function Annex9SheetSuite({
         }
 
         const createdDoc = await res.json();
+        const docId = createdDoc.document?.id || createdDoc.id;
         setSaveSuccess(true);
-        if (onSaved) onSaved(createdDoc.id);
-        else router.push(`/documents/${createdDoc.id}`);
+        if (onSaved) onSaved(docId);
+        else router.push(`/documents/${docId}`);
       } else {
         const payload = {
           title: currentTitle,
@@ -1526,6 +1541,19 @@ export function Annex9SheetSuite({
               </div>
             </div>
           )}
+          <PresetBuiltinExtrasSection
+            presetConfig={presetConfig}
+            formData={formData as unknown as Record<string, unknown>}
+            onCustomFieldChange={(key, value) =>
+              setFormData((prev) => ({
+                ...prev,
+                customFields: {
+                  ...(((prev as unknown as Record<string, unknown>).customFields as Record<string, unknown>) || {}),
+                  [key]: value,
+                },
+              }))
+            }
+          />
         </div>
       )}
 
@@ -1534,7 +1562,15 @@ export function Annex9SheetSuite({
         <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
           <div className="annex-printable-document bg-neutral-100 p-4 md:p-8 rounded-2xl flex justify-center overflow-x-auto print:bg-white print:p-0">
             {/* Standard Government Ledger Canvas (Landscape) */}
-            <div className="w-[1150px] bg-white text-black p-8 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight">
+            <div className="relative w-[1150px] bg-white text-black p-8 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight">
+              {presetConfig && presetConfig.elements.length > 0 && (
+                <PresetOverlayLayer
+                  config={presetConfig}
+                  pageId={presetConfig.pages[0]?.id || "builtin-a9-sheet"}
+                  formData={formData as unknown as Record<string, unknown>}
+                  displayMode="view"
+                />
+              )}
               
               {/* Top Tag */}
               <div className="flex justify-end mb-2">

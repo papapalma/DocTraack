@@ -1,6 +1,8 @@
-import { PrismaClient, Role, ApplicationStatus } from "@prisma/client";
+import { PrismaClient, Role, ApplicationStatus, AnnexPresetKind } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { buildDefaultPreset1Config, PRESET_SUPPORTED_ANNEX_NUMBERS } from "../src/lib/annex-presets";
+import { seedDemoQueueConfigAndAssignments } from "./queue-demo-data";
 
 const prisma = new PrismaClient();
 
@@ -141,12 +143,18 @@ async function main() {
   // ---------------------------------------------------------------------------
   console.log("▶ [Step 1/5] Performing clean database refresh (teardown)...");
 
+  await prisma.queueTicketEvent.deleteMany({});
+  await prisma.queueTicket.deleteMany({});
+  await prisma.queueCounter.deleteMany({});
+  await prisma.queueService.deleteMany({});
+  await prisma.queueConfig.deleteMany({});
   await prisma.verificationResult.deleteMany({});
   await prisma.verificationRun.deleteMany({});
   await prisma.comment.deleteMany({});
   await prisma.statusHistory.deleteMany({});
   await prisma.transmittal.deleteMany({});
   await prisma.document.deleteMany({});
+  await prisma.annexPreset.deleteMany({});
   await prisma.application.deleteMany({});
   await prisma.applicantCall.deleteMany({});
   await prisma.notification.deleteMany({});
@@ -354,11 +362,28 @@ async function main() {
   ];
 
   for (const a of annexes) {
-    await prisma.annexType.upsert({
+    const upsertedAnnex = await prisma.annexType.upsert({
       where: { number: a.number },
       update: { name: a.name, creatorRoles: a.creatorRoles, formSchema: a.formSchema },
       create: a,
     });
+
+    if ((PRESET_SUPPORTED_ANNEX_NUMBERS as readonly number[]).includes(a.number)) {
+      await prisma.annexPreset.create({
+        data: {
+          annexTypeId: upsertedAnnex.id,
+          name: `Preset 1 — Official Annex ${a.number} Standard`,
+          description: `Built-in official CHED/UniFAST ${a.name} template and interactive workspace.`,
+          kind: AnnexPresetKind.BUILT_IN,
+          isDefault: true,
+          isActive: true,
+          sortOrder: 1,
+          config: buildDefaultPreset1Config(a.number) as any,
+          createdById: staffUser.id,
+          updatedById: staffUser.id,
+        },
+      });
+    }
   }
 
   // Seed Landing Page Configuration
@@ -562,6 +587,12 @@ async function main() {
     const chunk = allApplications.slice(i, i + CHUNK_SIZE);
     await prisma.application.createMany({ data: chunk });
   }
+
+  console.log("\n▶ [Step 6/6] Seeding Walk-In Queue, 3 Demo Staff & Kiosk defaults...");
+  await seedDemoQueueConfigAndAssignments(prisma, defaultPasswordHash);
+  console.log(
+    "  ✔ Default Kiosk Config, 3 Demo Staff (staff1..3@minsu.edu.ph), 4 TDP Queue Services, and 9 Campus Windows seeded."
+  );
 
   console.log("\n===============================================================================");
   console.log("DATABASE REFRESH & SEEDING COMPLETED SUCCESSFULLY! 🎉");

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { safeJsonObject, sanitizeText } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,9 @@ export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUser();
     const { searchParams } = new URL(req.url);
-    const includeAll = searchParams.get("all") === "true" || user?.role === "STAFF";
+    const canSeeAll = user?.role === "STAFF" || user?.role === "DIRECTOR";
+    const includeAll =
+      canSeeAll && (searchParams.get("all") === "true" || user?.role === "STAFF");
 
     const now = new Date();
     const calls = await prisma.applicantCall.findMany({
@@ -59,7 +62,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
-    const { title, description, batchNumber, startDate, deadline, formSchema } = await req.json();
+    const body = await safeJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
+    }
+    const title = typeof body.title === "string" ? sanitizeText(body.title, 180) : "";
+    const description = typeof body.description === "string" ? sanitizeText(body.description, 2000) : "";
+    const batchNumber = body.batchNumber;
+    const startDate = typeof body.startDate === "string" ? body.startDate : undefined;
+    const deadline = typeof body.deadline === "string" ? body.deadline : undefined;
+    const formSchema = body.formSchema;
 
     if (!title || !deadline) {
       return NextResponse.json(
@@ -68,7 +80,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const parsedBatch = Math.max(1, parseInt(batchNumber, 10) || 1);
+    const parsedBatch = Math.max(1, parseInt(String(batchNumber ?? "1"), 10) || 1);
     const parsedStart = startDate ? new Date(startDate) : new Date();
     const parsedDeadline = new Date(deadline);
 

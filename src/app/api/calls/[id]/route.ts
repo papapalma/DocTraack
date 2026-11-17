@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { safeJsonObject, sanitizeText } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await getCurrentUser();
+    const canSeeInternal =
+      user?.role === "STAFF" || user?.role === "DIRECTOR" || user?.role === "SYSTEM_ADMIN";
     const { id } = await params;
     const now = new Date();
 
@@ -18,12 +22,12 @@ export async function GET(
       include: {
         _count: { select: { applications: true } },
         createdBy: {
-          select: { id: true, name: true, email: true },
+          select: canSeeInternal ? { id: true, name: true, email: true } : { name: true },
         },
       },
     });
 
-    if (!call) {
+    if (!call || (!call.isActive && !canSeeInternal)) {
       return NextResponse.json({ error: "Applicant call not found" }, { status: 404 });
     }
 
@@ -73,7 +77,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Applicant call not found" }, { status: 404 });
     }
 
-    const body = await req.json();
+    const body = await safeJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
+    }
     const updateData: {
       title?: string;
       description?: string | null;
@@ -85,7 +92,7 @@ export async function PATCH(
     } = {};
 
     if (body.title !== undefined) {
-      const trimmed = body.title?.trim();
+      const trimmed = typeof body.title === "string" ? sanitizeText(body.title, 180) : "";
       if (!trimmed) {
         return NextResponse.json({ error: "Call title cannot be empty." }, { status: 400 });
       }
@@ -93,11 +100,12 @@ export async function PATCH(
     }
 
     if (body.description !== undefined) {
-      updateData.description = body.description?.trim() || null;
+      updateData.description =
+        typeof body.description === "string" ? sanitizeText(body.description, 2000) || null : null;
     }
 
     if (body.batchNumber !== undefined) {
-      const parsedBatch = parseInt(body.batchNumber, 10);
+      const parsedBatch = parseInt(String(body.batchNumber), 10);
       if (isNaN(parsedBatch) || parsedBatch < 1) {
         return NextResponse.json({ error: "Batch number must be a positive integer." }, { status: 400 });
       }
@@ -108,6 +116,9 @@ export async function PATCH(
     let effectiveDeadline = existingCall.deadline;
 
     if (body.startDate !== undefined) {
+      if (typeof body.startDate !== "string" && typeof body.startDate !== "number") {
+        return NextResponse.json({ error: "Invalid start date format." }, { status: 400 });
+      }
       const parsedStart = new Date(body.startDate);
       if (isNaN(parsedStart.getTime())) {
         return NextResponse.json({ error: "Invalid start date format." }, { status: 400 });
@@ -117,6 +128,9 @@ export async function PATCH(
     }
 
     if (body.deadline !== undefined) {
+      if (typeof body.deadline !== "string" && typeof body.deadline !== "number") {
+        return NextResponse.json({ error: "Invalid deadline date format." }, { status: 400 });
+      }
       const parsedDeadline = new Date(body.deadline);
       if (isNaN(parsedDeadline.getTime())) {
         return NextResponse.json({ error: "Invalid deadline date format." }, { status: 400 });

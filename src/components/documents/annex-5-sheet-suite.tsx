@@ -4,6 +4,10 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
+import { AnnexPresetConfig } from "@/types/presets";
+import { applyPresetSettingsToAnnexDefaults } from "@/lib/annex-presets";
+import { PresetBuiltinExtrasSection } from "./preset-builtin-extras";
+import { PresetOverlayLayer } from "./preset-overlay-layer";
 import { Annex5FormData, Annex5HeiEntry, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { SortableTh } from "@/components/ui/sortable-header";
@@ -29,6 +33,8 @@ import {
 
 interface Annex5SheetSuiteProps {
   initialData?: Annex5FormData;
+  presetId?: string;
+  presetConfig?: AnnexPresetConfig;
   documentId?: string;
   documentTitle?: string;
   mode: "create" | "view";
@@ -38,6 +44,8 @@ interface Annex5SheetSuiteProps {
 
 export function Annex5SheetSuite({
   initialData,
+  presetId,
+  presetConfig,
   documentId,
   documentTitle,
   mode,
@@ -64,62 +72,62 @@ export function Annex5SheetSuite({
 
   // Default initial values
   const defaultData: Annex5FormData = useMemo(() => {
-    return (
-      initialData || {
-        date: new Date().toLocaleDateString("en-US", {
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        }),
-        memoOrderNumber: "01",
-        memoOrderYear: "2024",
-        term: "2nd",
-        academicYear: "2023-2024",
-        region: "MIMAROPA",
-        totalGrantees: 20,
+    if (initialData) return initialData;
+    const baseDefaults: Annex5FormData = {
+      date: new Date().toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }),
+      memoOrderNumber: "01",
+      memoOrderYear: "2024",
+      term: "2nd",
+      academicYear: "2023-2024",
+      region: "MIMAROPA",
+      totalGrantees: 20,
 
-        heis: [
-          {
-            seq: 1,
-            nameOfHei: "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS",
-            heiType: "SUC",
-            numberTdpGrantees: 20,
-          },
-          {
-            seq: 2,
-            nameOfHei: "ROMBLON STATE UNIVERSITY",
-            heiType: "SUC",
-            numberTdpGrantees: 15,
-          },
-          {
-            seq: 3,
-            nameOfHei: "MARINDUQUE STATE UNIVERSITY",
-            heiType: "SUC",
-            numberTdpGrantees: 15,
-          },
-        ],
-
-        addressee: {
-          name: "ATTY. RYAN L. ESTEVEZ",
-          position: "Officer-in-Charge, Office of the Executive Director IV",
-          office: "UniFAST Secretariat",
-          address: "Ground Floor, Technohub Building E, Ayala Land Commonwealth Avenue, Quezon City",
+      heis: [
+        {
+          seq: 1,
+          nameOfHei: "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS",
+          heiType: "SUC",
+          numberTdpGrantees: 20,
         },
-
-        signatories: {
-          regionalCoordinator: {
-            name: "MR. MICHAEL B. DELOS SANTOS",
-            position: "UniFAST Regional Coordinator",
-          },
-          chedroDirector: {
-            name: "EDNA IMELDA F. LEGAZPI",
-            position: "Director IV",
-            office: "Office of the Director IV, CHEDRO MIMAROPA",
-          },
+        {
+          seq: 2,
+          nameOfHei: "ROMBLON STATE UNIVERSITY",
+          heiType: "SUC",
+          numberTdpGrantees: 15,
         },
-      }
-    );
-  }, [initialData]);
+        {
+          seq: 3,
+          nameOfHei: "MARINDUQUE STATE UNIVERSITY",
+          heiType: "SUC",
+          numberTdpGrantees: 15,
+        },
+      ],
+
+      addressee: {
+        name: "ATTY. RYAN L. ESTEVEZ",
+        position: "Officer-in-Charge, Office of the Executive Director IV",
+        office: "UniFAST Secretariat",
+        address: "Ground Floor, Technohub Building E, Ayala Land Commonwealth Avenue, Quezon City",
+      },
+
+      signatories: {
+        regionalCoordinator: {
+          name: "MR. MICHAEL B. DELOS SANTOS",
+          position: "UniFAST Regional Coordinator",
+        },
+        chedroDirector: {
+          name: "EDNA IMELDA F. LEGAZPI",
+          position: "Director IV",
+          office: "Office of the Director IV, CHEDRO MIMAROPA",
+        },
+      },
+    };
+    return applyPresetSettingsToAnnexDefaults(5, baseDefaults as unknown as Record<string, unknown>, presetConfig) as unknown as Annex5FormData;
+  }, [initialData, presetConfig]);
 
   const [formData, setFormData] = useState<Annex5FormData>(defaultData);
   const [docTitle] = useState(
@@ -330,6 +338,7 @@ export function Annex5SheetSuite({
           body: JSON.stringify({
             title: docTitle,
             annexTypeId,
+            ...(presetId ? { presetId } : {}),
             formData,
             status: submitDirectly ? "SUBMITTED" : "DRAFT",
           }),
@@ -885,6 +894,19 @@ export function Annex5SheetSuite({
               </div>
             </div>
           )}
+          <PresetBuiltinExtrasSection
+            presetConfig={presetConfig}
+            formData={formData as unknown as Record<string, unknown>}
+            onCustomFieldChange={(key, value) =>
+              setFormData((prev) => ({
+                ...prev,
+                customFields: {
+                  ...(((prev as unknown as Record<string, unknown>).customFields as Record<string, unknown>) || {}),
+                  [key]: value,
+                },
+              }))
+            }
+          />
         </div>
       )}
 
@@ -892,7 +914,15 @@ export function Annex5SheetSuite({
       {/* 3. MODE B: REFINED OFFICIAL DOCUMENT CANVAS (annex5_tab1_Certification.png) */}
       {/* ========================================================================= */}
       <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
-        <div className="annex-printable-document bg-white text-ink font-sans p-6 sm:p-12 border border-neutral-800 shadow-xl rounded-sm max-w-4xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none print-container text-[12px] leading-relaxed space-y-6">
+        <div className="annex-printable-document relative bg-white text-ink font-sans p-6 sm:p-12 border border-neutral-800 shadow-xl rounded-sm max-w-4xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none print-container text-[12px] leading-relaxed space-y-6">
+          {presetConfig && presetConfig.elements.length > 0 && (
+            <PresetOverlayLayer
+              config={presetConfig}
+              pageId={presetConfig.pages[0]?.id || "builtin-a5-sheet"}
+              formData={formData as unknown as Record<string, unknown>}
+              displayMode="view"
+            />
+          )}
           {/* Top Form Tag */}
           <div className="text-right font-bold text-xs text-neutral-800">
             TDP Form - Annex 5

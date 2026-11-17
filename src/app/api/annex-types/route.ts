@@ -10,6 +10,9 @@ export async function GET() {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (user.role === "STUDENT") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const annexTypes = await prisma.annexType.findMany({
       orderBy: { number: "asc" },

@@ -6,9 +6,68 @@ import {
   removeLogoFromLibrary,
 } from "@/lib/branding";
 import { logAudit } from "@/lib/audit";
-import { HeaderLogosConfig } from "@/types";
+import {
+  parseSafeAssetUrl,
+  safeJsonObject,
+  sanitizeText,
+} from "@/lib/validation";
+import { HeaderLogosConfig, LogoConfig, LogoLibraryItem, LogoPresetId } from "@/types";
 
 export const dynamic = "force-dynamic";
+
+const ALLOWED_PRESETS = new Set<LogoPresetId>(["ched", "unifast", "minsu", "none"]);
+
+function sanitizeLogo(raw: unknown): LogoConfig | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+  const type = obj.type === "preset" ? "preset" : obj.type === "custom" ? "custom" : null;
+  if (!type) return null;
+  const safeUrl = obj.url !== undefined ? parseSafeAssetUrl(obj.url) : undefined;
+  if (type === "custom" && !safeUrl) return null;
+  const presetId =
+    typeof obj.presetId === "string" && ALLOWED_PRESETS.has(obj.presetId as LogoPresetId)
+      ? (obj.presetId as LogoPresetId)
+      : undefined;
+  return {
+    type,
+    ...(presetId ? { presetId } : {}),
+    ...(safeUrl ? { url: safeUrl } : {}),
+    ...(typeof obj.alt === "string" ? { alt: sanitizeText(obj.alt, 120) } : {}),
+  };
+}
+
+function sanitizeLibrary(raw: unknown): LogoLibraryItem[] | null {
+  if (!Array.isArray(raw)) return null;
+  const clean: LogoLibraryItem[] = [];
+  for (const item of raw.slice(0, 100)) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const obj = item as Record<string, unknown>;
+    const safeUrl = parseSafeAssetUrl(obj.url);
+    const id = typeof obj.id === "string" ? sanitizeText(obj.id, 80) : "";
+    const name = typeof obj.name === "string" ? sanitizeText(obj.name, 120) : "";
+    if (!safeUrl || !id || !name) continue;
+    const pos =
+      obj.positionPreference === "left" ||
+      obj.positionPreference === "right" ||
+      obj.positionPreference === "both"
+        ? obj.positionPreference
+        : undefined;
+    clean.push({
+      id,
+      name,
+      url: safeUrl,
+      uploadedAt:
+        typeof obj.uploadedAt === "string"
+          ? sanitizeText(obj.uploadedAt, 40)
+          : new Date().toISOString(),
+      ...(typeof obj.originalName === "string"
+        ? { originalName: sanitizeText(obj.originalName, 120) }
+        : {}),
+      ...(pos ? { positionPreference: pos } : {}),
+    });
+  }
+  return clean;
+}
 
 export async function GET() {
   try {
@@ -41,17 +100,28 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const body: HeaderLogosConfig = await req.json();
-
+    const body = await safeJsonObject(req);
     if (!body || (!body.leftLogo && !body.rightLogo && !body.library)) {
       return NextResponse.json({ error: "Invalid branding configuration" }, { status: 400 });
     }
 
+    const safeLeft = body.leftLogo !== undefined ? sanitizeLogo(body.leftLogo) : undefined;
+    const safeRight = body.rightLogo !== undefined ? sanitizeLogo(body.rightLogo) : undefined;
+    const safeLib = body.library !== undefined ? sanitizeLibrary(body.library) : undefined;
+
+    if (
+      (body.leftLogo !== undefined && !safeLeft) ||
+      (body.rightLogo !== undefined && !safeRight) ||
+      (body.library !== undefined && !safeLib)
+    ) {
+      return NextResponse.json({ error: "Invalid logo payload or disallowed URL" }, { status: 400 });
+    }
+
     const current = await getGlobalBranding();
     const updated: HeaderLogosConfig = {
-      leftLogo: body.leftLogo || current.leftLogo,
-      rightLogo: body.rightLogo || current.rightLogo,
-      library: body.library || current.library || [],
+      leftLogo: safeLeft || current.leftLogo,
+      rightLogo: safeRight || current.rightLogo,
+      library: safeLib || current.library || [],
     };
 
     const saved = await saveGlobalBranding(updated);

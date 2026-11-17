@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
+import { writeAuditTx } from "@/lib/audit";
 import { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -42,14 +42,16 @@ export async function GET(
     }
 
     const { searchParams } = new URL(req.url);
-    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const parsedPage = Number.parseInt(searchParams.get("page") || "1", 10);
+    const parsedPageSize = Number.parseInt(searchParams.get("pageSize") || "25", 10);
+    const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
     const pageSize = Math.min(
       100,
-      Math.max(1, parseInt(searchParams.get("pageSize") || "25", 10))
+      Number.isFinite(parsedPageSize) && parsedPageSize > 0 ? parsedPageSize : 25
     );
     const statusFilter = searchParams.get("status");
     const schoolFilter = searchParams.get("school");
-    const searchQuery = (searchParams.get("search") || "").trim();
+    const searchQuery = (searchParams.get("search") || "").trim().slice(0, 100);
 
     const whereClause: any = { runId: id };
 
@@ -149,22 +151,25 @@ export async function DELETE(
       );
     }
 
-    // Cascade delete run and results
-    await prisma.verificationRun.delete({
-      where: { id },
-    });
+    // Cascade delete run and results + write audit log atomically
+    await prisma.$transaction(async (tx) => {
+      await tx.verificationRun.delete({
+        where: { id },
+      });
 
-    await logAudit({
-      actorId: user.id,
-      action: "VERIFICATION_RUN_PURGED",
-      entity: "VerificationRun",
-      entityId: id,
-      details: {
-        title: run.title,
-        chedFileName: run.chedFileName,
-        registrarFileName: run.registrarFileName,
-        purgedAt: new Date().toISOString(),
-      },
+      await writeAuditTx(tx, {
+        actorId: user.id,
+        action: "VERIFICATION_RUN_PURGED",
+        entity: "VerificationRun",
+        entityId: id,
+        req,
+        details: {
+          title: run.title,
+          chedFileName: run.chedFileName,
+          registrarFileName: run.registrarFileName,
+          purgedAt: new Date().toISOString(),
+        },
+      });
     });
 
     return NextResponse.json({

@@ -18,13 +18,13 @@ export async function GET() {
       { status: 200 }
     );
   } catch (error) {
+    console.error("Health check database error:", error);
     return NextResponse.json(
       {
         status: "unhealthy",
         timestamp: new Date().toISOString(),
         service: "minsu-doctrack",
         database: "disconnected",
-        error: error instanceof Error ? error.message : "Database connection failed",
       },
       { status: 503 }
     );

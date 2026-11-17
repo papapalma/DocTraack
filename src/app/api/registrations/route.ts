@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, createSession, getCurrentUser } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
+import { hashPassword, getAuthCookieFlags, getCurrentUser } from "@/lib/auth";
+import { writeAuditTx } from "@/lib/audit";
+import { TWO_FA_SETUP_COOKIE_NAME, signScopedToken } from "@/lib/edge-session";
+import { encryptSecret } from "@/lib/secret-box";
 import { Role, ApplicationStatus } from "@prisma/client";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import {
@@ -14,6 +16,7 @@ import {
   isValidEmail,
   validatePassword,
   sanitizeText,
+  safeJsonObject,
   isValidPhilippineMobile,
   normalizePhilippineMobile,
   isValidStudentId,
@@ -180,6 +183,7 @@ export async function GET(req: NextRequest) {
         student: { select: { id: true, name: true, email: true, studentProfile: true } },
       },
       orderBy: { submittedAt: "desc" },
+      take: 1000,
     });
 
     // Harmonize applications data and auto-repair any existing records with missing profile fields
@@ -278,46 +282,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
-    const {
-      email,
-      password,
-      // Identification & Name
-      student_id,
-      last_name,
-      given_name,
-      ext_name,
-      middle_name,
-      // Profile
-      gender,
-      birthdate,
-      course_degree,
-      year_level,
-      // Address
-      street_barangay,
-      town_city,
-      province,
-      zipcode,
-      // Contact
-      contact_number,
-      // HEI
-      hei_uii,
-      hei_name,
-      hei_campus,
-      // Parents
-      father_last_name,
-      father_given_name,
-      father_middle_name,
-      father_contact_number,
-      father_email,
-      mother_last_name,
-      mother_given_name,
-      mother_middle_name,
-      mother_contact_number,
-      mother_email,
-      parent_contact_number,
-      parent_email,
-    } = body;
+    const body = await safeJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
+    }
+    const str = (key: string): string => (typeof body[key] === "string" ? (body[key] as string) : "");
+    const email = str("email");
+    const password = str("password");
+    const student_id = str("student_id");
+    const last_name = str("last_name");
+    const given_name = str("given_name");
+    const ext_name = str("ext_name");
+    const middle_name = str("middle_name");
+    const gender = str("gender");
+    const birthdate = str("birthdate");
+    const course_degree = str("course_degree");
+    const year_level = str("year_level");
+    const street_barangay = str("street_barangay");
+    const town_city = str("town_city");
+    const province = str("province");
+    const zipcode = str("zipcode");
+    const contact_number = str("contact_number");
+    const hei_uii = str("hei_uii");
+    const hei_name = str("hei_name");
+    const hei_campus = str("hei_campus");
+    const father_last_name = str("father_last_name");
+    const father_given_name = str("father_given_name");
+    const father_middle_name = str("father_middle_name");
+    const father_contact_number = str("father_contact_number");
+    const father_email = str("father_email");
+    const mother_last_name = str("mother_last_name");
+    const mother_given_name = str("mother_given_name");
+    const mother_middle_name = str("mother_middle_name");
+    const mother_contact_number = str("mother_contact_number");
+    const mother_email = str("mother_email");
+    const parent_contact_number = str("parent_contact_number");
+    const parent_email = str("parent_email");
 
     // Validate account credentials
     if (!email || !password) {
@@ -356,29 +356,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Security & Anti-Impersonation: Ensure Student ID is not already claimed
-    const existingWithStudentId = await prisma.application.findFirst({
-      where: {
-        OR: [
-          {
-            formData: {
-              path: ["student_id"],
-              equals: cleanStudentId,
-            },
-          },
-          {
-            formData: {
-              path: ["student_id_number"],
-              equals: cleanStudentId,
-            },
-          },
-        ],
-      },
-    });
-    if (existingWithStudentId) {
+    // Security & Anti-Impersonation: Ensure Student ID is not already claimed in Applications or User profiles
+    const [existingWithStudentId, existingProfileWithStudentId] = await Promise.all([
+      prisma.application.findFirst({
+        where: {
+          OR: [
+            { formData: { path: ["student_id"], equals: cleanStudentId } },
+            { formData: { path: ["student_id_number"], equals: cleanStudentId } },
+          ],
+        },
+        select: { id: true },
+      }),
+      prisma.user.findFirst({
+        where: {
+          OR: [
+            { studentProfile: { path: ["student_id"], equals: cleanStudentId } },
+            { studentProfile: { path: ["student_id_number"], equals: cleanStudentId } },
+          ],
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (existingWithStudentId || existingProfileWithStudentId) {
       return NextResponse.json(
         {
-          error: `The Student ID "${cleanStudentId}" is already registered to an existing account. Please sign in or contact the TDP Coordinator if you believe this is an error.`,
+          error: "If you already have an account with this email or Student ID, please sign in instead.",
         },
         { status: 409 }
       );
@@ -431,19 +433,25 @@ export async function POST(req: NextRequest) {
 
     if (existingUser) {
       return NextResponse.json(
-        { error: "An account with this email address already exists. Please sign in instead." },
+        { error: "If you already have an account with this email or Student ID, please sign in instead." },
         { status: 409 }
       );
     }
 
     const passwordHash = await hashPassword(password);
-    const fullName = `${given_name.trim()} ${middle_name ? middle_name.trim() + " " : ""}${last_name.trim()}${ext_name ? " " + ext_name.trim() : ""}`;
+    const fullName = sanitizeText(
+      `${given_name.trim()} ${middle_name ? middle_name.trim() + " " : ""}${last_name.trim()}${ext_name ? " " + ext_name.trim() : ""}`,
+      120
+    );
 
     // 1. Generate Microsoft Authenticator TOTP Secret & QR Code
     const totpSecret = generateBase32Secret(20);
+    const encryptedTotpSecret = encryptSecret(totpSecret);
     const formattedSecret = formatSecretForDisplay(totpSecret);
     const otpauthUrl = generateOTPAuthUrl(normalizedEmail, totpSecret);
     const qrSvg = generateQRCodeSVG(otpauthUrl);
+    const safeGender = ["M", "F", "Male", "Female"].includes(gender.trim()) ? gender.trim() : "M";
+    const safeYearLevel = sanitizeText(year_level || "1", 20);
 
     // 2. Prepare standardized Annex 1 payload with harmonized dual-keys
     const annex1FormData = {
@@ -453,11 +461,11 @@ export async function POST(req: NextRequest) {
       given_name: sanitizeText(given_name, 60),
       ext_name: ext_name ? sanitizeText(ext_name, 20) : "",
       middle_name: middle_name ? sanitizeText(middle_name, 60) : "",
-      gender: gender || "M",
-      birthdate: birthdate || "",
+      gender: safeGender,
+      birthdate: sanitizeText(birthdate, 20),
       course_degree: sanitizeText(course_degree, 120),
       program_course: sanitizeText(course_degree, 120),
-      year_level: year_level || "1",
+      year_level: safeYearLevel,
       street_barangay: sanitizeText(street_barangay, 120),
       town_city: sanitizeText(town_city, 80),
       province: sanitizeText(province, 80),
@@ -482,30 +490,41 @@ export async function POST(req: NextRequest) {
       parent_email: parent_email ? sanitizeText(parent_email, 80) : "",
     };
 
-    // 3. Create the Student User (Without auto-applying to a call)
-    const newUser = await prisma.user.create({
-      data: {
-        name: fullName,
-        email: normalizedEmail,
-        passwordHash,
-        role: Role.STUDENT,
-        studentProfile: annex1FormData,
-        twoFactorSecret: totpSecret,
-        twoFactorEnabled: false,
-        authenticatorLocked: false,
-      },
+    // 3. Create the Student User & Audit Log atomically (Without auto-applying to a call)
+    const newUser = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          name: fullName,
+          email: normalizedEmail,
+          passwordHash,
+          role: Role.STUDENT,
+          studentProfile: annex1FormData,
+          twoFactorSecret: encryptedTotpSecret,
+          twoFactorEnabled: false,
+          authenticatorLocked: false,
+        },
+      });
+
+      await writeAuditTx(tx, {
+        actorId: created.id,
+        action: "STUDENT_REGISTRATION",
+        entity: "user",
+        entityId: created.id,
+        req,
+        details: { email: created.email, studentId: cleanStudentId },
+      });
+
+      return created;
     });
 
-    // 4. Audit Log
-    await logAudit({
-      actorId: newUser.id,
-      action: "STUDENT_REGISTRATION",
-      entity: "user",
-      entityId: newUser.id,
-      details: { email: newUser.email, studentId: cleanStudentId },
-    });
+    const setupExpires = new Date(Date.now() + 15 * 60 * 1000);
+    const setupToken = await signScopedToken(
+      { userId: newUser.id },
+      "initial_2fa_lock",
+      15 * 60 * 1000
+    );
 
-    return NextResponse.json(
+    const res = NextResponse.json(
       {
         message: "Registration successful. Please lock your account with Microsoft Authenticator.",
         user: {
@@ -521,6 +540,9 @@ export async function POST(req: NextRequest) {
       },
       { status: 201 }
     );
+    res.cookies.set(TWO_FA_SETUP_COOKIE_NAME, setupToken, getAuthCookieFlags(setupExpires));
+    res.headers.set("Cache-Control", "no-store, private");
+    return res;
   } catch (error) {
     console.error("Continuous registration error:", error);
     return NextResponse.json(
@@ -544,39 +566,47 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
-    const {
-      student_id,
-      student_id_number,
-      given_name,
-      last_name,
-      middle_name,
-      ext_name,
-      gender,
-      birthdate,
-      campus,
-      hei_campus,
-      course_degree,
-      program_course,
-      year_level,
-      street_barangay,
-      town_city,
-      province,
-      zipcode,
-      contact_number,
-      father_last_name,
-      father_given_name,
-      father_middle_name,
-      father_contact_number,
-      father_email,
-      mother_last_name,
-      mother_given_name,
-      mother_middle_name,
-      mother_contact_number,
-      mother_email,
-      family_monthly_income,
-      latest_gwa,
-    } = body;
+    const body = await safeJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
+    }
+    const optStr = (key: string): string | undefined =>
+      typeof body[key] === "string" ? (body[key] as string) : undefined;
+    const optVal = (key: string): string | number | undefined =>
+      typeof body[key] === "string" || typeof body[key] === "number"
+        ? (body[key] as string | number)
+        : undefined;
+
+    const student_id = optStr("student_id");
+    const student_id_number = optStr("student_id_number");
+    const given_name = optStr("given_name");
+    const last_name = optStr("last_name");
+    const middle_name = optStr("middle_name");
+    const ext_name = optStr("ext_name");
+    const gender = optStr("gender");
+    const birthdate = optStr("birthdate");
+    const campus = optStr("campus");
+    const hei_campus = optStr("hei_campus");
+    const course_degree = optStr("course_degree");
+    const program_course = optStr("program_course");
+    const year_level = optStr("year_level");
+    const street_barangay = optStr("street_barangay");
+    const town_city = optStr("town_city");
+    const province = optStr("province");
+    const zipcode = optStr("zipcode");
+    const contact_number = optStr("contact_number");
+    const father_last_name = optStr("father_last_name");
+    const father_given_name = optStr("father_given_name");
+    const father_middle_name = optStr("father_middle_name");
+    const father_contact_number = optStr("father_contact_number");
+    const father_email = optStr("father_email");
+    const mother_last_name = optStr("mother_last_name");
+    const mother_given_name = optStr("mother_given_name");
+    const mother_middle_name = optStr("mother_middle_name");
+    const mother_contact_number = optStr("mother_contact_number");
+    const mother_email = optStr("mother_email");
+    const family_monthly_income = optVal("family_monthly_income");
+    const latest_gwa = optVal("latest_gwa");
 
     // Check if any application for this student is already ACCEPTED
     const acceptedApp = await prisma.application.findFirst({
@@ -616,12 +646,14 @@ export async function PUT(req: NextRequest) {
     const existingLastName = (prevFormData.last_name || "").trim().toUpperCase();
     const existingGivenName = (prevFormData.given_name || "").trim().toUpperCase();
     const existingMiddleName = (prevFormData.middle_name || "").trim().toUpperCase();
+    const existingExtName = (prevFormData.ext_name || "").trim().toUpperCase();
 
     if (isLockedStudentId) {
       if (
-        (last_name && existingLastName && last_name.trim().toUpperCase() !== existingLastName) ||
-        (given_name && existingGivenName && given_name.trim().toUpperCase() !== existingGivenName) ||
-        (middle_name && existingMiddleName && middle_name.trim().toUpperCase() !== existingMiddleName)
+        (last_name !== undefined && existingLastName && last_name.trim().toUpperCase() !== existingLastName) ||
+        (given_name !== undefined && existingGivenName && given_name.trim().toUpperCase() !== existingGivenName) ||
+        (middle_name !== undefined && middle_name.trim().toUpperCase() !== existingMiddleName) ||
+        (ext_name !== undefined && ext_name.trim().toUpperCase() !== existingExtName)
       ) {
         return NextResponse.json(
           {
@@ -635,8 +667,8 @@ export async function PUT(req: NextRequest) {
 
     // Determine target Student ID
     let finalStudentId = existingStudentId;
-    const incomingRawId = student_id || student_id_number;
-    if (incomingRawId) {
+    const incomingRawId = student_id ?? student_id_number;
+    if (incomingRawId !== undefined) {
       const incomingId = sanitizeText(incomingRawId, 30).trim().toUpperCase();
       if (isLockedStudentId && existingStudentId && incomingId !== existingStudentId) {
         return NextResponse.json(
@@ -658,18 +690,31 @@ export async function PUT(req: NextRequest) {
         );
       }
 
-      // Check anti-impersonation collision against other users
-      const otherClaimed = await prisma.application.findFirst({
-        where: {
-          NOT: { studentId: user.id },
-          OR: [
-            { formData: { path: ["student_id"], equals: incomingId } },
-            { formData: { path: ["student_id_number"], equals: incomingId } },
-          ],
-        },
-      });
+      // Check anti-impersonation collision against other users & applications
+      const [otherAppClaimed, otherUserClaimed] = await Promise.all([
+        prisma.application.findFirst({
+          where: {
+            NOT: { studentId: user.id },
+            OR: [
+              { formData: { path: ["student_id"], equals: incomingId } },
+              { formData: { path: ["student_id_number"], equals: incomingId } },
+            ],
+          },
+          select: { id: true },
+        }),
+        prisma.user.findFirst({
+          where: {
+            NOT: { id: user.id },
+            OR: [
+              { studentProfile: { path: ["student_id"], equals: incomingId } },
+              { studentProfile: { path: ["student_id_number"], equals: incomingId } },
+            ],
+          },
+          select: { id: true },
+        }),
+      ]);
 
-      if (otherClaimed) {
+      if (otherAppClaimed || otherUserClaimed) {
         return NextResponse.json(
           { error: `The Student ID "${incomingId}" is already registered to another account.` },
           { status: 409 }
@@ -677,6 +722,16 @@ export async function PUT(req: NextRequest) {
       }
 
       finalStudentId = incomingId;
+    }
+
+    if (birthdate !== undefined && birthdate !== "") {
+      const ageCheck = isMinimumAge(birthdate, 15);
+      if (!ageCheck.valid) {
+        return NextResponse.json(
+          { error: ageCheck.message || "Applicant must be at least 15 years old." },
+          { status: 400 }
+        );
+      }
     }
 
     // Name validation
@@ -781,11 +836,11 @@ export async function PUT(req: NextRequest) {
       last_name: cleanLast,
       middle_name: cleanMiddle,
       ext_name: cleanExt,
-      gender: gender || prevFormData.gender || "M",
-      birthdate: birthdate !== undefined ? birthdate : prevFormData.birthdate || "",
+      gender: gender && ["M", "F", "Male", "Female"].includes(gender.trim()) ? gender.trim() : prevFormData.gender || "M",
+      birthdate: birthdate !== undefined ? sanitizeText(birthdate, 20) : prevFormData.birthdate || "",
       course_degree: finalCourse,
       program_course: finalCourse,
-      year_level: year_level || prevFormData.year_level || "1",
+      year_level: year_level !== undefined ? sanitizeText(year_level, 20) : prevFormData.year_level || "1",
       campus: finalCampus,
       hei_campus: finalCampus,
       hei_name: prevFormData.hei_name || "Mindoro State University",
@@ -852,36 +907,29 @@ export async function PUT(req: NextRequest) {
       latest_gwa: finalGwa,
     };
 
-    const userUpdateData: any = {
+    const userUpdateData: { studentProfile: typeof updatedFormData; name?: string } = {
       studentProfile: updatedFormData,
     };
-    if (newFullName && newFullName.length >= 2) {
-      userUpdateData.name = newFullName;
+    if (!isLockedStudentId && newFullName && newFullName.length >= 2) {
+      userUpdateData.name = sanitizeText(newFullName, 120);
     }
 
-    let targetApplicationId = latestApp?.id;
+    const targetApplicationId = await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: userUpdateData,
+      });
 
-    if (latestApp) {
-      await prisma.$transaction([
-        prisma.user.update({
-          where: { id: user.id },
-          data: userUpdateData,
-        }),
-        prisma.application.update({
+      let appId = latestApp?.id;
+      if (latestApp) {
+        await tx.application.update({
           where: { id: latestApp.id },
           data: { formData: updatedFormData },
-        }),
-      ]);
-    } else {
-      // If student never had an application, create a base registration record
-      const now = new Date();
-      const trackingCode = `MINSU-TDP-${now.getFullYear()}-B1-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
-      const [_, newApp] = await prisma.$transaction([
-        prisma.user.update({
-          where: { id: user.id },
-          data: userUpdateData,
-        }),
-        prisma.application.create({
+        });
+      } else {
+        const now = new Date();
+        const trackingCode = `MINSU-TDP-${now.getFullYear()}-B1-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+        const newApp = await tx.application.create({
           data: {
             studentId: user.id,
             batchNumber: 1,
@@ -889,21 +937,26 @@ export async function PUT(req: NextRequest) {
             trackingCode,
             status: ApplicationStatus.SUBMITTED,
           },
-        }),
-      ]);
-      targetApplicationId = newApp.id;
-    }
+        });
+        appId = newApp.id;
+      }
 
-    await logAudit({
-      actorId: user.id,
-      action: "STUDENT_PROFILE_UPDATED",
-      entity: "application",
-      entityId: targetApplicationId || user.id,
-      details: {
-        studentId: finalStudentId,
-        updatedFields: Object.keys(body),
-      },
+      await writeAuditTx(tx, {
+        actorId: user.id,
+        action: "STUDENT_PROFILE_UPDATED",
+        entity: "application",
+        entityId: appId || user.id,
+        req,
+        details: {
+          studentId: finalStudentId,
+          updatedFields: Object.keys(body),
+        },
+      });
+
+      return appId;
     });
+
+    void targetApplicationId;
 
     return NextResponse.json({
       message: "Profile updated successfully",

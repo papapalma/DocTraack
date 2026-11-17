@@ -21,6 +21,9 @@ export async function GET(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (user.role === "STUDENT") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     // 1. Fetch all calls to understand configured batches
     const calls = await prisma.applicantCall.findMany({

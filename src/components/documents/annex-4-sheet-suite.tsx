@@ -4,6 +4,10 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
+import { AnnexPresetConfig } from "@/types/presets";
+import { applyPresetSettingsToAnnexDefaults } from "@/lib/annex-presets";
+import { PresetBuiltinExtrasSection } from "./preset-builtin-extras";
+import { PresetOverlayLayer } from "./preset-overlay-layer";
 import { Annex4FormData, Annex4Grantee, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { BatchSelectorDropdown } from "./batch-selector-dropdown";
@@ -34,6 +38,8 @@ import {
 
 interface Annex4SheetSuiteProps {
   initialData?: Annex4FormData;
+  presetId?: string;
+  presetConfig?: AnnexPresetConfig;
   documentId?: string;
   documentTitle?: string;
   mode: "create" | "view";
@@ -43,6 +49,8 @@ interface Annex4SheetSuiteProps {
 
 export function Annex4SheetSuite({
   initialData,
+  presetId,
+  presetConfig,
   documentId,
   documentTitle,
   mode,
@@ -78,71 +86,71 @@ export function Annex4SheetSuite({
 
   // Default initial values
   const defaultData: Annex4FormData = useMemo(() => {
-    return (
-      initialData || {
-        regionCode: "MIMAROPA",
-        heiCode: "MINSU",
-        heiName: "Mindoro State University - Bongabong Campus",
-        heiAddress: "Labasan, Bongabong, Oriental Mindoro",
-        academicYear: "2023-2024",
-        termCode: "2",
-        trancheNumber: "1",
-        batchNumber: "1",
-        referenceNumber: "MIMAROPA-MINSU-2023-2-1:1",
-        billingDate: new Date().toLocaleDateString("en-US", {
+    if (initialData) return initialData;
+    const baseDefaults: Annex4FormData = {
+      regionCode: "MIMAROPA",
+      heiCode: "MINSU",
+      heiName: "Mindoro State University - Bongabong Campus",
+      heiAddress: "Labasan, Bongabong, Oriental Mindoro",
+      academicYear: "2023-2024",
+      termCode: "2",
+      trancheNumber: "1",
+      batchNumber: "1",
+      referenceNumber: "MIMAROPA-MINSU-2023-2-1:1",
+      billingDate: new Date().toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }),
+      isLastBatch: false,
+      campus: "Bongabong Campus",
+
+      totalGrantees: 0,
+      stipendPerGrantee: 7500,
+      stipendTier: "7500",
+      totalSubsidy: 0,
+      managementFeeRate: 0.005,
+      managementFeeAmount: 0,
+      grandTotalBilling: 0,
+
+      grantees: [],
+
+      jmcNumber: "04",
+      jmcSeries: "2022",
+
+      signatories: {
+        accountingHead: {
+          name: "MA. ELENA L. BAUTISTA, CPA",
+          position: "Chief Accountant / Authorized Representative",
+        },
+        president: {
+          name: "DR. EMMANUEL C. MACALALAD",
+          position: "University President",
+        },
+        tesFocalPerson: {
+          name: "ENGR. EDWIN C. CAYETANO",
+          position: "HEI TES Focal Person / Scholarship Coordinator",
+        },
+        registrar: {
+          name: "ATTY. ROWENA S. DE GUZMAN",
+          position: "University Registrar",
+        },
+      },
+      notary: {
+        docNo: "___",
+        pageNo: "___",
+        bookNo: "___",
+        series: "2024",
+        issuedAt: "Bongabong, Oriental Mindoro",
+        issuedOn: new Date().toLocaleDateString("en-US", {
           month: "long",
           day: "numeric",
           year: "numeric",
         }),
-        isLastBatch: false,
-        campus: "Bongabong Campus",
-
-        totalGrantees: 0,
-        stipendPerGrantee: 7500,
-        stipendTier: "7500",
-        totalSubsidy: 0,
-        managementFeeRate: 0.005,
-        managementFeeAmount: 0,
-        grandTotalBilling: 0,
-
-        grantees: [],
-
-        jmcNumber: "04",
-        jmcSeries: "2022",
-
-        signatories: {
-          accountingHead: {
-            name: "MA. ELENA L. BAUTISTA, CPA",
-            position: "Chief Accountant / Authorized Representative",
-          },
-          president: {
-            name: "DR. EMMANUEL C. MACALALAD",
-            position: "University President",
-          },
-          tesFocalPerson: {
-            name: "ENGR. EDWIN C. CAYETANO",
-            position: "HEI TES Focal Person / Scholarship Coordinator",
-          },
-          registrar: {
-            name: "ATTY. ROWENA S. DE GUZMAN",
-            position: "University Registrar",
-          },
-        },
-        notary: {
-          docNo: "___",
-          pageNo: "___",
-          bookNo: "___",
-          series: "2024",
-          issuedAt: "Bongabong, Oriental Mindoro",
-          issuedOn: new Date().toLocaleDateString("en-US", {
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-          }),
-        },
-      }
-    );
-  }, [initialData]);
+      },
+    };
+    return applyPresetSettingsToAnnexDefaults(4, baseDefaults as unknown as Record<string, unknown>, presetConfig) as unknown as Annex4FormData;
+  }, [initialData, presetConfig]);
 
   const [formData, setFormData] = useState<Annex4FormData>(defaultData);
   const [docTitle, setDocTitle] = useState(
@@ -495,6 +503,7 @@ export function Annex4SheetSuite({
           body: JSON.stringify({
             title: docTitle,
             annexTypeId,
+            ...(presetId ? { presetId } : {}),
             formData,
             status: submitDirectly ? "SUBMITTED" : "DRAFT",
           }),
@@ -1390,6 +1399,19 @@ export function Annex4SheetSuite({
               </div>
             </div>
           )}
+          <PresetBuiltinExtrasSection
+            presetConfig={presetConfig}
+            formData={formData as unknown as Record<string, unknown>}
+            onCustomFieldChange={(key, value) =>
+              setFormData((prev) => ({
+                ...prev,
+                customFields: {
+                  ...(((prev as unknown as Record<string, unknown>).customFields as Record<string, unknown>) || {}),
+                  [key]: value,
+                },
+              }))
+            }
+          />
         </div>
       )}
 
@@ -1397,7 +1419,19 @@ export function Annex4SheetSuite({
       {/* 3. MODE B: REFINED OFFICIAL DOCUMENT CANVAS (Print-Ready Government Suite)*/}
       {/* ========================================================================= */}
       <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
-        <div className="annex-printable-document bg-white text-ink font-sans p-6 sm:p-10 border border-neutral-800 shadow-xl rounded-sm max-w-5xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none print-container">
+        <div className="annex-printable-document relative bg-white text-ink font-sans p-6 sm:p-10 border border-neutral-800 shadow-xl rounded-sm max-w-5xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none print-container">
+          {presetConfig && presetConfig.elements.length > 0 && (
+            <PresetOverlayLayer
+              config={presetConfig}
+              pageId={
+                presetConfig.pages.find((p) => p.tabKey === activeTab)?.id ||
+                presetConfig.pages[0]?.id ||
+                "builtin-a4-tab1"
+              }
+              formData={formData as unknown as Record<string, unknown>}
+              displayMode="view"
+            />
+          )}
           {/* ======================================================================= */}
           {/* TAB 1: FORM 1 – CONSOLIDATED TDP BILLING STATEMENT                      */}
           {/* ======================================================================= */}

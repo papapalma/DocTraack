@@ -4,6 +4,10 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
+import { AnnexPresetConfig } from "@/types/presets";
+import { applyPresetSettingsToAnnexDefaults } from "@/lib/annex-presets";
+import { PresetBuiltinExtrasSection } from "./preset-builtin-extras";
+import { PresetOverlayLayer } from "./preset-overlay-layer";
 import { Annex6FormData, Annex6ManagementFeeExpenses, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { MINSU_CAMPUSES, getMinsuCampusConfig } from "@/lib/campus-constants";
@@ -26,6 +30,8 @@ import {
 
 interface Annex6SheetSuiteProps {
   initialData?: Annex6FormData;
+  presetId?: string;
+  presetConfig?: AnnexPresetConfig;
   documentId?: string;
   documentTitle?: string;
   mode: "create" | "view";
@@ -35,6 +41,8 @@ interface Annex6SheetSuiteProps {
 
 export function Annex6SheetSuite({
   initialData,
+  presetId,
+  presetConfig,
   documentId,
   documentTitle,
   mode,
@@ -61,52 +69,52 @@ export function Annex6SheetSuite({
 
   // Default initial values
   const defaultData: Annex6FormData = useMemo(() => {
-    return (
-      initialData || {
-        heiName: "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS",
-        heiAddress: "Labasan, Bongabong, Oriental Mindoro",
-        coveredPeriod: "January 1, 2024 to June 30, 2024",
+    if (initialData) return initialData;
+    const baseDefaults: Annex6FormData = {
+      heiName: "MINDORO STATE UNIVERSITY - BONGABONG CAMPUS",
+      heiAddress: "Labasan, Bongabong, Oriental Mindoro",
+      coveredPeriod: "January 1, 2024 to June 30, 2024",
 
-        checkNumber: "LBP-2024-009841",
-        checkDate: "March 15, 2024",
-        totalStipendReceived: 750000,
-        totalAscReceived: 3750,
-        totalFundsReceived: 753750,
+      checkNumber: "LBP-2024-009841",
+      checkDate: "March 15, 2024",
+      totalStipendReceived: 750000,
+      totalAscReceived: 3750,
+      totalFundsReceived: 753750,
 
-        totalStipendUtilized: 750000,
-        managementFeeExpenses: {
-          officeSupplies: 1200,
-          communication: 650,
-          travelingLocal: 800,
-          representation: 500,
-          otherProfessionalServices: 400,
-          legalServices: 100,
-          otherExpenses: 100,
+      totalStipendUtilized: 750000,
+      managementFeeExpenses: {
+        officeSupplies: 1200,
+        communication: 650,
+        travelingLocal: 800,
+        representation: 500,
+        otherProfessionalServices: 400,
+        legalServices: 100,
+        otherExpenses: 100,
+      },
+      totalManagementFeeUtilized: 3750,
+      totalFundsUtilized: 753750,
+
+      balance: 0,
+      utilizationRate: 100,
+
+      signatories: {
+        chiefAccountant: {
+          name: "MA. ELENA L. BAUTISTA, CPA",
+          position: "Chief Accountant",
         },
-        totalManagementFeeUtilized: 3750,
-        totalFundsUtilized: 753750,
-
-        balance: 0,
-        utilizationRate: 100,
-
-        signatories: {
-          chiefAccountant: {
-            name: "MA. ELENA L. BAUTISTA, CPA",
-            position: "Chief Accountant",
-          },
-          president: {
-            name: "DR. EMMANUEL C. MACALALAD",
-            position: "University President",
-          },
-          auditor: {
-            name: "ATTY. CRISTINA M. MERCADO",
-            position: "State Auditor IV / COA Audit Team Leader",
-            agency: "Commission on Audit (COA) - MinSU",
-          },
+        president: {
+          name: "DR. EMMANUEL C. MACALALAD",
+          position: "University President",
         },
-      }
-    );
-  }, [initialData]);
+        auditor: {
+          name: "ATTY. CRISTINA M. MERCADO",
+          position: "State Auditor IV / COA Audit Team Leader",
+          agency: "Commission on Audit (COA) - MinSU",
+        },
+      },
+    };
+    return applyPresetSettingsToAnnexDefaults(6, baseDefaults as unknown as Record<string, unknown>, presetConfig) as unknown as Annex6FormData;
+  }, [initialData, presetConfig]);
 
   const [formData, setFormData] = useState<Annex6FormData>(defaultData);
   const [docTitle] = useState(
@@ -262,6 +270,7 @@ export function Annex6SheetSuite({
           body: JSON.stringify({
             title: docTitle,
             annexTypeId,
+            ...(presetId ? { presetId } : {}),
             formData,
             status: submitDirectly ? "SUBMITTED" : "DRAFT",
           }),
@@ -879,6 +888,19 @@ export function Annex6SheetSuite({
               </div>
             </div>
           )}
+          <PresetBuiltinExtrasSection
+            presetConfig={presetConfig}
+            formData={formData as unknown as Record<string, unknown>}
+            onCustomFieldChange={(key, value) =>
+              setFormData((prev) => ({
+                ...prev,
+                customFields: {
+                  ...(((prev as unknown as Record<string, unknown>).customFields as Record<string, unknown>) || {}),
+                  [key]: value,
+                },
+              }))
+            }
+          />
         </div>
       )}
 
@@ -886,7 +908,15 @@ export function Annex6SheetSuite({
       {/* 3. MODE B: REFINED OFFICIAL DOCUMENT CANVAS (FUR_tab_preview.png)         */}
       {/* ========================================================================= */}
       <div className={viewMode === "sheet" ? "block" : "hidden print:block"}>
-        <div className="annex-printable-document bg-white text-ink font-sans p-6 sm:p-12 border border-neutral-800 shadow-xl rounded-sm max-w-4xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none print-container text-[11px] leading-tight space-y-6">
+        <div className="annex-printable-document relative bg-white text-ink font-sans p-6 sm:p-12 border border-neutral-800 shadow-xl rounded-sm max-w-4xl mx-auto print:shadow-none print:border-none print:p-0 print:max-w-none print-container text-[11px] leading-tight space-y-6">
+          {presetConfig && presetConfig.elements.length > 0 && (
+            <PresetOverlayLayer
+              config={presetConfig}
+              pageId={presetConfig.pages[0]?.id || "builtin-a6-sheet"}
+              formData={formData as unknown as Record<string, unknown>}
+              displayMode="view"
+            />
+          )}
           {/* Top Header Logos */}
           <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
             <div className="w-20 flex justify-center">

@@ -44,7 +44,13 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               <Sidebar />
             </Suspense>
           </div>
-          <main className="flex-1 h-full min-h-0 overflow-y-auto p-3 sm:p-6 md:p-8 max-w-7xl mx-auto w-full min-w-0 apple-scrollbar print:h-auto print:overflow-visible print:p-0 print:m-0 print:max-w-none">
+          <main
+            className={`flex-1 h-full min-h-0 overflow-y-auto mx-auto w-full min-w-0 apple-scrollbar print:h-auto print:overflow-visible print:p-0 print:m-0 print:max-w-none ${
+              pathname?.startsWith("/annex-presets")
+                ? "p-3 sm:p-4 lg:p-5 max-w-[1920px]"
+                : "p-3 sm:p-6 md:p-8 max-w-7xl"
+            }`}
+          >
             <PageTransition key={pathname}>
               {children}
             </PageTransition>

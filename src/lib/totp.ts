@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import { decryptSecret } from "./secret-box";
 
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
@@ -104,6 +105,43 @@ export function generateTOTP(
 }
 
 /**
+ * Verifies a 6-digit TOTP code against the secret (plaintext or encrypted envelope)
+ * and returns the matched 30s time step for atomic replay prevention.
+ */
+export function verifyTOTPWithStep(
+  token: string,
+  secret: string,
+  windowSteps: number = 1,
+  timeStepSec: number = 30
+): { valid: boolean; matchedStep: number | null } {
+  if (!token || !secret) return { valid: false, matchedStep: null };
+  const cleanToken = token.trim().replace(/\s+/g, "");
+  if (!/^\d{6}$/.test(cleanToken)) return { valid: false, matchedStep: null };
+
+  let rawSecret: string;
+  try {
+    rawSecret = decryptSecret(secret);
+  } catch {
+    return { valid: false, matchedStep: null };
+  }
+  if (!rawSecret) return { valid: false, matchedStep: null };
+
+  const nowMs = Date.now();
+  const baseStep = Math.floor(nowMs / 1000 / timeStepSec);
+
+  for (let i = -windowSteps; i <= windowSteps; i++) {
+    const step = baseStep + i;
+    const timestamp = step * timeStepSec * 1000;
+    const expected = generateTOTP(rawSecret, timestamp, timeStepSec, 6);
+    if (crypto.timingSafeEqual(Buffer.from(cleanToken), Buffer.from(expected))) {
+      return { valid: true, matchedStep: step };
+    }
+  }
+
+  return { valid: false, matchedStep: null };
+}
+
+/**
  * Verifies a 6-digit TOTP code against the secret within a drift window.
  * Default window = 1 allows -30s to +30s tolerance.
  */
@@ -113,20 +151,7 @@ export function verifyTOTP(
   windowSteps: number = 1,
   timeStepSec: number = 30
 ): boolean {
-  if (!token || !secret) return false;
-  const cleanToken = token.trim().replace(/\s+/g, "");
-  if (!/^\d{6}$/.test(cleanToken)) return false;
-
-  const now = Date.now();
-  for (let i = -windowSteps; i <= windowSteps; i++) {
-    const timestamp = now + i * timeStepSec * 1000;
-    const expected = generateTOTP(secret, timestamp, timeStepSec, 6);
-    if (crypto.timingSafeEqual(Buffer.from(cleanToken), Buffer.from(expected))) {
-      return true;
-    }
-  }
-
-  return false;
+  return verifyTOTPWithStep(token, secret, windowSteps, timeStepSec).valid;
 }
 
 /**

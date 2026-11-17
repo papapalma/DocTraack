@@ -1,28 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, createSession } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
+import { writeAuditTx } from "@/lib/audit";
 import { Role } from "@prisma/client";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { isValidEmail, validatePassword, sanitizeText } from "@/lib/validation";
+import {
+  isValidEmail,
+  validatePassword,
+  sanitizeText,
+  safeJsonObject,
+} from "@/lib/validation";
 
 export async function POST(req: NextRequest) {
   try {
-    // Rate Limiting: max 5 registrations per 10 minutes per IP
     const clientIp = getClientIp(req);
-    const rateCheck = checkRateLimit(`register:${clientIp}`, { limit: 5, windowMs: 600000 });
+    const rateCheck = checkRateLimit(`register:${clientIp}`, {
+      limit: 3,
+      windowMs: 600000,
+    });
     if (!rateCheck.success) {
       return NextResponse.json(
         {
-          error: "Too many accounts created from this network. Please try again later.",
+          error:
+            "Too many accounts created from this network. Please try again later.",
         },
-        { status: 429 }
+        {
+          status: 429,
+          headers: {
+            "Retry-After": Math.ceil(rateCheck.resetMs / 1000).toString(),
+          },
+        }
       );
     }
 
-    const { name, email, password } = await req.json();
+    const body = await safeJsonObject(req);
+    if (!body) {
+      return NextResponse.json(
+        { error: "Invalid JSON payload" },
+        { status: 400 }
+      );
+    }
 
-    if (!name || !email || !password) {
+    const { name, email, password } = body;
+
+    if (
+      typeof name !== "string" ||
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !name ||
+      !email ||
+      !password
+    ) {
       return NextResponse.json(
         { error: "Name, email, and password are required" },
         { status: 400 }
@@ -48,54 +76,59 @@ export async function POST(req: NextRequest) {
     const passCheck = validatePassword(password);
     if (!passCheck.valid) {
       return NextResponse.json(
-        { error: passCheck.message || "Password does not meet security requirements" },
+        {
+          error:
+            passCheck.message || "Password does not meet security requirements",
+        },
         { status: 400 }
       );
     }
 
-    // Check if user already exists
     const existing = await prisma.user.findUnique({
       where: { email: normalizedEmail },
+      select: { id: true },
     });
 
     if (existing) {
       return NextResponse.json(
-        { error: "An account with this email address already exists" },
+        { error: "Unable to register with the provided email address." },
         { status: 409 }
       );
     }
 
     const passwordHash = await hashPassword(password);
 
-    // Students register with open registration as decided in Branch 8
-    const newUser = await prisma.user.create({
-      data: {
-        name: name.trim(),
-        email: normalizedEmail,
-        passwordHash,
-        role: Role.STUDENT,
-      },
+    const newUser = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          name: cleanName,
+          email: normalizedEmail,
+          passwordHash,
+          role: Role.STUDENT,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+        },
+      });
+
+      await writeAuditTx(tx, {
+        actorId: created.id,
+        action: "STUDENT_REGISTRATION",
+        entity: "user",
+        entityId: created.id,
+        req,
+        details: { email: created.email },
+      });
+
+      return created;
     });
 
-    // Auto-login upon registration
-    await createSession(newUser.id);
+    await createSession(newUser.id, Role.STUDENT);
 
-    await logAudit({
-      actorId: newUser.id,
-      action: "STUDENT_REGISTRATION",
-      entity: "user",
-      entityId: newUser.id,
-      details: { email: newUser.email },
-    });
-
-    return NextResponse.json({
-      user: {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-      },
-    });
+    return NextResponse.json({ user: newUser });
   } catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json(

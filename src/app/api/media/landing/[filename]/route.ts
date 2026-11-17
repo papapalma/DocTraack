@@ -1,0 +1,74 @@
+import { NextRequest, NextResponse } from "next/server";
+import path from "path";
+import fs from "fs/promises";
+import { existsSync } from "fs";
+import { resolveContainedFilePath } from "@/lib/upload-security";
+import { sanitizeDownloadFilename } from "@/lib/validation";
+
+export const dynamic = "force-dynamic";
+
+const MIME_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+};
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ filename: string }> }
+) {
+  try {
+    const { filename } = await params;
+
+    const storageDir = path.resolve(
+      process.cwd(),
+      "storage",
+      "uploads",
+      "landing"
+    );
+    const filePath = resolveContainedFilePath(storageDir, filename);
+    if (!filePath) {
+      return NextResponse.json({ error: "Invalid filename" }, { status: 400 });
+    }
+
+    const sanitized = path.basename(filePath);
+    const ext = path.extname(sanitized).toLowerCase();
+    const mimeType = MIME_TYPES[ext];
+    if (!mimeType) {
+      return NextResponse.json(
+        { error: "Unsupported media format" },
+        { status: 400 }
+      );
+    }
+
+    if (!existsSync(filePath)) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+
+    const fileBuffer = await fs.readFile(filePath);
+    const safeDispName = sanitizeDownloadFilename(sanitized, "landing-asset");
+
+    const headers: Record<string, string> = {
+      "Content-Type": mimeType,
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "Content-Disposition": `inline; filename="${safeDispName}"`,
+      "X-Content-Type-Options": "nosniff",
+    };
+
+    if (mimeType === "image/svg+xml") {
+      headers["Content-Security-Policy"] =
+        "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+    }
+
+    return new Response(fileBuffer, { status: 200, headers });
+  } catch (error) {
+    console.error("Stream landing asset error:", error);
+    return NextResponse.json(
+      { error: "Failed to stream asset" },
+      { status: 500 }
+    );
+  }
+}
+

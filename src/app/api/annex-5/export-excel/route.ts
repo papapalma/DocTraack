@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { Role } from "@prisma/client";
+import { canAccessDocument, canExportAnnex } from "@/lib/rbac";
+import { logAudit } from "@/lib/audit";
+import { sanitizeDownloadFilename, sanitizeExcelWorkbook } from "@/lib/validation";
+import { Role as AppRole } from "@/types";
 import ExcelJS from "exceljs";
 import { Annex5FormData } from "@/types";
 
@@ -14,7 +17,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (user.role === Role.STUDENT) {
+    const role = user.role as AppRole;
+    if (!canExportAnnex(role, 5)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -33,9 +37,12 @@ export async function GET(req: NextRequest) {
       if (!doc || !doc.formData) {
         return NextResponse.json({ error: "Document not found" }, { status: 404 });
       }
+      if (doc.annexType.number !== 5 || !canAccessDocument({ id: user.id, role }, doc)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
 
       formData = doc.formData as unknown as Annex5FormData;
-      fileTitle = `Annex_5_Certification_${(formData.region || "MIMAROPA").replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      fileTitle = sanitizeDownloadFilename(`Annex_5_Certification_${formData.region || "MIMAROPA"}`, "Annex_5_Regional_Certification");
     } else {
       return NextResponse.json(
         { error: "Missing documentId parameter" },
@@ -216,8 +223,18 @@ export async function GET(req: NextRequest) {
     ws.getCell(`B${currentRow}`).value = formData.signatories?.chedroDirector?.office || "Director IV, Office of the Director IV, CHEDRO MIMAROPA";
     ws.getCell(`B${currentRow}`).font = { name: "Arial", size: 9 };
 
+    sanitizeExcelWorkbook(workbook);
     // Write binary buffer
     const buffer = await workbook.xlsx.writeBuffer();
+
+    await logAudit({
+      actorId: user.id,
+      action: "ANNEX_EXCEL_EXPORTED",
+      entity: "document",
+      entityId: documentId,
+      req,
+      details: { annexNumber: 5 },
+    });
 
     return new NextResponse(buffer, {
       status: 200,
@@ -225,6 +242,7 @@ export async function GET(req: NextRequest) {
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="${fileTitle}.xlsx"`,
+        "Cache-Control": "no-store, private",
       },
     });
   } catch (error) {

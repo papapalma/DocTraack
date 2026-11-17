@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (user.role !== Role.STAFF && user.role !== Role.DIRECTOR && user.role !== Role.ACCOUNTING) {
+    if (user.role !== Role.STAFF && user.role !== Role.DIRECTOR) {
       return NextResponse.json(
         { error: "Forbidden: Insufficient privileges" },
         { status: 403 }
@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
         student: { select: { id: true, name: true, email: true } },
       },
       orderBy: [{ batchNumber: "asc" }, { submittedAt: "asc" }],
+      take: 2000,
     });
 
     const candidates: Annex4Grantee[] = applications.map((app, index) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/hooks/use-session";
 import { Button } from "@/components/ui/button";
@@ -19,9 +19,13 @@ import { Annex7Creator } from "@/components/documents/annex-7-creator";
 import { Annex8Creator } from "@/components/documents/annex-8-creator";
 import { Annex9Creator } from "@/components/documents/annex-9-creator";
 import { Annex10Creator } from "@/components/documents/annex-10-creator";
+import { PresetSelectorPanel } from "@/components/documents/preset-selector-panel";
+import { CustomPresetDocumentSuite } from "@/components/documents/custom-preset-suite";
+import { AnnexPresetRecord } from "@/types/presets";
+import { isPresetSupportedAnnex } from "@/lib/annex-presets";
 import { useSearchParams } from "next/navigation";
 
-export default function NewDocumentPage() {
+function NewDocumentPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useSession();
@@ -58,30 +62,81 @@ export default function NewDocumentPage() {
     fetchAnnexTypes();
   }, [searchParams]);
 
-  if (!user) return null;
-
-  if (user.role !== "STAFF" && user.role !== "ACCOUNTING") {
-    return (
-      <div className="py-20 text-center max-w-md mx-auto">
-        <h3 className="text-lg font-bold text-[#B3261E]">Access Restricted</h3>
-        <p className="text-sm text-[#55645B] mt-1 mb-4">
-          Only TDP Staff Coordinators and Accounting Officers are authorized to prepare annex documents.
-        </p>
-        <Link href="/dashboard">
-          <Button variant="outline" size="sm">
-            Return to Dashboard
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
   // Filter annexes available for this user's role
-  const availableAnnexes = annexTypes.filter((a) =>
-    canCreateAnnex(user.role, a.number)
-  );
+  const availableAnnexes = user
+    ? annexTypes.filter((a) => canCreateAnnex(user.role, a.number))
+    : [];
 
   const selectedAnnex = annexTypes.find((a) => a.id === selectedAnnexId);
+  const [presets, setPresets] = useState<AnnexPresetRecord[]>([]);
+  const [loadingPresets, setLoadingPresets] = useState<boolean>(false);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("");
+
+  const selectedPreset = React.useMemo(
+    () => presets.find((p) => p.id === selectedPresetId) || presets.find((p) => p.isDefault) || presets[0] || null,
+    [presets, selectedPresetId]
+  );
+  const isCustomPreset = Boolean(
+    selectedAnnex &&
+      isPresetSupportedAnnex(selectedAnnex.number) &&
+      selectedPreset &&
+      selectedPreset.kind === "CUSTOM_UPLOAD"
+  );
+
+  useEffect(() => {
+    const num = selectedAnnex?.number;
+    let cancelled = false;
+    if (!num || !isPresetSupportedAnnex(num)) {
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setPresets([]);
+        setSelectedPresetId("");
+        setLoadingPresets(false);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    let done = false;
+    queueMicrotask(() => {
+      if (!cancelled && !done) setLoadingPresets(true);
+    });
+    fetch(`/api/annex-presets?annexNumber=${num}`)
+      .then((res) => (res.ok ? res.json() : { presets: [] }))
+      .then((data) => {
+        if (cancelled) return;
+        const list = (data.presets || []) as AnnexPresetRecord[];
+        setPresets(list);
+        const def = list.find((p) => p.isDefault) || list[0];
+        setSelectedPresetId(def?.id || "");
+        if (def && num === 1 && def.kind === "BUILT_IN") {
+          const s = def.config?.settings;
+          setFormData((prev) => ({
+            ...prev,
+            ...(s?.extraDefaults?.target_agency
+              ? { target_agency: String(s.extraDefaults.target_agency) }
+              : {}),
+            ...(s?.extraDefaults?.remarks
+              ? { remarks: String(s.extraDefaults.remarks) }
+              : {}),
+            ...(s?.academicYear ? { academic_year: s.academicYear } : {}),
+            ...(s?.batchNumber ? { batch_number: s.batchNumber } : {}),
+          }));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPresets([]);
+      })
+      .finally(() => {
+        done = true;
+        if (!cancelled) setLoadingPresets(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAnnex?.number]);
 
   const handleSelectAnnexWithTypes = (id: string, typesList: AnnexTypeInfo[]) => {
     setSelectedAnnexId(id);
@@ -126,6 +181,7 @@ export default function NewDocumentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           annexTypeId: selectedAnnexId,
+          ...(selectedPreset?.id ? { presetId: selectedPreset.id } : {}),
           title: title.trim(),
           formData,
           submitDirectly,
@@ -160,6 +216,24 @@ export default function NewDocumentPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedAnnexId]);
+
+  if (!user) return null;
+
+  if (user.role !== "STAFF" && user.role !== "ACCOUNTING") {
+    return (
+      <div className="py-20 text-center max-w-md mx-auto">
+        <h3 className="text-lg font-bold text-[#B3261E]">Access Restricted</h3>
+        <p className="text-sm text-[#55645B] mt-1 mb-4">
+          Only TDP Staff Coordinators and Accounting Officers are authorized to prepare annex documents.
+        </p>
+        <Link href="/dashboard">
+          <Button variant="outline" size="sm">
+            Return to Dashboard
+          </Button>
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 print:max-w-none print:m-0 print:p-0 print:w-full print:space-y-0">
@@ -246,48 +320,129 @@ export default function NewDocumentPage() {
         </CardContent>
       </Card>
 
+      {/* Preset Picker for Annexes 1 & 3-10 */}
+      {selectedAnnex && isPresetSupportedAnnex(selectedAnnex.number) && (
+        <PresetSelectorPanel
+          annexNumber={selectedAnnex.number}
+          presets={presets}
+          selectedPresetId={selectedPreset?.id || selectedPresetId}
+          loading={loadingPresets}
+          userRole={user?.role}
+          onSelectPreset={(preset) => {
+            setSelectedPresetId(preset.id);
+            if (selectedAnnex.number === 1 && preset.kind === "BUILT_IN") {
+              const s = preset.config?.settings;
+              setFormData((prev) => ({
+                ...prev,
+                ...(s?.extraDefaults?.target_agency
+                  ? { target_agency: String(s.extraDefaults.target_agency) }
+                  : {}),
+                ...(s?.extraDefaults?.remarks
+                  ? { remarks: String(s.extraDefaults.remarks) }
+                  : {}),
+                ...(s?.academicYear ? { academic_year: s.academicYear } : {}),
+                ...(s?.batchNumber ? { batch_number: s.batchNumber } : {}),
+              }));
+            }
+          }}
+        />
+      )}
+
+      {/* Custom Preset PDF/Image Interactive Workspace + Official Sheet */}
+      {selectedAnnex && isCustomPreset && selectedPreset && (
+        <CustomPresetDocumentSuite
+          key={selectedPreset.id}
+          mode="create"
+          annexTypeId={selectedAnnexId}
+          annexNumber={selectedAnnex.number}
+          presetId={selectedPreset.id}
+          presetName={selectedPreset.name}
+          presetConfig={selectedPreset.config}
+        />
+      )}
+
       {/* Step 2: Specialized Annex 3 Creator */}
-      {selectedAnnex && selectedAnnex.number === 3 && (
-        <Annex3Creator annexTypeId={selectedAnnexId} />
+      {selectedAnnex && !isCustomPreset && selectedAnnex.number === 3 && (
+        <Annex3Creator
+          key={selectedPreset?.id || "builtin-3"}
+          annexTypeId={selectedAnnexId}
+          presetId={selectedPreset?.id}
+          presetConfig={selectedPreset?.config}
+        />
       )}
 
       {/* Step 2: Specialized Annex 4 Creator */}
-      {selectedAnnex && selectedAnnex.number === 4 && (
-        <Annex4Creator annexTypeId={selectedAnnexId} />
+      {selectedAnnex && !isCustomPreset && selectedAnnex.number === 4 && (
+        <Annex4Creator
+          key={selectedPreset?.id || "builtin-4"}
+          annexTypeId={selectedAnnexId}
+          presetId={selectedPreset?.id}
+          presetConfig={selectedPreset?.config}
+        />
       )}
 
       {/* Step 2: Specialized Annex 5 Creator */}
-      {selectedAnnex && selectedAnnex.number === 5 && (
-        <Annex5Creator annexTypeId={selectedAnnexId} />
+      {selectedAnnex && !isCustomPreset && selectedAnnex.number === 5 && (
+        <Annex5Creator
+          key={selectedPreset?.id || "builtin-5"}
+          annexTypeId={selectedAnnexId}
+          presetId={selectedPreset?.id}
+          presetConfig={selectedPreset?.config}
+        />
       )}
 
       {/* Step 2: Specialized Annex 6 Creator */}
-      {selectedAnnex && selectedAnnex.number === 6 && (
-        <Annex6Creator annexTypeId={selectedAnnexId} />
+      {selectedAnnex && !isCustomPreset && selectedAnnex.number === 6 && (
+        <Annex6Creator
+          key={selectedPreset?.id || "builtin-6"}
+          annexTypeId={selectedAnnexId}
+          presetId={selectedPreset?.id}
+          presetConfig={selectedPreset?.config}
+        />
       )}
 
       {/* Step 2: Specialized Annex 7 Creator */}
-      {selectedAnnex && selectedAnnex.number === 7 && (
-        <Annex7Creator annexTypeId={selectedAnnexId} />
+      {selectedAnnex && !isCustomPreset && selectedAnnex.number === 7 && (
+        <Annex7Creator
+          key={selectedPreset?.id || "builtin-7"}
+          annexTypeId={selectedAnnexId}
+          presetId={selectedPreset?.id}
+          presetConfig={selectedPreset?.config}
+        />
       )}
 
       {/* Step 2: Specialized Annex 8 Creator */}
-      {selectedAnnex && selectedAnnex.number === 8 && (
-        <Annex8Creator annexTypeId={selectedAnnexId} />
+      {selectedAnnex && !isCustomPreset && selectedAnnex.number === 8 && (
+        <Annex8Creator
+          key={selectedPreset?.id || "builtin-8"}
+          annexTypeId={selectedAnnexId}
+          presetId={selectedPreset?.id}
+          presetConfig={selectedPreset?.config}
+        />
       )}
 
       {/* Step 2: Specialized Annex 9 Creator */}
-      {selectedAnnex && selectedAnnex.number === 9 && (
-        <Annex9Creator annexTypeId={selectedAnnexId} />
+      {selectedAnnex && !isCustomPreset && selectedAnnex.number === 9 && (
+        <Annex9Creator
+          key={selectedPreset?.id || "builtin-9"}
+          annexTypeId={selectedAnnexId}
+          presetId={selectedPreset?.id}
+          presetConfig={selectedPreset?.config}
+        />
       )}
 
       {/* Step 2: Specialized Annex 10 Creator */}
-      {selectedAnnex && selectedAnnex.number === 10 && (
-        <Annex10Creator annexTypeId={selectedAnnexId} />
+      {selectedAnnex && !isCustomPreset && selectedAnnex.number === 10 && (
+        <Annex10Creator
+          key={selectedPreset?.id || "builtin-10"}
+          annexTypeId={selectedAnnexId}
+          presetId={selectedPreset?.id}
+          presetConfig={selectedPreset?.config}
+        />
       )}
 
       {/* Step 2: Complete Annex Form Fields for generic annexes */}
-      {selectedAnnex && selectedAnnex.number !== 3 && selectedAnnex.number !== 4 && selectedAnnex.number !== 5 && selectedAnnex.number !== 6 && selectedAnnex.number !== 7 && selectedAnnex.number !== 8 && selectedAnnex.number !== 9 && selectedAnnex.number !== 10 && (
+      {selectedAnnex && !isCustomPreset && selectedAnnex.number !== 3 && selectedAnnex.number !== 4 && selectedAnnex.number !== 5 && selectedAnnex.number !== 6 && selectedAnnex.number !== 7 && selectedAnnex.number !== 8 && selectedAnnex.number !== 9 && selectedAnnex.number !== 10 && (
         <Card className="animate-in fade-in slide-in-from-top-4">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -399,5 +554,19 @@ export default function NewDocumentPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function NewDocumentPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-5xl mx-auto py-12 px-4 text-center text-sm text-[#55645B]">
+          Loading document builder...
+        </div>
+      }
+    >
+      <NewDocumentPageContent />
+    </Suspense>
   );
 }

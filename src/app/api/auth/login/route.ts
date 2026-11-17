@@ -1,20 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createSession, verifyPassword } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { isValidEmail } from "@/lib/validation";
-import { verifyTOTP, verifyRecoveryCode } from "@/lib/totp";
+import { logAudit, writeAuditTx } from "@/lib/audit";
+import {
+  checkRateLimit,
+  clearFailures,
+  getClientIp,
+  isLockedOut,
+  recordFailure,
+} from "@/lib/rate-limit";
+import { isValidEmail, safeJsonObject } from "@/lib/validation";
+import { verifyTOTPWithStep, verifyRecoveryCode } from "@/lib/totp";
+import { Role } from "@/types";
+
+const DUMMY_PASSWORD_HASH =
+  "$2a$10$CwTycUXWue0Thq9StjUM0uJ8l1Q1w9y1Q1w9y1Q1w9y1Q1w9y1Q1w";
+const GENERIC_AUTH_ERROR =
+  "Invalid email, password, or Authenticator verification code.";
 
 export async function POST(req: NextRequest) {
   try {
-    // Rate Limiting: max 5 login attempts per minute per IP
     const clientIp = getClientIp(req);
-    const rateCheck = checkRateLimit(`login:${clientIp}`, { limit: 5, windowMs: 60000 });
+    const rateCheck = checkRateLimit(`login:${clientIp}`, {
+      limit: 10,
+      windowMs: 60000,
+    });
     if (!rateCheck.success) {
       return NextResponse.json(
         {
-          error: "Too many login attempts. Please wait 1 minute before trying again.",
+          error:
+            "Too many login attempts. Please wait 1 minute before trying again.",
         },
         {
           status: 429,
@@ -25,17 +40,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { email, password, code, authMode = "password" } = await req.json();
+    const body = await safeJsonObject(req);
+    if (!body) {
+      return NextResponse.json(
+        { error: "Invalid request payload" },
+        { status: 400 }
+      );
+    }
 
-    if (!email) {
+    const rawEmail = body.email;
+    const password = body.password;
+    const code = body.code;
+    const authMode = body.authMode === "totp" ? "totp" : "password";
+
+    if (typeof rawEmail !== "string" || !rawEmail.trim()) {
       return NextResponse.json(
         { error: "Email is required" },
         { status: 400 }
       );
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-
+    const normalizedEmail = rawEmail.trim().toLowerCase();
     if (!isValidEmail(normalizedEmail)) {
       return NextResponse.json(
         { error: "Invalid email format" },
@@ -43,115 +68,172 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const accountLockKey = `login-acct:${normalizedEmail}`;
+    const lockState = isLockedOut(accountLockKey);
+    if (lockState.locked) {
+      return NextResponse.json(
+        {
+          error:
+            "Too many failed authentication attempts for this account. Please wait before trying again.",
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(lockState.retryAfterSec) },
+        }
+      );
+    }
+
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "Invalid email or credentials" },
-        { status: 401 }
-      );
-    }
-
-    if (!user.active) {
-      return NextResponse.json(
-        { error: "Account is disabled. Please contact the administrator." },
-        { status: 403 }
-      );
+    if (!user || !user.active) {
+      await verifyPassword("timing_equalization_pad", DUMMY_PASSWORD_HASH);
+      recordFailure(accountLockKey, 5, 5 * 60 * 1000);
+      await logAudit({
+        actorId: user?.id ?? null,
+        action: "USER_LOGIN_FAILED",
+        entity: "user",
+        entityId: user?.id ?? normalizedEmail,
+        req,
+        details: {
+          email: normalizedEmail,
+          reason: !user ? "unknown_account" : "inactive_account",
+        },
+      });
+      return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
     }
 
     if (authMode === "totp") {
-      // Login with Microsoft Authenticator 6-digit TOTP code (or 8-character recovery code)
-      if (!code || typeof code !== "string" || code.trim() === "") {
+      // Passwordless Authenticator quick-login mode (strict per-account lockout + replay guard)
+      if (typeof code !== "string" || !code.trim()) {
         return NextResponse.json(
           { error: "Authenticator code is required" },
           { status: 400 }
         );
       }
 
-      if (!user.twoFactorSecret || !user.twoFactorEnabled) {
+      const totpLockKey = `login-totp:${normalizedEmail}`;
+      const totpLock = isLockedOut(totpLockKey);
+      if (totpLock.locked) {
         return NextResponse.json(
           {
-            error: "Microsoft Authenticator is not configured for this account. Please sign in with your password.",
+            error:
+              "Too many invalid Authenticator attempts. Please wait before trying again.",
           },
-          { status: 400 }
+          {
+            status: 429,
+            headers: { "Retry-After": String(totpLock.retryAfterSec) },
+          }
         );
       }
 
-      let isValid = verifyTOTP(code, user.twoFactorSecret);
-      let usedRecoveryCode = false;
+      if (!user.twoFactorSecret || !user.twoFactorEnabled) {
+        recordFailure(totpLockKey, 5, 5 * 60 * 1000);
+        await logAudit({
+          actorId: user.id,
+          action: "USER_LOGIN_TOTP_FAILED",
+          entity: "user",
+          entityId: user.id,
+          req,
+          details: { email: user.email, reason: "2fa_not_enabled" },
+        });
+        return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
+      }
 
-      // If TOTP fails, check if the input is an emergency recovery code (e.g. 8 hex characters or formatted XXXX-XXXX)
-      if (!isValid && user.twoFactorRecoveryCodes && user.twoFactorRecoveryCodes.length > 0) {
-        const recoveryCheck = await verifyRecoveryCode(code, user.twoFactorRecoveryCodes);
+      const totpResult = verifyTOTPWithStep(code, user.twoFactorSecret);
+      let isValid =
+        totpResult.valid &&
+        totpResult.matchedStep !== null &&
+        (user.lastTotpStep === null || totpResult.matchedStep > user.lastTotpStep);
+      let usedRecoveryCode = false;
+      let remainingHashedCodes = user.twoFactorRecoveryCodes;
+
+      if (
+        !isValid &&
+        user.twoFactorRecoveryCodes &&
+        user.twoFactorRecoveryCodes.length > 0
+      ) {
+        const recoveryCheck = await verifyRecoveryCode(
+          code,
+          user.twoFactorRecoveryCodes
+        );
         if (recoveryCheck.valid) {
           isValid = true;
           usedRecoveryCode = true;
-          // Invalidate the used recovery code
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { twoFactorRecoveryCodes: recoveryCheck.remainingHashedCodes },
-          });
+          remainingHashedCodes = recoveryCheck.remainingHashedCodes;
         }
       }
 
       if (!isValid) {
-        return NextResponse.json(
-          { error: "Invalid or expired Authenticator code. Please check your Microsoft Authenticator app." },
-          { status: 401 }
-        );
+        recordFailure(totpLockKey, 5, 5 * 60 * 1000);
+        recordFailure(accountLockKey, 5, 5 * 60 * 1000);
+        await logAudit({
+          actorId: user.id,
+          action: "USER_LOGIN_TOTP_FAILED",
+          entity: "user",
+          entityId: user.id,
+          req,
+          details: { email: user.email, reason: "invalid_or_replayed_code" },
+        });
+        return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
       }
 
-      // Create session in database & set cookie
-      await createSession(user.id);
+      try {
+        await prisma.$transaction(async (tx) => {
+          if (usedRecoveryCode) {
+            const updated = await tx.user.updateMany({
+              where: {
+                id: user.id,
+                twoFactorRecoveryCodes: {
+                  equals: user.twoFactorRecoveryCodes,
+                },
+              },
+              data: { twoFactorRecoveryCodes: remainingHashedCodes },
+            });
+            if (updated.count === 0) {
+              throw new Error("CONCURRENT_RECOVERY_CODE");
+            }
+          } else if (totpResult.matchedStep !== null) {
+            const updated = await tx.user.updateMany({
+              where: {
+                id: user.id,
+                OR: [
+                  { lastTotpStep: null },
+                  { lastTotpStep: { lt: totpResult.matchedStep } },
+                ],
+              },
+              data: { lastTotpStep: totpResult.matchedStep },
+            });
+            if (updated.count === 0) {
+              throw new Error("REPLAYED_TOTP");
+            }
+          }
 
-      await logAudit({
-        actorId: user.id,
-        action: usedRecoveryCode ? "USER_LOGIN_RECOVERY_CODE" : "USER_LOGIN_TOTP",
-        entity: "user",
-        entityId: user.id,
-        details: { email: user.email, role: user.role, method: usedRecoveryCode ? "recovery_code" : "microsoft_authenticator" },
-      });
-
-      return NextResponse.json({
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          departmentId: user.departmentId,
-          twoFactorEnabled: user.twoFactorEnabled,
-          authenticatorLocked: user.authenticatorLocked,
-        },
-      });
-    } else {
-      // Standard Password Login
-      if (!password) {
-        return NextResponse.json(
-          { error: "Password is required" },
-          { status: 400 }
-        );
+          await writeAuditTx(tx, {
+            actorId: user.id,
+            action: usedRecoveryCode
+              ? "USER_LOGIN_RECOVERY_CODE"
+              : "USER_LOGIN_TOTP",
+            entity: "user",
+            entityId: user.id,
+            req,
+            details: {
+              email: user.email,
+              role: user.role,
+              method: usedRecoveryCode
+                ? "recovery_code"
+                : "microsoft_authenticator",
+            },
+          });
+        });
+      } catch {
+        return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
       }
 
-      const isMatch = await verifyPassword(password, user.passwordHash);
-      if (!isMatch) {
-        return NextResponse.json(
-          { error: "Invalid email or password" },
-          { status: 401 }
-        );
-      }
-
-      // Create session in database & set cookie
-      await createSession(user.id);
-
-      await logAudit({
-        actorId: user.id,
-        action: "USER_LOGIN",
-        entity: "user",
-        entityId: user.id,
-        details: { email: user.email, role: user.role, method: "password" },
-      });
+      clearFailures(totpLockKey);
+      clearFailures(accountLockKey);
+      await createSession(user.id, user.role as Role);
 
       return NextResponse.json({
         user: {
@@ -165,6 +247,147 @@ export async function POST(req: NextRequest) {
         },
       });
     }
+
+    // Standard Password Login (+ mandatory second-factor TOTP when 2FA is enabled)
+    if (typeof password !== "string" || !password) {
+      return NextResponse.json(
+        { error: "Password is required" },
+        { status: 400 }
+      );
+    }
+
+    const isMatch = await verifyPassword(password, user.passwordHash);
+    if (!isMatch) {
+      recordFailure(accountLockKey, 5, 5 * 60 * 1000);
+      await logAudit({
+        actorId: user.id,
+        action: "USER_LOGIN_FAILED",
+        entity: "user",
+        entityId: user.id,
+        req,
+        details: { email: user.email, reason: "invalid_password" },
+      });
+      return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
+    }
+
+    let twoFactorUsed = false;
+    let usedRecoveryCode = false;
+
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      // Prompt Step 2 only AFTER password succeeds so 2FA status is never disclosed pre-auth
+      if (typeof code !== "string" || !code.trim()) {
+        return NextResponse.json({
+          requiresTwoFactor: true,
+          message:
+            "Enter the 6-digit Microsoft Authenticator code or recovery code to complete sign in.",
+        });
+      }
+
+      const totpResult = verifyTOTPWithStep(code, user.twoFactorSecret);
+      let secondFactorValid =
+        totpResult.valid &&
+        totpResult.matchedStep !== null &&
+        (user.lastTotpStep === null || totpResult.matchedStep > user.lastTotpStep);
+      let remainingHashedCodes = user.twoFactorRecoveryCodes;
+
+      if (
+        !secondFactorValid &&
+        user.twoFactorRecoveryCodes &&
+        user.twoFactorRecoveryCodes.length > 0
+      ) {
+        const recoveryCheck = await verifyRecoveryCode(
+          code,
+          user.twoFactorRecoveryCodes
+        );
+        if (recoveryCheck.valid) {
+          secondFactorValid = true;
+          usedRecoveryCode = true;
+          remainingHashedCodes = recoveryCheck.remainingHashedCodes;
+        }
+      }
+
+      if (!secondFactorValid) {
+        recordFailure(accountLockKey, 5, 5 * 60 * 1000);
+        await logAudit({
+          actorId: user.id,
+          action: "USER_LOGIN_2FA_FAILED",
+          entity: "user",
+          entityId: user.id,
+          req,
+          details: { email: user.email, reason: "invalid_second_factor" },
+        });
+        return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
+      }
+
+      twoFactorUsed = true;
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          if (usedRecoveryCode) {
+            const updated = await tx.user.updateMany({
+              where: {
+                id: user.id,
+                twoFactorRecoveryCodes: {
+                  equals: user.twoFactorRecoveryCodes,
+                },
+              },
+              data: { twoFactorRecoveryCodes: remainingHashedCodes },
+            });
+            if (updated.count === 0) {
+              throw new Error("CONCURRENT_RECOVERY_CODE");
+            }
+          } else if (totpResult.matchedStep !== null) {
+            const updated = await tx.user.updateMany({
+              where: {
+                id: user.id,
+                OR: [
+                  { lastTotpStep: null },
+                  { lastTotpStep: { lt: totpResult.matchedStep } },
+                ],
+              },
+              data: { lastTotpStep: totpResult.matchedStep },
+            });
+            if (updated.count === 0) {
+              throw new Error("REPLAYED_TOTP");
+            }
+          }
+        });
+      } catch {
+        return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
+      }
+    }
+
+    clearFailures(accountLockKey);
+    await createSession(user.id, user.role as Role);
+
+    await logAudit({
+      actorId: user.id,
+      action: "USER_LOGIN",
+      entity: "user",
+      entityId: user.id,
+      req,
+      details: {
+        email: user.email,
+        role: user.role,
+        method: twoFactorUsed
+          ? usedRecoveryCode
+            ? "password+recovery_code"
+            : "password+microsoft_authenticator"
+          : "password",
+      },
+    });
+
+    return NextResponse.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        departmentId: user.departmentId,
+        twoFactorEnabled: user.twoFactorEnabled,
+        authenticatorLocked: user.authenticatorLocked,
+      },
+    });
   } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json(

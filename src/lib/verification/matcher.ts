@@ -84,22 +84,55 @@ export function runThreeWayCrossCheck(params: {
 
   const results: MatchedResultItem[] = [];
 
-  // 1. Build Index for Registrar Records
-  // Map key -> list of registrar records with that key
-  const registrarExactMap = new Map<string, StudentInputRecord[]>();
-  for (const reg of registrarRecords) {
-    const key = buildMatchKey(reg.lastName, reg.firstName, reg.school);
-    const existing = registrarExactMap.get(key) || [];
-    existing.push(reg);
-    registrarExactMap.set(key, existing);
+  // 1. Precompute normalized attributes and indexes for Registrar Records
+  interface IndexedRegistrarRecord {
+    idx: number;
+    rec: StudentInputRecord;
+    campus: string;
+    lastBase: string;
+    firstInitial: string;
   }
 
-  // 2. Build Index for System Records
-  const systemExactMap = new Map<string, StudentInputRecord[]>();
-  for (const sys of systemRecords) {
+  const registrarExactMap = new Map<string, IndexedRegistrarRecord[]>();
+  const registrarLastInitialBuckets = new Map<string, IndexedRegistrarRecord[]>();
+  const registrarFirstInitialBuckets = new Map<string, IndexedRegistrarRecord[]>();
+
+  for (let idx = 0; idx < registrarRecords.length; idx++) {
+    const reg = registrarRecords[idx];
+    const campus = canonicalizeCampus(reg.school).canonical;
+    const lastBase = normalizeStudentName(reg.lastName).base;
+    const firstBase = normalizeStudentName(reg.firstName).base;
+    const entry: IndexedRegistrarRecord = {
+      idx,
+      rec: reg,
+      campus,
+      lastBase,
+      firstInitial: firstBase.charAt(0),
+    };
+
+    const exactKey = buildMatchKey(reg.lastName, reg.firstName, reg.school);
+    const exactList = registrarExactMap.get(exactKey) || [];
+    exactList.push(entry);
+    registrarExactMap.set(exactKey, exactList);
+
+    const lastInit = lastBase.charAt(0);
+    const lBucket = registrarLastInitialBuckets.get(lastInit) || [];
+    lBucket.push(entry);
+    registrarLastInitialBuckets.set(lastInit, lBucket);
+
+    const fInit = entry.firstInitial;
+    const fBucket = registrarFirstInitialBuckets.get(fInit) || [];
+    fBucket.push(entry);
+    registrarFirstInitialBuckets.set(fInit, fBucket);
+  }
+
+  // 2. Build Index for System Records (preserve index to avoid O(N) indexOf)
+  const systemExactMap = new Map<string, Array<{ idx: number; rec: StudentInputRecord }>>();
+  for (let idx = 0; idx < systemRecords.length; idx++) {
+    const sys = systemRecords[idx];
     const key = buildMatchKey(sys.lastName, sys.firstName, sys.school);
     const existing = systemExactMap.get(key) || [];
-    existing.push(sys);
+    existing.push({ idx, rec: sys });
     systemExactMap.set(key, existing);
   }
 
@@ -128,13 +161,12 @@ export function runThreeWayCrossCheck(params: {
     if (exactCandidates && exactCandidates.length > 0) {
       // Find candidate with compatible middle name
       for (const cand of exactCandidates) {
-        if (isMiddleNameCompatible(ched.middleName, cand.middleName)) {
-          const regIdx = registrarRecords.indexOf(cand);
-          if (regIdx !== -1) matchedRegistrarIndices.add(regIdx);
+        if (isMiddleNameCompatible(ched.middleName, cand.rec.middleName)) {
+          matchedRegistrarIndices.add(cand.idx);
 
           step1Results.push({
             ched,
-            matchedRegistrar: cand,
+            matchedRegistrar: cand.rec,
             isExactMatch: true,
             isFuzzyMatch: false,
             confidenceScore: 1.0,
@@ -147,54 +179,60 @@ export function runThreeWayCrossCheck(params: {
 
     if (foundExact) continue;
 
-    // If no exact match: perform Fuzzy Matching across registrar records
-    // Optimization: candidate blocking by school and last name prefix
+    // Indexed fuzzy candidate lookup (blocking by normalized last/first initial + campus)
     const chedCampus = canonicalizeCampus(ched.school).canonical;
     const chedLastNorm = normalizeStudentName(ched.lastName).base;
+    const chedFirstInitial = normalizeStudentName(ched.firstName).base.charAt(0);
 
     let bestCandidate: StudentInputRecord | null = null;
     let bestCandidateIdx = -1;
     let bestScore = 0;
 
-    for (let rIdx = 0; rIdx < registrarRecords.length; rIdx++) {
-      const reg = registrarRecords[rIdx];
-      const regCampus = canonicalizeCampus(reg.school).canonical;
+    const seenCandidates = new Set<number>();
+    const candidatePools = [
+      registrarLastInitialBuckets.get(chedLastNorm.charAt(0)) || [],
+      registrarFirstInitialBuckets.get(chedFirstInitial) || [],
+    ];
 
-      // Allow fuzzy matching within the same campus or general MinSU
-      if (
-        chedCampus !== regCampus &&
-        chedCampus !== "MINSU_GENERAL" &&
-        regCampus !== "MINSU_GENERAL"
-      ) {
-        continue;
-      }
+    for (const pool of candidatePools) {
+      for (const entry of pool) {
+        if (seenCandidates.has(entry.idx)) continue;
+        seenCandidates.add(entry.idx);
 
-      // Check first letter of last name or similarity
-      const regLastNorm = normalizeStudentName(reg.lastName).base;
-      if (
-        chedLastNorm.charAt(0) !== regLastNorm.charAt(0) &&
-        Math.abs(chedLastNorm.length - regLastNorm.length) > 2
-      ) {
-        continue;
-      }
-
-      const sim = computeStudentSimilarity(
-        {
-          lastName: ched.lastName,
-          firstName: ched.firstName,
-          middleName: ched.middleName,
-        },
-        {
-          lastName: reg.lastName,
-          firstName: reg.firstName,
-          middleName: reg.middleName,
+        // Allow fuzzy matching within the same campus or general MinSU
+        if (
+          chedCampus !== entry.campus &&
+          chedCampus !== "MINSU_GENERAL" &&
+          entry.campus !== "MINSU_GENERAL"
+        ) {
+          continue;
         }
-      );
 
-      if (sim.totalScore > bestScore) {
-        bestScore = sim.totalScore;
-        bestCandidate = reg;
-        bestCandidateIdx = rIdx;
+        if (
+          chedLastNorm.charAt(0) !== entry.lastBase.charAt(0) &&
+          Math.abs(chedLastNorm.length - entry.lastBase.length) > 2
+        ) {
+          continue;
+        }
+
+        const sim = computeStudentSimilarity(
+          {
+            lastName: ched.lastName,
+            firstName: ched.firstName,
+            middleName: ched.middleName,
+          },
+          {
+            lastName: entry.rec.lastName,
+            firstName: entry.rec.firstName,
+            middleName: entry.rec.middleName,
+          }
+        );
+
+        if (sim.totalScore > bestScore) {
+          bestScore = sim.totalScore;
+          bestCandidate = entry.rec;
+          bestCandidateIdx = entry.idx;
+        }
       }
     }
 
@@ -230,11 +268,10 @@ export function runThreeWayCrossCheck(params: {
 
     let matchedSystem: StudentInputRecord | null = null;
     if (systemCandidates && systemCandidates.length > 0) {
-      for (const sys of systemCandidates) {
-        if (isMiddleNameCompatible(ched.middleName, sys.middleName)) {
-          const sIdx = systemRecords.indexOf(sys);
-          if (sIdx !== -1) matchedSystemIndices.add(sIdx);
-          matchedSystem = sys;
+      for (const sysEntry of systemCandidates) {
+        if (isMiddleNameCompatible(ched.middleName, sysEntry.rec.middleName)) {
+          matchedSystemIndices.add(sysEntry.idx);
+          matchedSystem = sysEntry.rec;
           break;
         }
       }

@@ -1,18 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
+import { canExportAnnex } from "@/lib/rbac";
+import { logAudit } from "@/lib/audit";
+import {
+  escapeHtml,
+  safeJsonObject,
+  sanitizeDownloadFilename,
+} from "@/lib/validation";
 import { Annex10FormData } from "@/types";
+import { Role } from "@/types";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { formData, granteeId, title } = body as {
-      formData: Annex10FormData;
-      granteeId?: string;
-      title?: string;
-    };
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    if (!formData || !formData.grantees || formData.grantees.length === 0) {
+    if (!canExportAnnex(user.role as Role, 10)) {
       return NextResponse.json(
-        { error: "Invalid form data: grantees are required." },
+        { error: "Forbidden: Only Staff Coordinators or Campus Director may export Annex 10." },
+        { status: 403 }
+      );
+    }
+
+    const body = await safeJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
+    }
+
+    const formData = body.formData as Annex10FormData | undefined;
+    const granteeId =
+      typeof body.granteeId === "string" ? body.granteeId : undefined;
+    const title = typeof body.title === "string" ? body.title : undefined;
+
+    if (
+      !formData ||
+      !Array.isArray(formData.grantees) ||
+      formData.grantees.length === 0 ||
+      formData.grantees.length > 500
+    ) {
+      return NextResponse.json(
+        { error: "Invalid form data: 1 to 500 grantees are required." },
         { status: 400 }
       );
     }
@@ -21,6 +50,13 @@ export async function POST(req: NextRequest) {
       ? formData.grantees.filter((g) => g.id === granteeId)
       : formData.grantees;
 
+    if (granteesToExport.length === 0) {
+      return NextResponse.json(
+        { error: "Requested grantee not found." },
+        { status: 404 }
+      );
+    }
+
     const labelRight =
       formData.topRightLabelType === "annex3_original"
         ? "Annex 3 - NOA"
@@ -28,11 +64,23 @@ export async function POST(req: NextRequest) {
         ? "TDP Form - Annex 10 (Annex 3 - NOA)"
         : "TDP Form – Annex 10 (NOA)";
 
+    const safeDocTitle = escapeHtml(title || "Notice of Award (NOA)");
+    const safeLetterDate = escapeHtml(formData.letterDate);
+    const conditionsList = Array.isArray(formData.conditions)
+      ? formData.conditions
+      : [];
+    const safeMemoRef = escapeHtml(formData.memorandumOrderRef);
+    const signatory = formData.signatory || {
+      name: "",
+      position: "",
+      office: "",
+    };
+
     let docHtml = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
       <head>
         <meta charset='utf-8'>
-        <title>${title || "Notice of Award (NOA)"}</title>
+        <title>${safeDocTitle}</title>
         <!--[if gte mso 9]>
         <xml>
           <w:WordDocument>
@@ -117,12 +165,23 @@ export async function POST(req: NextRequest) {
     `;
 
     granteesToExport.forEach((grantee, idx) => {
+      const safeName = escapeHtml(grantee.granteeName);
+      const safeAddress = escapeHtml(grantee.address);
+      const safeCity = escapeHtml(grantee.cityMunicipality);
+      const safeSalutation = escapeHtml(
+        grantee.salutation || `Dear Mr./Ms. ${grantee.granteeName || ""}:`
+      );
+      const safeAwardNo = escapeHtml(grantee.awardNo);
+      const numericStipend = Number(grantee.stipendAmount) || 0;
+      const safeSem = escapeHtml(grantee.startingSemester);
+      const safeAy = escapeHtml(grantee.academicYear);
+
       docHtml += `
         <div class="${idx < granteesToExport.length - 1 ? "page-break" : ""}">
           <table class="top-label-table">
             <tr>
               <td align="left" style="width: 50%;">CHED-UniFAST-NOA</td>
-              <td align="right" style="width: 50%;">${labelRight}</td>
+              <td align="right" style="width: 50%;">${escapeHtml(labelRight)}</td>
             </tr>
           </table>
 
@@ -142,34 +201,34 @@ export async function POST(req: NextRequest) {
           </div>
 
           <div class="addressee-block">
-            <div>${formData.letterDate}</div>
+            <div>${safeLetterDate}</div>
             <br/>
-            <div><strong>${grantee.granteeName}</strong></div>
-            <div>${grantee.address}</div>
-            <div>${grantee.cityMunicipality}</div>
+            <div><strong>${safeName}</strong></div>
+            <div>${safeAddress}</div>
+            <div>${safeCity}</div>
             <br/>
-            <div>${grantee.salutation || `Dear Mr./Ms. ${grantee.granteeName}:`}</div>
+            <div>${safeSalutation}</div>
           </div>
 
           <div class="award-paragraph">
-            We are pleased to inform that you are qualified as a TDP-TES grantee with Award No. <strong>TDP-TES${grantee.awardNo}</strong>. Subject to availability of funds as provided in the General Appropriations Act and provisions of issuances issued by CHED/UniFAST, you will receive PhP ${grantee.stipendAmount.toLocaleString()} per semester starting the <strong>${grantee.startingSemester} Semester of AY ${grantee.academicYear}</strong>. Once qualified, a TDP grantee will continue to receive grants provided that you are enrolled every semester and complies with the documentary requirements, and retention policy of his Higher Education Institution pursuant to the maximum residency rule.
+            We are pleased to inform that you are qualified as a TDP-TES grantee with Award No. <strong>TDP-TES${safeAwardNo}</strong>. Subject to availability of funds as provided in the General Appropriations Act and provisions of issuances issued by CHED/UniFAST, you will receive PhP ${escapeHtml(numericStipend.toLocaleString())} per semester starting the <strong>${safeSem} Semester of AY ${safeAy}</strong>. Once qualified, a TDP grantee will continue to receive grants provided that you are enrolled every semester and complies with the documentary requirements, and retention policy of his Higher Education Institution pursuant to the maximum residency rule.
           </div>
 
           <div>As TDP-TES grantee, you must comply with the following conditions:</div>
           <ul class="conditions-list" style="list-style-type: disc;">
-            ${formData.conditions.map((c) => `<li>${c}</li>`).join("")}
+            ${conditionsList.map((c) => `<li>${escapeHtml(c)}</li>`).join("")}
           </ul>
 
           <div class="warning-text">
-            Please be advised that failure to comply with the above conditions will be grounds for the termination of your grants per ${formData.memorandumOrderRef}.
+            Please be advised that failure to comply with the above conditions will be grounds for the termination of your grants per ${safeMemoRef}.
           </div>
 
           <div class="signatory-block">
             <div>Very truly yours,</div>
             <br/><br/>
-            <div><strong>${formData.signatory.name}</strong></div>
-            <div>${formData.signatory.position}</div>
-            <div>${formData.signatory.office}</div>
+            <div><strong>${escapeHtml(signatory.name)}</strong></div>
+            <div>${escapeHtml(signatory.position)}</div>
+            <div>${escapeHtml(signatory.office)}</div>
           </div>
 
           <div class="footer-note">
@@ -184,16 +243,31 @@ export async function POST(req: NextRequest) {
       </html>
     `;
 
+    await logAudit({
+      actorId: user.id,
+      action: "ANNEX_10_DOC_EXPORTED",
+      entity: "document",
+      entityId: granteeId || "batch",
+      req,
+      details: { granteeCount: granteesToExport.length },
+    });
+
+    const filename = sanitizeDownloadFilename(
+      title ? `Annex10_${title}` : "Annex10_NOA",
+      "Annex10_NOA"
+    );
+
     return new Response("\ufeff" + docHtml, {
       headers: {
         "Content-Type": "application/msword; charset=utf-8",
-        "Content-Disposition": `attachment; filename="Annex10_NOA.doc"`,
+        "Content-Disposition": `attachment; filename="${filename}.doc"`,
+        "X-Content-Type-Options": "nosniff",
       },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Export DOC error:", error);
     return NextResponse.json(
-      { error: "Failed to generate document export: " + error.message },
+      { error: "Failed to generate document export." },
       { status: 500 }
     );
   }

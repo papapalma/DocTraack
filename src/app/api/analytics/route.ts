@@ -3,23 +3,32 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
+import { escapeCsvCell } from "@/lib/validation";
 
 export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUser();
-    if (!user || user.role !== "DIRECTOR") {
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (user.role !== "DIRECTOR") {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
     const format = searchParams.get("format");
 
-    // Fetch all documents with their annex type
+    // Fetch document metadata without heavy formData/presetSnapshot JSON payloads
     const documents = await prisma.document.findMany({
-      include: {
-        annexType: true,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        createdAt: true,
+        annexType: { select: { number: true, name: true } },
         createdBy: { select: { name: true, role: true } },
-        transmittal: true,
+        transmittal: { select: { recipient: true, method: true } },
       },
     });
 
@@ -61,22 +70,32 @@ export async function GET(req: NextRequest) {
       const rows = documents
         .map((d) =>
           [
-            `"${d.id}"`,
-            `"Annex ${d.annexType?.number}"`,
-            `"${d.title.replace(/"/g, '""')}"`,
-            `"${d.status}"`,
-            `"${d.createdBy?.name || ""}"`,
-            `"${new Date(d.createdAt).toISOString()}"`,
-            `"${d.transmittal?.recipient || ""}"`,
-            `"${d.transmittal?.method || ""}"`,
+            escapeCsvCell(d.id),
+            escapeCsvCell(`Annex ${d.annexType?.number}`),
+            escapeCsvCell(d.title),
+            escapeCsvCell(d.status),
+            escapeCsvCell(d.createdBy?.name || ""),
+            escapeCsvCell(new Date(d.createdAt).toISOString()),
+            escapeCsvCell(d.transmittal?.recipient || ""),
+            escapeCsvCell(d.transmittal?.method || ""),
           ].join(",")
         )
         .join("\n");
+
+      await logAudit({
+        actorId: user.id,
+        action: "ANALYTICS_CSV_EXPORTED",
+        entity: "analytics",
+        entityId: "analytics",
+        req,
+        details: { rowCount: documents.length },
+      });
 
       return new Response(headers + rows, {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": 'attachment; filename="minsu-doctrack-analytics.csv"',
+          "Cache-Control": "no-store, private",
         },
       });
     }

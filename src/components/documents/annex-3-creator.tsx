@@ -2,12 +2,15 @@
 
 import React from "react";
 import { Annex3SheetSuite } from "./annex-3-sheet-suite";
+import { AnnexPresetConfig } from "@/types/presets";
 
 interface Annex3CreatorProps {
   annexTypeId: string;
+  presetId?: string;
+  presetConfig?: AnnexPresetConfig;
 }
 
-export function Annex3Creator({ annexTypeId }: Annex3CreatorProps) {
+export function Annex3Creator({ annexTypeId, presetId, presetConfig }: Annex3CreatorProps) {
   return (
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-minsu-green-900 via-minsu-green-800 to-minsu-green-700 text-white rounded-2xl p-6 apple-shadow border border-minsu-green-800 print:hidden relative overflow-hidden">
@@ -28,7 +31,7 @@ export function Annex3Creator({ annexTypeId }: Annex3CreatorProps) {
         </div>
       </div>
 
-      <Annex3SheetSuite mode="create" annexTypeId={annexTypeId} />
+      <Annex3SheetSuite mode="create" annexTypeId={annexTypeId} presetId={presetId} presetConfig={presetConfig} />
     </div>
   );
 }

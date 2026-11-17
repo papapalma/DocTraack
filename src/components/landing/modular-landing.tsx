@@ -1,6 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import { Ticket } from "lucide-react";
 import { LandingSection, LandingStyleSettings, DEFAULT_STYLE_SETTINGS } from "@/types/landing";
 import { MotionContext } from "@/components/landing/motion/motion-wrapper";
 import { HeroSection } from "@/components/landing/sections/hero-section";
@@ -22,6 +24,7 @@ interface ModularLandingProps {
   showFooter?: boolean;
   className?: string;
   isEmbeddedPreview?: boolean;
+  showKioskButton?: boolean;
 }
 
 export function ModularLanding({
@@ -32,7 +35,31 @@ export function ModularLanding({
   showFooter = true,
   className = "",
   isEmbeddedPreview = false,
+  showKioskButton,
 }: ModularLandingProps) {
+  const [fetchedShowKiosk, setFetchedShowKiosk] = useState(false);
+
+  useEffect(() => {
+    if (showKioskButton !== undefined || isEmbeddedPreview) return;
+    let cancelled = false;
+    fetch("/api/queue/config", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.config) {
+          setFetchedShowKiosk(Boolean(data.config.showHomepageKioskButton));
+        }
+      })
+      .catch(() => {
+        // Non-blocking fallback when config endpoint is unreachable
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showKioskButton, isEmbeddedPreview]);
+
+  const effectiveShowKioskButton =
+    showKioskButton !== undefined ? showKioskButton : fetchedShowKiosk;
+
   const activeSections = sections.filter((s) => s.enabled);
 
   const bgImage = styleSettings.customBgImage?.trim() || "/campus-bg.jpg";
@@ -77,6 +104,15 @@ export function ModularLanding({
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {effectiveShowKioskButton && !isEmbeddedPreview && (
+              <Link
+                href="/kiosk"
+                className="inline-flex h-9 sm:h-10 items-center gap-1.5 rounded-xl border border-white/25 bg-white/10 px-3 sm:px-4 text-xs sm:text-sm font-semibold text-white transition hover:bg-white/20"
+              >
+                <Ticket className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#F2B705]" />
+                <span>Walk-In Kiosk</span>
+              </Link>
+            )}
             <Button
               variant="accent"
               size="sm"

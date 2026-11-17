@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
+import { writeAuditTx } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
+import { sanitizeText } from "@/lib/validation";
 import { DocumentStatus } from "@prisma/client";
 
 export async function POST(
@@ -17,14 +18,18 @@ export async function POST(
 
     if (user.role !== "DIRECTOR") {
       return NextResponse.json(
-        { error: "Only users with the Director role can return documents for revision." },
+        {
+          error:
+            "Only users with the Director role can return documents for revision.",
+        },
         { status: 403 }
       );
     }
 
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const comment = body.comment?.trim() || "";
+    const comment =
+      typeof body?.comment === "string" ? sanitizeText(body.comment, 2000) : "";
 
     const doc = await prisma.document.findUnique({
       where: { id },
@@ -35,19 +40,32 @@ export async function POST(
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
-    if (doc.status !== DocumentStatus.SUBMITTED && doc.status !== DocumentStatus.RESUBMITTED) {
+    if (
+      doc.status !== DocumentStatus.SUBMITTED &&
+      doc.status !== DocumentStatus.RESUBMITTED
+    ) {
       return NextResponse.json(
         { error: `Cannot return document currently in ${doc.status} state.` },
         { status: 400 }
       );
     }
 
-    const operations: any[] = [
-      prisma.document.update({
-        where: { id },
+    const updatedDoc = await prisma.$transaction(async (tx) => {
+      const transitioned = await tx.document.updateMany({
+        where: {
+          id,
+          status: { in: [DocumentStatus.SUBMITTED, DocumentStatus.RESUBMITTED] },
+        },
         data: { status: DocumentStatus.RETURNED },
-      }),
-      prisma.statusHistory.create({
+      });
+
+      if (transitioned.count === 0) {
+        return null;
+      }
+
+      const fresh = await tx.document.findUnique({ where: { id } });
+
+      await tx.statusHistory.create({
         data: {
           documentId: id,
           fromStatus: doc.status,
@@ -55,32 +73,37 @@ export async function POST(
           actorId: user.id,
           comment: comment || "Returned for revisions by Director",
         },
-      }),
-    ];
+      });
 
-    if (comment) {
-      operations.push(
-        prisma.comment.create({
+      if (comment) {
+        await tx.comment.create({
           data: {
             documentId: id,
             authorId: user.id,
             body: comment,
           },
-        })
+        });
+      }
+
+      await writeAuditTx(tx, {
+        actorId: user.id,
+        action: "DOCUMENT_RETURNED",
+        entity: "document",
+        entityId: id,
+        req,
+        details: { comment, fromStatus: doc.status },
+      });
+
+      return fresh;
+    });
+
+    if (!updatedDoc) {
+      return NextResponse.json(
+        { error: "Document status changed concurrently. Please refresh and try again." },
+        { status: 409 }
       );
     }
 
-    const results = await prisma.$transaction(operations);
-
-    await logAudit({
-      actorId: user.id,
-      action: "DOCUMENT_RETURNED",
-      entity: "document",
-      entityId: id,
-      details: { comment },
-    });
-
-    // Notify the preparer that changes are requested
     await createNotification({
       userId: doc.createdById,
       title: "Document Returned for Revision",
@@ -88,7 +111,7 @@ export async function POST(
       link: `/documents/${id}`,
     });
 
-    return NextResponse.json({ document: results[0] });
+    return NextResponse.json({ document: updatedDoc });
   } catch (error) {
     console.error("Return document error:", error);
     return NextResponse.json(

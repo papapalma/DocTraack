@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageAnnouncements } from "@/lib/rbac";
 import { logAudit } from "@/lib/audit";
-import { sanitizeText } from "@/lib/validation";
+import { safeJsonObject, sanitizeText } from "@/lib/validation";
 import { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -81,12 +81,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json().catch(() => ({}));
-    const title = sanitizeText(body.title || "").trim();
-    const content = sanitizeText(body.content || "").trim();
-    const category = body.category || "GENERAL";
+    const body = await safeJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
+    }
+    const title = typeof body.title === "string" ? sanitizeText(body.title, 200).trim() : "";
+    const content = typeof body.content === "string" ? sanitizeText(body.content, 5000).trim() : "";
+    const category = typeof body.category === "string" ? body.category : "GENERAL";
     const isPinned = Boolean(body.isPinned);
-    const targetAudience = body.targetAudience || "ALL";
+    const targetAudience = typeof body.targetAudience === "string" ? body.targetAudience : "ALL";
 
     if (!title || title.length < 3) {
       return NextResponse.json(

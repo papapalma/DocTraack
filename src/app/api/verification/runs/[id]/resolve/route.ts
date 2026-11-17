@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
+import { writeAuditTx } from "@/lib/audit";
+import { safeJsonObject, sanitizeText } from "@/lib/validation";
 import { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+
+class AlreadyResolvedError extends Error {}
 
 export async function POST(
   req: NextRequest,
@@ -24,10 +27,15 @@ export async function POST(
     }
 
     const { id } = await params;
-    const body = await req.json().catch(() => ({}));
-    const { resultId, action, notes } = body;
+    const body = await safeJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
+    }
+    const resultId = typeof body.resultId === "string" ? body.resultId.trim() : "";
+    const action = body.action;
+    const cleanNotes = typeof body.notes === "string" ? sanitizeText(body.notes, 500) : "";
 
-    if (!resultId || !action || !["CONFIRM", "DISMISS"].includes(action)) {
+    if (!resultId || (action !== "CONFIRM" && action !== "DISMISS")) {
       return NextResponse.json(
         { error: "Invalid request. 'resultId' and 'action' ('CONFIRM' or 'DISMISS') are required." },
         { status: 400 }
@@ -45,60 +53,76 @@ export async function POST(
       );
     }
 
-    let newStatus = result.status;
-    let runUpdateData: any = {};
-
-    if (action === "CONFIRM") {
-      // If confirmed match: student is enrolled in Registrar
-      newStatus = result.inSystem ? "FULLY_VERIFIED" : "NEEDS_ENCODING";
-      runUpdateData = {
-        possibleMatchCount: { decrement: 1 },
-        ...(result.inSystem
-          ? { fullyVerifiedCount: { increment: 1 } }
-          : { needsEncodingCount: { increment: 1 } }),
-      };
-    } else {
-      // If dismissed: student is not officially enrolled in Registrar
-      newStatus = "NOT_ENROLLED";
-      runUpdateData = {
-        possibleMatchCount: { decrement: 1 },
-        notEnrolledCount: { increment: 1 },
-      };
+    if (result.status !== "POSSIBLE_MATCH" || result.isManuallyResolved) {
+      return NextResponse.json(
+        { error: "Only unresolved possible matches can be resolved" },
+        { status: 409 }
+      );
     }
 
+    const newStatus =
+      action === "CONFIRM"
+        ? result.inSystem
+          ? "FULLY_VERIFIED"
+          : "NEEDS_ENCODING"
+        : "NOT_ENROLLED";
+
+    const runUpdateData =
+      action === "CONFIRM"
+        ? {
+            possibleMatchCount: { decrement: 1 },
+            ...(result.inSystem
+              ? { fullyVerifiedCount: { increment: 1 } }
+              : { needsEncodingCount: { increment: 1 } }),
+          }
+        : {
+            possibleMatchCount: { decrement: 1 },
+            notEnrolledCount: { increment: 1 },
+          };
+
     const updated = await prisma.$transaction(async (tx) => {
-      const updatedItem = await tx.verificationResult.update({
-        where: { id: resultId },
+      const claim = await tx.verificationResult.updateMany({
+        where: {
+          id: resultId,
+          runId: id,
+          status: "POSSIBLE_MATCH",
+          isManuallyResolved: false,
+        },
         data: {
           status: newStatus,
           isManuallyResolved: true,
           resolvedStatus: action,
-          resolvedNotes: notes || null,
+          resolvedNotes: cleanNotes || null,
           inRegistrar: action === "CONFIRM",
         },
       });
+
+      if (claim.count === 0) {
+        throw new AlreadyResolvedError("Verification item was already resolved concurrently");
+      }
 
       await tx.verificationRun.update({
         where: { id },
         data: runUpdateData,
       });
 
-      return updatedItem;
-    });
+      await writeAuditTx(tx, {
+        actorId: user.id,
+        action: "VERIFICATION_MATCH_RESOLVED",
+        entity: "VerificationResult",
+        entityId: resultId,
+        req,
+        details: {
+          runId: id,
+          studentName: `${result.lastName}, ${result.firstName}`,
+          previousStatus: result.status,
+          newStatus,
+          action,
+          notes: cleanNotes || null,
+        },
+      });
 
-    await logAudit({
-      actorId: user.id,
-      action: "VERIFICATION_MATCH_RESOLVED",
-      entity: "VerificationResult",
-      entityId: resultId,
-      details: {
-        runId: id,
-        studentName: `${result.lastName}, ${result.firstName}`,
-        previousStatus: result.status,
-        newStatus,
-        action,
-        notes,
-      },
+      return tx.verificationResult.findUnique({ where: { id: resultId } });
     });
 
     return NextResponse.json({
@@ -106,6 +130,9 @@ export async function POST(
       result: updated,
     });
   } catch (error) {
+    if (error instanceof AlreadyResolvedError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error("Resolve match error:", error);
     return NextResponse.json(
       { error: "Failed to resolve match" },

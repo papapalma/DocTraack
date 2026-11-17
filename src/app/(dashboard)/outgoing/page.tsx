@@ -267,7 +267,7 @@ export default function OutgoingDocumentsPage() {
                             : "N/A"}
                         </td>
                         <td className="py-3.5 px-4 text-xs whitespace-nowrap">
-                          {doc.transmittal?.driveLink ? (
+                          {doc.transmittal?.driveLink && /^https?:\/\//i.test(doc.transmittal.driveLink) ? (
                             <a
                               href={doc.transmittal.driveLink}
                               target="_blank"

@@ -28,6 +28,8 @@ import {
   Award,
 } from "lucide-react";
 import { BatchSelectorDropdown } from "@/components/documents/batch-selector-dropdown";
+import { PresetSelectorPanel } from "@/components/documents/preset-selector-panel";
+import { AnnexPresetRecord } from "@/types/presets";
 import { useTable } from "@/hooks/use-table";
 import { SortableTh } from "@/components/ui/sortable-header";
 import { PaginationBar } from "@/components/ui/pagination-bar";
@@ -66,6 +68,35 @@ export default function RegistrationsValidationPage() {
   const [compileAgency, setCompileAgency] = useState("Commission on Higher Education (CHED) / UniFAST");
   const [compileAY, setCompileAY] = useState("A.Y. 2026-2027, 1st Semester");
   const [compileBatches, setCompileBatches] = useState<number[]>([1]);
+  const [annex1Presets, setAnnex1Presets] = useState<AnnexPresetRecord[]>([]);
+  const [loadingAnnex1Presets, setLoadingAnnex1Presets] = useState(false);
+  const [compilePresetId, setCompilePresetId] = useState<string>("");
+
+  useEffect(() => {
+    if (!compileModalOpen) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setLoadingAnnex1Presets(true);
+    });
+    fetch("/api/annex-presets?annexNumber=1")
+      .then((res) => (res.ok ? res.json() : { presets: [] }))
+      .then((data) => {
+        if (cancelled) return;
+        const list = (data.presets || []) as AnnexPresetRecord[];
+        setAnnex1Presets(list);
+        const def = list.find((p) => p.isDefault) || list[0];
+        if (def) setCompilePresetId(def.id);
+      })
+      .catch(() => {
+        if (!cancelled) setAnnex1Presets([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingAnnex1Presets(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [compileModalOpen]);
   const [compileRemarks, setCompileRemarks] = useState("Official batch submission of validated student grantees for executive endorsement.");
   const [isCompiling, setIsCompiling] = useState(false);
   const [compileSuccess, setCompileSuccess] = useState<string | null>(null);
@@ -216,6 +247,7 @@ export default function RegistrationsValidationPage() {
           targetAgency: compileAgency,
           academicYear: compileAY,
           remarks: compileRemarks,
+          ...(compilePresetId ? { presetId: compilePresetId } : {}),
         }),
       });
 
@@ -942,6 +974,27 @@ export default function RegistrationsValidationPage() {
             </div>
           ) : (
             <div className="space-y-3">
+              {annex1Presets.length > 0 && (
+                <PresetSelectorPanel
+                  annexNumber={1}
+                  presets={annex1Presets}
+                  selectedPresetId={compilePresetId}
+                  loading={loadingAnnex1Presets}
+                  userRole={user?.role}
+                  compact
+                  onSelectPreset={(preset) => {
+                    setCompilePresetId(preset.id);
+                    const s = preset.config?.settings;
+                    if (s?.extraDefaults?.target_agency) {
+                      setCompileAgency(String(s.extraDefaults.target_agency));
+                    }
+                    if (s?.extraDefaults?.remarks) {
+                      setCompileRemarks(String(s.extraDefaults.remarks));
+                    }
+                  }}
+                />
+              )}
+
               <div className="space-y-1.5">
                 <Label htmlFor="c-batch" required className="text-xs font-semibold">
                   TDP Intake Batch(es) to Compile (Select 1, 2, or 3)

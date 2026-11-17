@@ -1,7 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+
+const AUTH_ACTIONS = [
+  "USER_LOGIN",
+  "USER_LOGOUT",
+  "USER_REGISTERED",
+  "USER_LOGIN_TOTP",
+  "USER_LOGIN_RECOVERY_CODE",
+  "USER_LOGIN_FAILED",
+  "USER_LOGIN_TOTP_FAILED",
+  "USER_LOGIN_2FA_FAILED",
+  "USER_2FA_ENABLED",
+  "USER_2FA_SETUP_INITIATED",
+  "STUDENT_REGISTRATION",
+];
+
+const USER_ADMIN_ACTIONS = [
+  "USER_CREATED",
+  "USER_UPDATED",
+  "USER_DELETED",
+  "ADMIN_RESET_PASSWORD",
+  "STUDENT_PROFILE_UPDATED",
+];
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,14 +41,15 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-    const limit = Math.min(
-      200,
-      Math.max(10, parseInt(searchParams.get("limit") || "25", 10))
-    );
-    const search = searchParams.get("search")?.trim() || "";
-    const entity = searchParams.get("entity")?.trim() || "all";
-    const category = searchParams.get("category")?.trim() || "all";
+    const parsedPage = parseInt(searchParams.get("page") || "1", 10);
+    const page = Number.isFinite(parsedPage) ? Math.max(1, parsedPage) : 1;
+    const parsedLimit = parseInt(searchParams.get("limit") || "25", 10);
+    const limit = Number.isFinite(parsedLimit)
+      ? Math.min(200, Math.max(10, parsedLimit))
+      : 25;
+    const search = (searchParams.get("search")?.trim() || "").slice(0, 120);
+    const entity = (searchParams.get("entity")?.trim() || "all").slice(0, 60);
+    const category = (searchParams.get("category")?.trim() || "all").slice(0, 40);
     const dateRange = searchParams.get("dateRange")?.trim() || "all";
     const isExport = searchParams.get("export") === "true";
 
@@ -44,7 +68,7 @@ export async function GET(req: NextRequest) {
       switch (category.toUpperCase()) {
         case "AUTH":
           whereConditions.push({
-            action: { in: ["USER_LOGIN", "USER_LOGOUT", "USER_REGISTERED"] },
+            action: { in: AUTH_ACTIONS },
           });
           break;
         case "DOCUMENT":
@@ -54,12 +78,25 @@ export async function GET(req: NextRequest) {
           break;
         case "USER":
           whereConditions.push({
-            action: { in: ["USER_CREATED", "USER_UPDATED", "USER_DELETED"] },
+            action: { in: USER_ADMIN_ACTIONS },
           });
           break;
         case "LANDING":
           whereConditions.push({
             action: { startsWith: "LANDING_" },
+          });
+          break;
+        case "PRESET":
+          whereConditions.push({
+            action: { startsWith: "PRESET_" },
+          });
+          break;
+        case "QUEUE":
+          whereConditions.push({
+            OR: [
+              { action: { startsWith: "QUEUE_" } },
+              { action: { startsWith: "KIOSK_" } },
+            ],
           });
           break;
         default:
@@ -145,13 +182,24 @@ export async function GET(req: NextRequest) {
         }),
         prisma.auditLog.count({
           where: {
-            action: { in: ["USER_LOGIN", "USER_LOGOUT", "USER_REGISTERED"] },
+            action: { in: AUTH_ACTIONS },
           },
         }),
         prisma.auditLog.groupBy({
           by: ["actorId"],
         }),
       ]);
+
+    if (isExport) {
+      await logAudit({
+        actorId: currentUser.id,
+        action: "AUDIT_LOG_EXPORTED",
+        entity: "audit_log",
+        entityId: "export",
+        req,
+        details: { rowCount: logs.length, category, entity, dateRange },
+      });
+    }
 
     const totalPages = Math.ceil(totalCount / limit);
 

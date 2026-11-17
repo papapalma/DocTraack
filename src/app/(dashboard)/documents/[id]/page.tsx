@@ -14,6 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StateContainer } from "@/components/ui/state-container";
 import { canEditDocument, canReviewDocument, canUploadScan, canTransmit, canArchive } from "@/lib/rbac";
 import { AnnexFormField, DocumentStatus } from "@/types";
+import type { AnnexPresetConfig } from "@/types/presets";
+import { isPresetSupportedAnnex } from "@/lib/annex-presets";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -34,6 +36,8 @@ import {
   Search,
   SearchX,
   RotateCcw,
+  Layers,
+  RefreshCw,
 } from "lucide-react";
 import { useTable } from "@/hooks/use-table";
 import { SortableTh } from "@/components/ui/sortable-header";
@@ -49,6 +53,7 @@ import { Annex7Viewer } from "@/components/documents/annex-7-viewer";
 import { Annex8Viewer } from "@/components/documents/annex-8-viewer";
 import { Annex9Viewer } from "@/components/documents/annex-9-viewer";
 import { Annex10Viewer } from "@/components/documents/annex-10-viewer";
+import { CustomPresetDocumentSuite } from "@/components/documents/custom-preset-suite";
 
 function Annex1GranteesTable({ students, documentId }: { students: any[]; documentId: string }) {
   const {
@@ -219,6 +224,9 @@ export default function DocumentDetailPage({
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncingPreset, setSyncingPreset] = useState(false);
+  const [presetSyncNotice, setPresetSyncNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [presetSyncVersion, setPresetSyncVersion] = useState(0);
 
   // Director review remarks
   const [reviewComment, setReviewComment] = useState("");
@@ -500,16 +508,58 @@ export default function DocumentDetailPage({
     }
   };
 
+  const handleSyncPreset = async () => {
+    if (!document?.presetId || syncingPreset) return;
+    setSyncingPreset(true);
+    setPresetSyncNotice(null);
+    try {
+      const res = await fetch(`/api/documents/${id}/sync-preset`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPresetSyncNotice({
+          type: "error",
+          text: data.error || "Failed to sync latest preset settings.",
+        });
+        return;
+      }
+      await loadDoc();
+      setPresetSyncVersion((v) => v + 1);
+      setPresetSyncNotice({
+        type: "success",
+        text: `Synced latest preset snapshot (${data.document?.presetNameSnapshot || "Preset updated"}).`,
+      });
+    } catch {
+      setPresetSyncNotice({
+        type: "error",
+        text: "Network error while syncing latest preset.",
+      });
+    } finally {
+      setSyncingPreset(false);
+    }
+  };
+
   const fields = (document.annexType?.formSchema as any)?.fields as AnnexFormField[] || [];
-  const isAnnex3 = document?.annexType?.number === 3 && (formData as any)?.billedGrantees;
-  const isAnnex4 = document?.annexType?.number === 4 && (formData as any)?.grantees;
-  const isAnnex5 = document?.annexType?.number === 5 && (formData as any)?.heis;
-  const isAnnex6 = document?.annexType?.number === 6 && (formData as any)?.totalFundsReceived !== undefined;
-  const isAnnex7 = document?.annexType?.number === 7;
-  const isAnnex8 = document?.annexType?.number === 8;
-  const isAnnex9 = document?.annexType?.number === 9 && (formData as any)?.grantees;
-  const isAnnex10 = document?.annexType?.number === 10 && (formData as any)?.grantees;
-  const isSpecialSuite = isAnnex3 || isAnnex4 || isAnnex5 || isAnnex6 || isAnnex7 || isAnnex8 || isAnnex9 || isAnnex10;
+  const presetConfig = (document?.presetSnapshot || document?.preset?.config || null) as AnnexPresetConfig | null;
+  const isCustomPresetDoc = presetConfig?.kind === "CUSTOM_UPLOAD";
+  const showPresetBadge =
+    Boolean(document?.presetId || document?.presetNameSnapshot || presetConfig) ||
+    isPresetSupportedAnnex(document?.annexType?.number || 0);
+  const presetLabel =
+    document?.presetNameSnapshot ||
+    document?.preset?.name ||
+    "Preset 1 — Default";
+
+  const isAnnex3 = !isCustomPresetDoc && document?.annexType?.number === 3 && (formData as any)?.billedGrantees;
+  const isAnnex4 = !isCustomPresetDoc && document?.annexType?.number === 4 && (formData as any)?.grantees;
+  const isAnnex5 = !isCustomPresetDoc && document?.annexType?.number === 5 && (formData as any)?.heis;
+  const isAnnex6 = !isCustomPresetDoc && document?.annexType?.number === 6 && (formData as any)?.totalFundsReceived !== undefined;
+  const isAnnex7 = !isCustomPresetDoc && document?.annexType?.number === 7;
+  const isAnnex8 = !isCustomPresetDoc && document?.annexType?.number === 8;
+  const isAnnex9 = !isCustomPresetDoc && document?.annexType?.number === 9 && (formData as any)?.grantees;
+  const isAnnex10 = !isCustomPresetDoc && document?.annexType?.number === 10 && (formData as any)?.grantees;
+  const isSpecialSuite = isCustomPresetDoc || isAnnex3 || isAnnex4 || isAnnex5 || isAnnex6 || isAnnex7 || isAnnex8 || isAnnex9 || isAnnex10;
 
   return (
     <div className="space-y-6">
@@ -527,6 +577,12 @@ export default function DocumentDetailPage({
               Annex {document.annexType?.number}
             </span>
             <StatusBadge status={document.status} size="sm" />
+            {showPresetBadge && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#F1F8F1] text-[#123F17] border border-[#1B5E20]/20">
+                <Layers className="w-3 h-3 text-[#1B5E20]" />
+                Preset: {presetLabel}
+              </span>
+            )}
           </div>
           <h1 className="text-xl sm:text-2xl font-heading font-bold text-[#1F2A24]">
             {document.title}
@@ -544,6 +600,20 @@ export default function DocumentDetailPage({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {isEditable && document.presetId && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={syncingPreset}
+              onClick={handleSyncPreset}
+              className="border-[#B88A00]/40 text-[#B88A00] hover:bg-[#FFF1C2]/50 font-semibold apple-press"
+              title="Refresh this draft with the latest saved preset layout and defaults"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${syncingPreset ? "animate-spin" : ""}`} />
+              {syncingPreset ? "Syncing..." : "Sync Latest Preset"}
+            </Button>
+          )}
           {/* Workflow Sidebar Toggle for suites that support it */}
           {isSpecialSuite && (
             <Button
@@ -610,15 +680,52 @@ export default function DocumentDetailPage({
         </div>
       </div>
 
+      {presetSyncNotice && (
+        <div
+          className={`flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border text-xs font-medium print:hidden ${
+            presetSyncNotice.type === "success"
+              ? "bg-[#F1F8F1] border-[#1B5E20]/25 text-[#123F17]"
+              : "bg-red-50 border-red-200 text-red-700"
+          }`}
+        >
+          <span>{presetSyncNotice.text}</span>
+          <button
+            type="button"
+            onClick={() => setPresetSyncNotice(null)}
+            className="text-[11px] font-semibold underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Main Grid: Left = Form Fields / Full Canvas, Right = Workflow & Timeline */}
       <div className={isSpecialSuite && !showWorkflowPanel ? "space-y-6 print:block" : "grid grid-cols-1 lg:grid-cols-3 gap-6 print:block"}>
         {/* Left Column: Document Data */}
         <div className={isSpecialSuite ? (showWorkflowPanel ? "lg:col-span-2 space-y-6 print:w-full print:max-w-none" : "w-full print:w-full print:max-w-none") : "lg:col-span-2 space-y-6 print:hidden"}>
-          {isAnnex3 ? (
+          {isCustomPresetDoc && presetConfig ? (
+            <CustomPresetDocumentSuite
+              key={`${document.id}-${document.presetId || "custom"}-${presetSyncVersion}`}
+              mode="view"
+              annexTypeId={document.annexTypeId}
+              annexNumber={document.annexType?.number || 1}
+              presetId={document.presetId || undefined}
+              presetName={presetLabel}
+              presetConfig={presetConfig}
+              documentId={document.id}
+              documentTitle={document.title}
+              initialFormData={formData}
+              canEdit={isEditable}
+              onSaved={loadDoc}
+            />
+          ) : isAnnex3 ? (
             <Annex3Viewer
               documentId={document.id}
               documentTitle={document.title}
               formData={formData as any}
+              key={`${document.id}-${document.presetId || "default"}-${presetSyncVersion}`}
+              presetId={document.presetId || undefined}
+              presetConfig={presetConfig || undefined}
               onSaved={loadDoc}
             />
           ) : isAnnex4 ? (
@@ -626,6 +733,9 @@ export default function DocumentDetailPage({
               documentId={document.id}
               documentTitle={document.title}
               formData={formData as any}
+              key={`${document.id}-${document.presetId || "default"}-${presetSyncVersion}`}
+              presetId={document.presetId || undefined}
+              presetConfig={presetConfig || undefined}
               onSaved={loadDoc}
             />
           ) : isAnnex5 ? (
@@ -633,6 +743,9 @@ export default function DocumentDetailPage({
               documentId={document.id}
               documentTitle={document.title}
               formData={formData as any}
+              key={`${document.id}-${document.presetId || "default"}-${presetSyncVersion}`}
+              presetId={document.presetId || undefined}
+              presetConfig={presetConfig || undefined}
               onSaved={loadDoc}
             />
           ) : isAnnex6 ? (
@@ -640,6 +753,9 @@ export default function DocumentDetailPage({
               documentId={document.id}
               documentTitle={document.title}
               formData={formData as any}
+              key={`${document.id}-${document.presetId || "default"}-${presetSyncVersion}`}
+              presetId={document.presetId || undefined}
+              presetConfig={presetConfig || undefined}
               onSaved={loadDoc}
             />
           ) : isAnnex7 ? (
@@ -647,6 +763,9 @@ export default function DocumentDetailPage({
               documentId={document.id}
               documentTitle={document.title}
               formData={formData as any}
+              key={`${document.id}-${document.presetId || "default"}-${presetSyncVersion}`}
+              presetId={document.presetId || undefined}
+              presetConfig={presetConfig || undefined}
               onSaved={loadDoc}
             />
           ) : isAnnex8 ? (
@@ -654,6 +773,9 @@ export default function DocumentDetailPage({
               documentId={document.id}
               documentTitle={document.title}
               formData={formData as any}
+              key={`${document.id}-${document.presetId || "default"}-${presetSyncVersion}`}
+              presetId={document.presetId || undefined}
+              presetConfig={presetConfig || undefined}
               onSaved={loadDoc}
             />
           ) : isAnnex9 ? (
@@ -661,6 +783,9 @@ export default function DocumentDetailPage({
               documentId={document.id}
               documentTitle={document.title}
               formData={formData as any}
+              key={`${document.id}-${document.presetId || "default"}-${presetSyncVersion}`}
+              presetId={document.presetId || undefined}
+              presetConfig={presetConfig || undefined}
               onSaved={loadDoc}
             />
           ) : isAnnex10 ? (
@@ -668,6 +793,9 @@ export default function DocumentDetailPage({
               documentId={document.id}
               documentTitle={document.title}
               formData={formData as any}
+              key={`${document.id}-${document.presetId || "default"}-${presetSyncVersion}`}
+              presetId={document.presetId || undefined}
+              presetConfig={presetConfig || undefined}
               onSaved={loadDoc}
             />
           ) : (

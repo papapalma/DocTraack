@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
-import { Role, DocumentStatus, ApplicationStatus } from "@prisma/client";
+import { resolveAnnexPresetForDocument } from "@/lib/annex-presets-server";
+import { Role, DocumentStatus, ApplicationStatus, Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { applicationIds, batchNumber, batchNumbers, targetAgency, academicYear, remarks } = body;
+    const { applicationIds, batchNumber, batchNumbers, targetAgency, academicYear, remarks, presetId } = body;
 
     // Normalize batch selection into an array of numbers if provided
     let targetBatches: number[] = [];
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest) {
         student: { select: { id: true, name: true, email: true, studentProfile: true } },
       },
       orderBy: [{ batchNumber: "asc" }, { submittedAt: "asc" }],
+      take: 2000,
     });
 
     if (applications.length === 0) {
@@ -178,15 +180,22 @@ export async function POST(req: NextRequest) {
     }
     const docTitle = `Annex 1: Masterlist of TDP Grantees (${batchLabel}) - ${academicYear || `A.Y. ${now.getFullYear()}-${now.getFullYear() + 1}`} (${formattedStudents.length} Students)`;
 
+    const resolvedPreset = await resolveAnnexPresetForDocument(
+      annex1Type.id,
+      1,
+      presetId
+    );
+    const extraDefaults = (resolvedPreset.presetConfig.settings?.extraDefaults || {}) as Record<string, unknown>;
+
     const docFormData = {
-      target_agency: targetAgency || "Commission on Higher Education (CHED) / UniFAST",
-      academic_year: academicYear || `A.Y. ${now.getFullYear()}-${now.getFullYear() + 1}`,
+      target_agency: targetAgency || String(extraDefaults.target_agency || "Commission on Higher Education (CHED) / UniFAST"),
+      academic_year: academicYear || resolvedPreset.presetConfig.settings?.academicYear || `A.Y. ${now.getFullYear()}-${now.getFullYear() + 1}`,
       batch_number: targetBatches.length > 0 ? targetBatches.join(", ") : (batchNumber || "1"),
       selected_batches: targetBatches,
       transmittal_number: `MINSU-ANNEX1-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       submission_date: now.toISOString().split("T")[0],
       total_grantees: formattedStudents.length,
-      remarks: remarks || `Officially validated TDP grantees (${batchLabel}) ready for executive confirmation and transmittal.`,
+      remarks: remarks || String(extraDefaults.remarks || `Officially validated TDP grantees (${batchLabel}) ready for executive confirmation and transmittal.`),
       students: formattedStudents,
     };
 
@@ -194,6 +203,9 @@ export async function POST(req: NextRequest) {
     const document = await prisma.document.create({
       data: {
         annexTypeId: annex1Type.id,
+        presetId: resolvedPreset.presetId,
+        presetNameSnapshot: resolvedPreset.presetName,
+        presetSnapshot: resolvedPreset.presetConfig as unknown as Prisma.InputJsonValue,
         title: docTitle,
         status: DocumentStatus.SUBMITTED, // Automatically in Director's Review Queue
         formData: docFormData,

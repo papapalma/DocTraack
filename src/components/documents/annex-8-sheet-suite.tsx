@@ -4,6 +4,10 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
+import { AnnexPresetConfig } from "@/types/presets";
+import { applyPresetSettingsToAnnexDefaults } from "@/lib/annex-presets";
+import { PresetBuiltinExtrasSection } from "./preset-builtin-extras";
+import { PresetOverlayLayer } from "./preset-overlay-layer";
 import { Annex8FormData, Annex8CheckEntry, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { SortableTh } from "@/components/ui/sortable-header";
@@ -31,6 +35,8 @@ import {
 
 interface Annex8SheetSuiteProps {
   initialData?: Annex8FormData;
+  presetId?: string;
+  presetConfig?: AnnexPresetConfig;
   documentId?: string;
   documentTitle?: string;
   mode: "create" | "view";
@@ -40,6 +46,8 @@ interface Annex8SheetSuiteProps {
 
 export function Annex8SheetSuite({
   initialData,
+  presetId,
+  presetConfig,
   documentId,
   documentTitle,
   mode,
@@ -131,7 +139,13 @@ export function Annex8SheetSuite({
       auditorTitle: "COA/State Auditor",
     };
 
-    if (!initialData) return baseDefaults;
+    if (!initialData) {
+      return applyPresetSettingsToAnnexDefaults(
+        8,
+        baseDefaults as unknown as Record<string, unknown>,
+        presetConfig
+      ) as unknown as Annex8FormData;
+    }
 
     const resolvedEntries = Array.isArray(initialData.entries) && initialData.entries.length > 0
       ? initialData.entries
@@ -147,7 +161,7 @@ export function Annex8SheetSuite({
       entries: resolvedEntries,
       totalAmount: resolvedTotal,
     };
-  }, [initialData]);
+  }, [initialData, presetConfig]);
 
   const [formData, setFormData] = useState<Annex8FormData>(defaultData);
 
@@ -335,6 +349,7 @@ export function Annex8SheetSuite({
         const payload = {
           title: docTitle,
           annexTypeId: annexTypeId,
+          ...(presetId ? { presetId } : {}),
           formData: formData,
           submitDirectly,
         };
@@ -1050,13 +1065,34 @@ export function Annex8SheetSuite({
               </div>
             </div>
           )}
+          <PresetBuiltinExtrasSection
+            presetConfig={presetConfig}
+            formData={formData as unknown as Record<string, unknown>}
+            onCustomFieldChange={(key, value) =>
+              setFormData((prev) => ({
+                ...prev,
+                customFields: {
+                  ...(((prev as unknown as Record<string, unknown>).customFields as Record<string, unknown>) || {}),
+                  [key]: value,
+                },
+              }))
+            }
+          />
         </div>
       )}
 
       {/* OFFICIAL CANVAS RENDER FUNCTION */}
       {(() => {
         const renderOfficialRciSheet = (editableLogo: boolean = true) => (
-          <div className="w-[1020px] bg-white text-black p-10 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight text-left">
+          <div className="relative w-[1020px] bg-white text-black p-10 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight text-left">
+            {presetConfig && presetConfig.elements.length > 0 && (
+              <PresetOverlayLayer
+                config={presetConfig}
+                pageId={presetConfig.pages[0]?.id || "builtin-a8-sheet"}
+                formData={formData as unknown as Record<string, unknown>}
+                displayMode="view"
+              />
+            )}
             {/* Top Tag */}
             <div className="flex justify-end mb-2">
               <span className="italic text-xs font-sans font-semibold tracking-wide text-neutral-800">

@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { canEditDocument } from "@/lib/rbac";
+import { canAccessDocument, canEditDocument } from "@/lib/rbac";
 import { logAudit } from "@/lib/audit";
 import { DocumentStatus } from "@prisma/client";
+import { Role } from "@/types";
 
 export async function GET(
   req: NextRequest,
@@ -30,6 +31,9 @@ export async function GET(
       where: { id },
       include: {
         annexType: true,
+        preset: {
+          select: { id: true, name: true, kind: true, updatedAt: true },
+        },
         createdBy: {
           select: { id: true, name: true, email: true, role: true },
         },
@@ -52,6 +56,22 @@ export async function GET(
 
     if (!document) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
+    }
+
+    if (
+      !canAccessDocument(
+        { id: user.id, role: user.role as Role },
+        {
+          status: document.status,
+          createdById: document.createdById,
+          annexType: { number: document.annexType.number },
+        }
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Access denied for this document and annex scope." },
+        { status: 403 }
+      );
     }
 
     return NextResponse.json({ document });

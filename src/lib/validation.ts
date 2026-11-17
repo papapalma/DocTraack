@@ -1,6 +1,7 @@
 /**
  * Security validation and input sanitization utilities
  */
+import type ExcelJS from "exceljs";
 
 // Standard RFC 5322 compliant email regex
 const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
@@ -206,4 +207,134 @@ export function isValidPersonName(name: string): boolean {
   if (trimmed.length < 2 || trimmed.length > 60) return false;
   // Unicode letter characters, periods, apostrophes, hyphens, spaces
   return /^[a-zA-ZÀ-ÿ\u00f1\u00d1\s'.-]+$/.test(trimmed);
+}
+
+/**
+ * Escapes HTML special characters for safe HTML/Word rendering.
+ */
+export function escapeHtml(value: unknown): string {
+  const str = value === null || value === undefined ? "" : String(value);
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/\//g, "&#x2F;");
+}
+
+const FORMULA_TRIGGER_REGEX = /^[\t\r ]*[=+\-@]|^[\t\r]/;
+
+/**
+ * Neutralizes spreadsheet formula injection (CWE-1236) by prefixing an apostrophe
+ * whenever a cell starts with =, +, -, @, tab, or carriage return.
+ */
+export function neutralizeSpreadsheetCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const str = String(value);
+  if (!str) return "";
+  return FORMULA_TRIGGER_REGEX.test(str) ? `'${str}` : str;
+}
+
+/**
+ * Neutralizes all plain-string cells across an ExcelJS workbook before serialization.
+ */
+export function sanitizeExcelWorkbook(workbook: ExcelJS.Workbook): void {
+  for (const ws of workbook.worksheets) {
+    ws.eachRow((row) => {
+      row.eachCell((cell) => {
+        if (typeof cell.value === "string") {
+          cell.value = neutralizeSpreadsheetCell(cell.value);
+        }
+      });
+    });
+  }
+}
+
+/**
+ * Escapes and formula-neutralizes a cell for standard comma-delimited CSV output.
+ */
+export function escapeCsvCell(value: unknown): string {
+  const neutralized = neutralizeSpreadsheetCell(value);
+  return `"${neutralized.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Sanitizes and formula-neutralizes a cell for pipe-delimited CSV export (strips |, CR, LF).
+ */
+export function sanitizePipeCsvCell(value: unknown): string {
+  const flat =
+    value === null || value === undefined
+      ? ""
+      : String(value).replace(/[|\r\n]+/g, " ");
+  return neutralizeSpreadsheetCell(flat);
+}
+
+/**
+ * Restricts download header filenames to safe ASCII tokens.
+ */
+export function sanitizeDownloadFilename(
+  name: string,
+  fallback = "export"
+): string {
+  const clean = (name || "")
+    .replace(/\.{2,}/g, "_")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[._-]+|[._-]+$/g, "")
+    .slice(0, 100);
+  return clean || fallback;
+}
+
+/**
+ * Validates that an external link uses an explicit HTTP/HTTPS scheme (blocks javascript:, data:, vbscript:).
+ */
+export function parseSafeHttpUrl(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 2048 || /[\x00-\x1F\x7F]/.test(trimmed)) {
+    return null;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validates either an internal root-relative path (/api/media/... or /logo.png)
+ * or an explicit HTTP/HTTPS URL (blocks protocol-relative //, javascript:, data:).
+ */
+export function parseSafeAssetUrl(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 2048 || /[\x00-\x1F\x7F]/.test(trimmed)) {
+    return null;
+  }
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//") && !trimmed.includes("\\")) {
+    return trimmed;
+  }
+  return parseSafeHttpUrl(trimmed);
+}
+
+/**
+ * Safely parses a JSON request body as a plain non-array object.
+ */
+export async function safeJsonObject(
+  req: Request
+): Promise<Record<string, unknown> | null> {
+  try {
+    const body = await req.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return null;
+    }
+    return body as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }

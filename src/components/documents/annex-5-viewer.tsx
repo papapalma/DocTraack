@@ -3,11 +3,14 @@
 import React from "react";
 import { Annex5FormData } from "@/types";
 import { Annex5SheetSuite } from "./annex-5-sheet-suite";
+import { AnnexPresetConfig } from "@/types/presets";
 
 interface Annex5ViewerProps {
   documentId: string;
   documentTitle: string;
   formData: Annex5FormData;
+  presetId?: string;
+  presetConfig?: AnnexPresetConfig;
   onSaved?: () => void;
 }
 
@@ -15,6 +18,8 @@ export function Annex5Viewer({
   documentId,
   documentTitle,
   formData,
+  presetId,
+  presetConfig,
   onSaved,
 }: Annex5ViewerProps) {
   return (
@@ -23,6 +28,8 @@ export function Annex5Viewer({
       documentId={documentId}
       documentTitle={documentTitle}
       initialData={formData}
+      presetId={presetId}
+      presetConfig={presetConfig}
       onSaved={onSaved}
     />
   );

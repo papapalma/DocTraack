@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { canArchive } from "@/lib/rbac";
-import { logAudit } from "@/lib/audit";
+import { writeAuditTx } from "@/lib/audit";
 import { DocumentStatus } from "@prisma/client";
 
 export async function POST(
@@ -32,12 +32,19 @@ export async function POST(
       );
     }
 
-    const [updated] = await prisma.$transaction([
-      prisma.document.update({
-        where: { id },
+    const updatedDoc = await prisma.$transaction(async (tx) => {
+      const transitioned = await tx.document.updateMany({
+        where: { id, status: DocumentStatus.TRANSMITTED },
         data: { status: DocumentStatus.ARCHIVED },
-      }),
-      prisma.statusHistory.create({
+      });
+
+      if (transitioned.count === 0) {
+        return null;
+      }
+
+      const fresh = await tx.document.findUnique({ where: { id } });
+
+      await tx.statusHistory.create({
         data: {
           documentId: id,
           fromStatus: doc.status,
@@ -45,17 +52,27 @@ export async function POST(
           actorId: user.id,
           comment: "Manually archived by user",
         },
-      }),
-    ]);
+      });
 
-    await logAudit({
-      actorId: user.id,
-      action: "DOCUMENT_ARCHIVED",
-      entity: "document",
-      entityId: id,
+      await writeAuditTx(tx, {
+        actorId: user.id,
+        action: "DOCUMENT_ARCHIVED",
+        entity: "document",
+        entityId: id,
+        req,
+      });
+
+      return fresh;
     });
 
-    return NextResponse.json({ document: updated });
+    if (!updatedDoc) {
+      return NextResponse.json(
+        { error: "Document status changed concurrently. Please refresh and try again." },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json({ document: updatedDoc });
   } catch (error) {
     console.error("Archive document error:", error);
     return NextResponse.json(

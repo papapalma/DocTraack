@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSession } from "@/hooks/use-session";
+import { escapeCsvCell } from "@/lib/validation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -238,17 +239,17 @@ export default function AuditLogsPage() {
       const data = await res.json();
       const exportLogs: AuditLogItem[] = data.logs || [];
 
-      // Build CSV
+      // Build CSV with CWE-1236 formula neutralization
       const headers = ["Timestamp", "Action", "Actor Name", "Actor Email", "Actor Role", "Entity", "Entity ID", "Details"];
       const rows = exportLogs.map((l) => [
-        `"${new Date(l.createdAt).toISOString()}"`,
-        `"${l.action.replace(/"/g, '""')}"`,
-        `"${(l.actor?.name || "System").replace(/"/g, '""')}"`,
-        `"${(l.actor?.email || "").replace(/"/g, '""')}"`,
-        `"${l.actor?.role || ""}"`,
-        `"${l.entity.replace(/"/g, '""')}"`,
-        `"${l.entityId.replace(/"/g, '""')}"`,
-        `"${JSON.stringify(l.details || {}).replace(/"/g, '""')}"`,
+        escapeCsvCell(new Date(l.createdAt).toISOString()),
+        escapeCsvCell(l.action),
+        escapeCsvCell(l.actor?.name || "System"),
+        escapeCsvCell(l.actor?.email || ""),
+        escapeCsvCell(l.actor?.role || ""),
+        escapeCsvCell(l.entity),
+        escapeCsvCell(l.entityId),
+        escapeCsvCell(JSON.stringify(l.details || {})),
       ]);
 
       const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -332,6 +333,12 @@ export default function AuditLogsPage() {
       return {
         bg: "bg-rose-50 text-rose-700 border-rose-200/80",
         dot: "bg-rose-500",
+      };
+    }
+    if (action.startsWith("PRESET_") || action.startsWith("QUEUE_") || action.startsWith("KIOSK_")) {
+      return {
+        bg: "bg-[#FFF1C2] text-[#B88A00] border-[#F2B705]/40",
+        dot: "bg-[#F2B705]",
       };
     }
     return {
@@ -607,6 +614,8 @@ export default function AuditLogsPage() {
                 <option value="DOCUMENT">Document Operations</option>
                 <option value="USER">User Administration</option>
                 <option value="LANDING">Landing CMS</option>
+                <option value="PRESET">Annex Presets</option>
+                <option value="QUEUE">Walk-In Queue & Kiosk</option>
               </select>
             </div>
 
@@ -624,7 +633,11 @@ export default function AuditLogsPage() {
                 <option value="all">All Entities</option>
                 <option value="user">User</option>
                 <option value="document">Document</option>
+                <option value="annex_preset">Annex Preset</option>
                 <option value="landing_page">Landing Page</option>
+                <option value="queue_ticket">Queue Ticket</option>
+                <option value="queue_counter">Queue Window</option>
+                <option value="queue_config">Kiosk Config</option>
               </select>
             </div>
 

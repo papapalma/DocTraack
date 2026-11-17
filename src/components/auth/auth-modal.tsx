@@ -39,6 +39,7 @@ export function AuthModal({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authMode, setAuthMode] = useState<"password" | "totp">("password");
+  const [requiresTwoFactorStep, setRequiresTwoFactorStep] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -46,12 +47,14 @@ export function AuthModal({
   // Clear errors when switching modes or closing
   const switchMode = (newMode: "login" | "register") => {
     setError(null);
+    setRequiresTwoFactorStep(false);
     setMode(newMode);
   };
 
   const handleClose = () => {
     setError(null);
     setCode("");
+    setRequiresTwoFactorStep(false);
     onClose();
   };
 
@@ -60,6 +63,8 @@ export function AuthModal({
     setEmail(roleEmail);
     setPassword("Password@123");
     setAuthMode("password");
+    setRequiresTwoFactorStep(false);
+    setCode("");
     setError(null);
   };
 
@@ -91,6 +96,13 @@ export function AuthModal({
 
       if (!res.ok) {
         setError(data.error || "Failed to log in. Please check your credentials.");
+        setIsLoading(false);
+        return;
+      }
+
+      if (data.requiresTwoFactor) {
+        setRequiresTwoFactorStep(true);
+        setCode("");
         setIsLoading(false);
         return;
       }
@@ -187,6 +199,8 @@ export function AuthModal({
             type="button"
             onClick={() => {
               setAuthMode("password");
+              setRequiresTwoFactorStep(false);
+              setCode("");
               if (error) setError(null);
             }}
             className={`relative z-10 flex-1 py-1.5 px-2 rounded-lg text-center transition-all flex items-center justify-center gap-1.5 ${
@@ -208,6 +222,7 @@ export function AuthModal({
             type="button"
             onClick={() => {
               setAuthMode("totp");
+              setRequiresTwoFactorStep(false);
               if (error) setError(null);
             }}
             className={`relative z-10 flex-1 py-1.5 px-2 rounded-lg text-center transition-all flex items-center justify-center gap-1.5 ${
@@ -226,7 +241,7 @@ export function AuthModal({
           </button>
         </div>
 
-        {authMode === "password" ? (
+        {authMode === "password" && !requiresTwoFactorStep ? (
           <div>
             <FormField
               id="m-password"
@@ -258,7 +273,9 @@ export function AuthModal({
         ) : (
           <div className="p-3 bg-[#F6F8F6] rounded-xl border border-[#D6DDD8]/80 text-center space-y-2 my-1">
             <span className="text-[11px] font-bold text-[#1F2A24] block">
-              Enter 6-digit code from Microsoft Authenticator:
+              {requiresTwoFactorStep
+                ? "Second-Factor Verification: Enter 6-digit code from Microsoft Authenticator:"
+                : "Enter 6-digit code from Microsoft Authenticator:"}
             </span>
             <OtpInput
               value={code}
@@ -300,7 +317,7 @@ export function AuthModal({
             <Sparkles className="w-3 h-3 text-[#F2B705]" />
             <span>One-Click Demo Accounts:</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[11px]">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px]">
             <button
               type="button"
               onClick={() => fillRole("admin@minsu.edu.ph")}
@@ -335,8 +352,35 @@ export function AuthModal({
             </button>
             <button
               type="button"
+              onClick={() => fillRole("staff1@minsu.edu.ph")}
+              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-[#F1F8F1]/60 hover:bg-[#DCEFDD] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
+              title="Window 1 • Lane A"
+            >
+              <span>Staff 1</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => fillRole("staff2@minsu.edu.ph")}
+              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-[#F1F8F1]/60 hover:bg-[#DCEFDD] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
+              title="Window 2 • Lane P"
+            >
+              <span>Staff 2</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => fillRole("staff3@minsu.edu.ph")}
+              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-[#F1F8F1]/60 hover:bg-[#DCEFDD] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
+              title="Window 3 • Lanes V & G"
+            >
+              <span>Staff 3</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32]" />
+            </button>
+            <button
+              type="button"
               onClick={() => fillRole("student@minsu.edu.ph")}
-              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-white hover:bg-[#F1F8F1] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs col-span-2 sm:col-span-1"
+              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-white hover:bg-[#F1F8F1] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
             >
               <span>Student</span>
               <span className="w-1.5 h-1.5 rounded-full bg-[#F2B705]" />

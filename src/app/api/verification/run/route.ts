@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
+import { writeAuditTx } from "@/lib/audit";
+import { sanitizeDownloadFilename, sanitizeText } from "@/lib/validation";
 import { ApplicationStatus, Role } from "@prisma/client";
 import { parsePipeDelimitedCsv } from "@/lib/verification/csv-parser";
 import {
@@ -10,6 +11,10 @@ import {
 } from "@/lib/verification/matcher";
 
 export const dynamic = "force-dynamic";
+
+const MAX_CSV_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_CSV_ROWS = 15000;
+const ALLOWED_SCOPES = new Set(["ACCEPTED_GRANTEES", "ALL_APPLICATIONS"]);
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,15 +40,30 @@ export async function POST(req: NextRequest) {
 
     const chedFile = formData.get("chedFile") as File | null;
     const registrarFile = formData.get("registrarFile") as File | null;
-    const systemScope = (formData.get("systemScope") as string) || "ACCEPTED_GRANTEES";
-    const customTitle = (formData.get("title") as string)?.trim();
+    const rawScope = formData.get("systemScope");
+    const systemScope =
+      typeof rawScope === "string" && ALLOWED_SCOPES.has(rawScope)
+        ? rawScope
+        : "ACCEPTED_GRANTEES";
+    const rawTitle = formData.get("title");
+    const customTitle = typeof rawTitle === "string" ? sanitizeText(rawTitle, 140) : "";
 
-    if (!chedFile || !registrarFile) {
+    if (!chedFile || !registrarFile || !(chedFile instanceof File) || !(registrarFile instanceof File)) {
       return NextResponse.json(
         { error: "Both CHED CSV and Registrar CSV files are required." },
         { status: 400 }
       );
     }
+
+    if (chedFile.size > MAX_CSV_BYTES || registrarFile.size > MAX_CSV_BYTES) {
+      return NextResponse.json(
+        { error: "CSV files must not exceed 10 MB each." },
+        { status: 413 }
+      );
+    }
+
+    const safeChedName = sanitizeDownloadFilename(chedFile.name || "ched.csv", "ched.csv");
+    const safeRegistrarName = sanitizeDownloadFilename(registrarFile.name || "registrar.csv", "registrar.csv");
 
     // 1. In-memory Parsing of CSV Files
     const chedText = await chedFile.text();
@@ -75,8 +95,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Dynamic Fetching of DocTrack Database Records
-    const applicationWhere: any = {};
+    if (chedParsed.validRows.length > MAX_CSV_ROWS || registrarParsed.validRows.length > MAX_CSV_ROWS) {
+      return NextResponse.json(
+        { error: `CSV files exceed maximum supported row limit of ${MAX_CSV_ROWS}.` },
+        { status: 400 }
+      );
+    }
+
+    // 2. Dynamic Fetching of DocTrack Database Records (bounded)
+    const applicationWhere: { status?: ApplicationStatus } = {};
     if (systemScope === "ACCEPTED_GRANTEES") {
       applicationWhere.status = ApplicationStatus.ACCEPTED;
     }
@@ -86,6 +113,7 @@ export async function POST(req: NextRequest) {
       include: {
         student: { select: { id: true, name: true, email: true } },
       },
+      take: 10000,
     });
 
     const systemRecords: StudentInputRecord[] = applications
@@ -148,17 +176,17 @@ export async function POST(req: NextRequest) {
 
     const { results, summary } = crossCheckOutput;
 
-    // 5. Persist Run and Results in PostgreSQL
+    // 5. Persist Run, Results, and Audit Log atomically in PostgreSQL
     const now = new Date();
-    const defaultTitle = `Cross-Check ${now.toLocaleDateString()} - ${chedFile.name} vs ${registrarFile.name}`;
+    const defaultTitle = `Cross-Check ${now.toLocaleDateString()} - ${safeChedName} vs ${safeRegistrarName}`;
     const runTitle = customTitle || defaultTitle;
 
     const savedRun = await prisma.$transaction(async (tx) => {
       const run = await tx.verificationRun.create({
         data: {
           title: runTitle,
-          chedFileName: chedFile.name,
-          registrarFileName: registrarFile.name,
+          chedFileName: safeChedName,
+          registrarFileName: safeRegistrarName,
           systemDataSource: systemScope,
           totalChedRows: summary.totalChed,
           totalRegistrarRows: summary.totalRegistrar,
@@ -195,22 +223,22 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      return run;
-    });
+      await writeAuditTx(tx, {
+        actorId: user.id,
+        action: "VERIFICATION_RUN_COMPLETED",
+        entity: "VerificationRun",
+        entityId: run.id,
+        req,
+        details: {
+          title: runTitle,
+          chedFile: safeChedName,
+          registrarFile: safeRegistrarName,
+          systemScope,
+          summary,
+        },
+      });
 
-    // 6. Audit Trail Logging (Data Privacy & Compliance)
-    await logAudit({
-      actorId: user.id,
-      action: "VERIFICATION_RUN_COMPLETED",
-      entity: "VerificationRun",
-      entityId: savedRun.id,
-      details: {
-        title: runTitle,
-        chedFile: chedFile.name,
-        registrarFile: registrarFile.name,
-        systemScope,
-        summary,
-      },
+      return run;
     });
 
     return NextResponse.json({

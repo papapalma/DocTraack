@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { canCreateAnnex } from "@/lib/rbac";
+import { canCreateAnnex, canSelectAnnexPreset } from "@/lib/rbac";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
+import { resolveAnnexPresetForDocument } from "@/lib/annex-presets-server";
 import { DocumentStatus, Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
@@ -53,19 +54,32 @@ export async function GET(req: NextRequest) {
     }
 
     if (annexFilter) {
-      whereClause.annexType = { number: parseInt(annexFilter, 10) };
+      const parsedAnnex = parseInt(annexFilter, 10);
+      if (!Number.isFinite(parsedAnnex) || parsedAnnex < 1 || parsedAnnex > 10) {
+        return NextResponse.json({ error: "Invalid annex filter" }, { status: 400 });
+      }
+      whereClause.annexType = { number: parsedAnnex };
     }
+
+    const parsedLimit = parseInt(searchParams.get("limit") || "200", 10);
+    const take = Number.isFinite(parsedLimit)
+      ? Math.min(500, Math.max(1, parsedLimit))
+      : 200;
 
     const documents = await prisma.document.findMany({
       where: whereClause,
       include: {
         annexType: true,
+        preset: {
+          select: { id: true, name: true, kind: true },
+        },
         createdBy: {
           select: { id: true, name: true, email: true, role: true },
         },
         transmittal: true,
       },
       orderBy: { updatedAt: "desc" },
+      take,
     });
 
     return NextResponse.json({ documents });
@@ -86,7 +100,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { annexTypeId, title, formData, submitDirectly } = body;
+    const { annexTypeId, presetId, title, formData, submitDirectly } = body;
 
     if (!annexTypeId) {
       return NextResponse.json(
@@ -116,6 +130,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (presetId && !canSelectAnnexPreset(user.role, annexType.number)) {
+      return NextResponse.json(
+        { error: `Role ${user.role} cannot select a custom preset for Annex ${annexType.number}.` },
+        { status: 403 }
+      );
+    }
+
+    const resolvedPreset = await resolveAnnexPresetForDocument(
+      annexTypeId,
+      annexType.number,
+      presetId
+    );
+
     const docTitle =
       title ||
       `Annex ${annexType.number} - ${annexType.name} (${new Date().toLocaleDateString()})`;
@@ -133,6 +160,9 @@ export async function POST(req: NextRequest) {
     const document = await prisma.document.create({
       data: {
         annexTypeId,
+        presetId: resolvedPreset.presetId,
+        presetNameSnapshot: resolvedPreset.presetName,
+        presetSnapshot: resolvedPreset.presetConfig as unknown as Prisma.InputJsonValue,
         title: docTitle,
         status: initialStatus,
         formData: formData || {},
@@ -142,29 +172,34 @@ export async function POST(req: NextRequest) {
             fromStatus: DocumentStatus.DRAFT,
             toStatus: initialStatus,
             actorId: user.id,
-            comment: submitDirectly ? "Initial submission for Director review" : "Draft created",
+            comment: isDirectSubmit ? "Initial submission for Director review" : "Draft created",
           },
         },
       },
       include: {
         annexType: true,
+        preset: {
+          select: { id: true, name: true, kind: true, updatedAt: true },
+        },
       },
     });
 
     await logAudit({
       actorId: user.id,
-      action: submitDirectly ? "DOCUMENT_SUBMITTED" : "DOCUMENT_DRAFT_CREATED",
+      action: isDirectSubmit ? "DOCUMENT_SUBMITTED" : "DOCUMENT_DRAFT_CREATED",
       entity: "document",
       entityId: document.id,
       details: {
         annexNumber: annexType.number,
+        presetId: resolvedPreset.presetId,
+        presetName: resolvedPreset.presetName,
         title: document.title,
         status: initialStatus,
       },
     });
 
     // If submitted directly, notify Directors
-    if (submitDirectly) {
+    if (isDirectSubmit) {
       const directors = await prisma.user.findMany({
         where: { role: "DIRECTOR", active: true },
       });

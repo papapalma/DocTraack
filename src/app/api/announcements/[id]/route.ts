@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageAnnouncements } from "@/lib/rbac";
 import { logAudit } from "@/lib/audit";
-import { sanitizeText } from "@/lib/validation";
+import { safeJsonObject, sanitizeText } from "@/lib/validation";
+import { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await getCurrentUser();
     const { id } = await params;
     const announcement = await prisma.announcement.findUnique({
       where: { id },
@@ -28,6 +30,13 @@ export async function GET(
 
     if (!announcement) {
       return NextResponse.json({ error: "Announcement not found" }, { status: 404 });
+    }
+
+    if (!user && !["ALL", "PUBLIC"].includes(announcement.targetAudience)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (user?.role === Role.STUDENT && !["ALL", "STUDENTS", "PUBLIC"].includes(announcement.targetAudience)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     return NextResponse.json({ announcement });
@@ -66,11 +75,14 @@ export async function PATCH(
       return NextResponse.json({ error: "Announcement not found" }, { status: 404 });
     }
 
-    const body = await req.json().catch(() => ({}));
-    const updateData: any = {};
+    const body = await safeJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
+    }
+    const updateData: Record<string, unknown> = {};
 
     if (body.title !== undefined) {
-      const sanitized = sanitizeText(body.title).trim();
+      const sanitized = typeof body.title === "string" ? sanitizeText(body.title, 200).trim() : "";
       if (sanitized.length < 3) {
         return NextResponse.json(
           { error: "Title must be at least 3 characters." },
@@ -81,7 +93,7 @@ export async function PATCH(
     }
 
     if (body.content !== undefined) {
-      const sanitized = sanitizeText(body.content).trim();
+      const sanitized = typeof body.content === "string" ? sanitizeText(body.content, 5000).trim() : "";
       if (sanitized.length < 5) {
         return NextResponse.json(
           { error: "Content must be at least 5 characters." },
@@ -93,7 +105,7 @@ export async function PATCH(
 
     if (body.category !== undefined) {
       const validCategories = ["GENERAL", "URGENT", "DEADLINE", "REQUIREMENTS", "PAYROLL"];
-      updateData.category = validCategories.includes(body.category)
+      updateData.category = typeof body.category === "string" && validCategories.includes(body.category)
         ? body.category
         : "GENERAL";
     }
@@ -104,9 +116,10 @@ export async function PATCH(
 
     if (body.targetAudience !== undefined) {
       const validAudiences = ["ALL", "STUDENTS", "PUBLIC"];
-      updateData.targetAudience = validAudiences.includes(body.targetAudience)
-        ? body.targetAudience
-        : "ALL";
+      updateData.targetAudience =
+        typeof body.targetAudience === "string" && validAudiences.includes(body.targetAudience)
+          ? body.targetAudience
+          : "ALL";
     }
 
     const updated = await prisma.announcement.update({

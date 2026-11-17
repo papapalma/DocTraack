@@ -63,7 +63,7 @@ export function AuthenticatorLockStep({
       const res = await fetch("/api/auth/2fa/enable", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, code: codeToSubmit }),
+        body: JSON.stringify({ code: codeToSubmit }),
       });
 
       const data = await res.json();

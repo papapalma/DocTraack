@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { Role } from "@prisma/client";
+import { canAccessDocument, canExportAnnex } from "@/lib/rbac";
+import { logAudit } from "@/lib/audit";
+import { sanitizeDownloadFilename, sanitizeExcelWorkbook } from "@/lib/validation";
+import { Role as AppRole } from "@/types";
 import ExcelJS from "exceljs";
 import { Annex4FormData } from "@/types";
 
@@ -14,7 +17,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (user.role === Role.STUDENT) {
+    const role = user.role as AppRole;
+    if (!canExportAnnex(role, 4)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -33,9 +37,12 @@ export async function GET(req: NextRequest) {
       if (!doc || !doc.formData) {
         return NextResponse.json({ error: "Document not found" }, { status: 404 });
       }
+      if (doc.annexType.number !== 4 || !canAccessDocument({ id: user.id, role }, doc)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
 
       formData = doc.formData as unknown as Annex4FormData;
-      fileTitle = `Annex_4_${(formData.referenceNumber || doc.title).replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      fileTitle = sanitizeDownloadFilename(`Annex_4_${formData.referenceNumber || doc.title}`, "Annex_4_New_TDP_Billing_Package");
     } else {
       return NextResponse.json(
         { error: "Missing documentId parameter" },
@@ -507,8 +514,18 @@ export async function GET(req: NextRequest) {
     ws3.getCell("B36").value = "Signature over Printed Name of the President of the HEIs";
     ws3.getCell("B36").font = { name: "Arial", size: 9 };
 
+    sanitizeExcelWorkbook(workbook);
     // Write binary buffer
     const buffer = await workbook.xlsx.writeBuffer();
+
+    await logAudit({
+      actorId: user.id,
+      action: "ANNEX_EXCEL_EXPORTED",
+      entity: "document",
+      entityId: documentId,
+      req,
+      details: { annexNumber: 4 },
+    });
 
     return new NextResponse(buffer, {
       status: 200,
@@ -516,6 +533,7 @@ export async function GET(req: NextRequest) {
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="${fileTitle}.xlsx"`,
+        "Cache-Control": "no-store, private",
       },
     });
   } catch (error) {

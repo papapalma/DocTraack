@@ -35,6 +35,9 @@
   /* Apple Motion & Physics Curve */
   --apple-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --apple-smooth: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 body {
@@ -60,9 +63,17 @@ h1, h2, h3, h4, h5, h6 {
 
 .glass-header {
   background: rgba(27, 94, 32, 0.94);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid rgba(242, 183, 5, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 4px 20px rgba(0, 0, 0, 0.06);
+  transition: background-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out), border-color 200ms var(--ease-out);
+}
+
+.glass-header[data-scrolled="true"] {
+  background: rgba(22, 77, 28, 0.96);
+  border-bottom-color: rgba(242, 183, 5, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 10px 30px -6px rgba(18, 63, 23, 0.34), 0 4px 12px -2px rgba(0, 0, 0, 0.12);
 }
 
 .glass-card {
@@ -74,12 +85,59 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Apple Direct Tactile Response */
 .apple-press {
-  transition: transform 120ms var(--apple-spring), opacity 120ms ease, box-shadow 120ms ease;
+  transition: transform 150ms var(--ease-out), opacity 150ms ease, box-shadow 150ms ease;
   user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .apple-press:active {
   transform: scale(0.97);
+}
+
+.kiosk-header-control {
+  transition: transform 150ms var(--ease-out), background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), opacity 150ms ease;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.kiosk-header-control:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .kiosk-header-control:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+}
+
+/* Kiosk Touch Target Ergonomics */
+.kiosk-touch-tile {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: transform 120ms var(--apple-spring), opacity 120ms ease, box-shadow 160ms var(--apple-spring), border-color 160ms ease;
+}
+
+.kiosk-touch-tile:active {
+  transform: scale(0.97);
+}
+
+/* Orientation-aware Unified Kiosk Layout (stacks on portrait kiosks, side-by-side on landscape) */
+.kiosk-unified-auto {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (min-width: 1100px) and (orientation: landscape) {
+  .kiosk-unified-auto {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    gap: 2rem;
+  }
 }
 
 /* Apple Multi-stop Smooth Shadow */
@@ -93,11 +151,121 @@ h1, h2, h3, h4, h5, h6 {
   transition: transform 200ms var(--apple-spring), box-shadow 200ms var(--apple-spring);
 }
 
-.apple-shadow-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.04),
-              0 12px 24px rgba(27, 94, 32, 0.08),
-              0 24px 40px rgba(0, 0, 0, 0.06);
+@media (hover: hover) and (pointer: fine) {
+  .apple-shadow-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.04),
+                0 12px 24px rgba(27, 94, 32, 0.08),
+                0 24px 40px rgba(0, 0, 0, 0.06);
+  }
+}
+
+/* Kiosk Showcase Motion Primitives (GPU-only transform & opacity) */
+@keyframes kioskBeaconRing {
+  0% {
+    transform: scale(0.97);
+    opacity: 0.65;
+  }
+  70% {
+    transform: scale(1.045);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.045);
+    opacity: 0;
+  }
+}
+
+@keyframes kioskHeroSheen {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.45;
+  }
+  55% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translateX(220%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes kioskReadyPulse {
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+.kiosk-call-beacon {
+  animation: kioskBeaconRing 2.2s var(--ease-out) infinite;
+  pointer-events: none;
+}
+
+.kiosk-hero-sheen {
+  animation: kioskHeroSheen 5.8s var(--ease-in-out) infinite;
+  pointer-events: none;
+}
+
+.kiosk-ready-dot {
+  animation: kioskReadyPulse 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-header,
+  .apple-press,
+  .kiosk-header-control,
+  .kiosk-touch-tile,
+  .apple-shadow-hover {
+    transition-duration: 0.01ms !important;
+  }
+
+  .apple-press:active,
+  .kiosk-header-control:active,
+  .kiosk-touch-tile:active {
+    transform: none !important;
+  }
+
+  .kiosk-call-beacon,
+  .kiosk-hero-sheen,
+  .kiosk-ready-dot {
+    animation: none !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-header {
+    background: #1B5E20 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .glass-surface {
+    background: #FFFFFF !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .glass-header {
+    border-bottom-color: #F2B705 !important;
+    border-bottom-width: 2px !important;
+  }
+
+  .glass-surface,
+  .kiosk-touch-tile {
+    border-color: #1F2A24 !important;
+    border-width: 2px !important;
+  }
 }
 
 /* Apple Minimal Auto-hiding Scrollbar */
@@ -222,6 +390,33 @@ h1, h2, h3, h4, h5, h6 {
 
   th, td {
     border-color: #333333 !important;
+  }
+
+  /* 80mm Thermal Queue Slip Printing (scoped when body.kiosk-printing is active) */
+  body.kiosk-printing * {
+    visibility: hidden !important;
+  }
+
+  body.kiosk-printing .kiosk-thermal-slip,
+  body.kiosk-printing .kiosk-thermal-slip * {
+    visibility: visible !important;
+  }
+
+  body.kiosk-printing .kiosk-thermal-slip {
+    display: block !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 76mm !important;
+    max-width: 76mm !important;
+    padding: 4mm !important;
+    margin: 0 !important;
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+    line-height: 1.35 !important;
+    border: none !important;
+    box-shadow: none !important;
   }
 }
 

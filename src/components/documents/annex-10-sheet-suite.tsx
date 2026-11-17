@@ -4,6 +4,10 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
+import { AnnexPresetConfig } from "@/types/presets";
+import { applyPresetSettingsToAnnexDefaults } from "@/lib/annex-presets";
+import { PresetBuiltinExtrasSection } from "./preset-builtin-extras";
+import { PresetOverlayLayer } from "./preset-overlay-layer";
 import { Annex10FormData, Annex10Grantee, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { BatchSelectorDropdown } from "./batch-selector-dropdown";
@@ -35,6 +39,8 @@ import {
 
 interface Annex10SheetSuiteProps {
   initialData?: Annex10FormData;
+  presetId?: string;
+  presetConfig?: AnnexPresetConfig;
   documentId?: string;
   documentTitle?: string;
   mode: "create" | "view";
@@ -44,6 +50,8 @@ interface Annex10SheetSuiteProps {
 
 export function Annex10SheetSuite({
   initialData,
+  presetId,
+  presetConfig,
   documentId,
   documentTitle,
   mode,
@@ -80,7 +88,7 @@ export function Annex10SheetSuite({
   const defaultData: Annex10FormData = useMemo(() => {
     if (initialData) return initialData;
 
-    return {
+    const baseDefaults: Annex10FormData = {
       topRightLabelType: "annex10",
       letterDate: "October 28, 2026",
       defaultStartingSemester: "1st",
@@ -105,7 +113,12 @@ export function Annex10SheetSuite({
         "Not avail of multiple national government-funded assistance, except for Free Higher Education in SUCs and LUCs under R.A. No. 10931 or the Universal Access to Quality Tertiary Education Act and DSWD Assistance to Individuals in Crisis Situation (AICS).",
       ],
     };
-  }, [initialData]);
+    return applyPresetSettingsToAnnexDefaults(
+      10,
+      baseDefaults as unknown as Record<string, unknown>,
+      presetConfig
+    ) as unknown as Annex10FormData;
+  }, [initialData, presetConfig]);
 
   const [formData, setFormData] = useState<Annex10FormData>(defaultData);
   const [docTitle, setDocTitle] = useState<string>(
@@ -475,6 +488,7 @@ export function Annex10SheetSuite({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             annexTypeId,
+            ...(presetId ? { presetId } : {}),
             title: docTitle,
             formData,
             status: "DRAFT",
@@ -1417,6 +1431,19 @@ export function Annex10SheetSuite({
               </div>
             </div>
           )}
+          <PresetBuiltinExtrasSection
+            presetConfig={presetConfig}
+            formData={formData as unknown as Record<string, unknown>}
+            onCustomFieldChange={(key, value) =>
+              setFormData((prev) => ({
+                ...prev,
+                customFields: {
+                  ...(((prev as unknown as Record<string, unknown>).customFields as Record<string, unknown>) || {}),
+                  [key]: value,
+                },
+              }))
+            }
+          />
         </div>
       )}
 
@@ -1537,6 +1564,14 @@ export function Annex10SheetSuite({
                     minHeight: "11in",
                   }}
                 >
+                  {presetConfig && presetConfig.elements.length > 0 && (
+                    <PresetOverlayLayer
+                      config={presetConfig}
+                      pageId={presetConfig.pages[0]?.id || "builtin-a10-sheet"}
+                      formData={formData as unknown as Record<string, unknown>}
+                      displayMode="view"
+                    />
+                  )}
                   {/* TOP CORNER METADATA */}
                   <div className="flex justify-between items-start text-xs font-bold text-neutral-800 mb-4 tracking-tight">
                     <div>CHED-UniFAST-NOA</div>

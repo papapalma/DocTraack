@@ -33,12 +33,37 @@ enum ApplicationStatus {
   REJECTED
 }
 
+enum AnnexPresetKind {
+  BUILT_IN
+  CUSTOM_UPLOAD
+}
+
+enum QueuePriority {
+  REGULAR
+  PRIORITY
+}
+
+enum QueueTicketStatus {
+  WAITING
+  CALLED
+  SERVING
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+}
+
+enum KioskDisplayMode {
+  UNIFIED
+  CHECK_IN_ONLY
+  DISPLAY_ONLY
+}
+
 model User {
   id            String         @id @default(cuid())
   name          String
   email         String         @unique
   passwordHash  String
-  role          Role           @default(STAFF)
+  role          Role           @default(STUDENT)
   active        Boolean        @default(true)
   departmentId  String?
   createdAt     DateTime       @default(now())
@@ -53,6 +78,7 @@ model User {
   twoFactorRecoveryCodes String[]       @default([])
   twoFactorType          String?        @default("MICROSOFT_AUTHENTICATOR")
   authenticatorLocked    Boolean        @default(false)
+  lastTotpStep           Int?
 
   sessions      Session[]
   documents     Document[]
@@ -64,6 +90,11 @@ model User {
   transmittals  Transmittal[]
   verificationRuns VerificationRun[]
   announcements    Announcement[]
+  createdPresets   AnnexPreset[]  @relation("PresetCreator")
+  updatedPresets   AnnexPreset[]  @relation("PresetUpdater")
+  assignedCounters QueueCounter[] @relation("CounterStaff")
+  assignedServices QueueService[] @relation("ServiceAssignedStaff")
+  servedTickets    QueueTicket[]  @relation("TicketServer")
   notifyAnnouncements Boolean       @default(true)
   notifyPush          Boolean       @default(false)
 
@@ -78,35 +109,66 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
   @@map("sessions")
 }
 
 model AnnexType {
-  id           String      @id @default(cuid())
-  number       Int         @unique
+  id           String        @id @default(cuid())
+  number       Int           @unique
   name         String
   creatorRoles Role[]
   formSchema   Json
   pdfTemplate  String?
   documents    Document[]
+  presets      AnnexPreset[]
 
   @@map("annex_types")
 }
 
+model AnnexPreset {
+  id           String          @id @default(cuid())
+  annexTypeId  String
+  annexType    AnnexType       @relation(fields: [annexTypeId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  kind         AnnexPresetKind @default(BUILT_IN)
+  isDefault    Boolean         @default(false)
+  isActive     Boolean         @default(true)
+  sortOrder    Int             @default(1)
+  config       Json
+  createdById  String
+  createdBy    User            @relation("PresetCreator", fields: [createdById], references: [id])
+  updatedById  String?
+  updatedBy    User?           @relation("PresetUpdater", fields: [updatedById], references: [id])
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  documents    Document[]
+
+  @@index([annexTypeId, isActive])
+  @@index([annexTypeId, isDefault])
+  @@map("annex_presets")
+}
+
 model Document {
-  id            String          @id @default(cuid())
-  annexTypeId   String
-  annexType     AnnexType       @relation(fields: [annexTypeId], references: [id])
-  title         String
-  status        DocumentStatus  @default(DRAFT)
-  formData      Json            @default("{}")
-  fileUrl       String?
-  createdById   String
-  createdBy     User            @relation(fields: [createdById], references: [id])
-  departmentId  String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id                 String          @id @default(cuid())
+  annexTypeId        String
+  annexType          AnnexType       @relation(fields: [annexTypeId], references: [id])
+  presetId           String?
+  preset             AnnexPreset?    @relation(fields: [presetId], references: [id], onDelete: SetNull)
+  presetNameSnapshot String?
+  presetSnapshot     Json?
+  title              String
+  status             DocumentStatus  @default(DRAFT)
+  formData           Json            @default("{}")
+  fileUrl            String?
+  createdById        String
+  createdBy          User            @relation(fields: [createdById], references: [id])
+  departmentId       String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   comments      Comment[]
   statusHistory StatusHistory[]
@@ -115,6 +177,7 @@ model Document {
   @@index([status])
   @@index([createdById])
   @@index([annexTypeId])
+  @@index([presetId])
   @@map("documents")
 }
 
@@ -221,16 +284,18 @@ model Notification {
 
 model AuditLog {
   id        String   @id @default(cuid())
-  actorId   String
-  actor     User     @relation(fields: [actorId], references: [id])
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
   action    String
   entity    String
   entityId  String
+  ipAddress String?
   details   Json?
   createdAt DateTime @default(now())
 
   @@index([entity, entityId])
   @@index([actorId])
+  @@index([action, createdAt])
   @@map("audit_log")
 }
 
@@ -315,5 +380,126 @@ model Announcement {
   @@index([category])
   @@index([authorId])
   @@map("announcements")
+}
+
+model QueueConfig {
+  id                     String           @id @default("default")
+  kioskMode              KioskDisplayMode @default(UNIFIED)
+  defaultCampus          String           @default("Bongabong Campus")
+  allowCampusSwitch      Boolean          @default(false)
+  showHomepageKioskButton Boolean         @default(true)
+  showPrivacyMaskedNames Boolean          @default(false)
+  enableThermalPrint     Boolean          @default(true)
+  autoPrintTicket        Boolean          @default(false)
+  enableSoundChime       Boolean          @default(true)
+  enableVoiceTts         Boolean          @default(true)
+  priorityRatio          Int              @default(2)
+  idleResetSeconds       Int              @default(20)
+  attractModeSeconds     Int              @default(60)
+  kioskPinHash           String?
+  rateLimitBypassEnabled Boolean          @default(false)
+  updatedAt              DateTime         @updatedAt
+  updatedById            String?
+
+  @@map("queue_config")
+}
+
+model QueueService {
+  id               String        @id @default(cuid())
+  code             String        @unique
+  name             String
+  description      String?
+  campus           String?
+  icon             String        @default("file-text")
+  colorToken       String        @default("green")
+  estimatedMinutes Int           @default(5)
+  handledByRoles   Role[]
+  assignedStaff    User[]        @relation("ServiceAssignedStaff")
+  sortOrder        Int           @default(1)
+  isActive         Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  tickets          QueueTicket[]
+
+  @@index([isActive, sortOrder])
+  @@map("queue_services")
+}
+
+model QueueCounter {
+  id                       String        @id @default(cuid())
+  name                     String
+  campus                   String
+  serviceCodes             String[]      @default([])
+  allowedRoles             Role[]
+  assignedStaffId          String?
+  assignedStaff            User?         @relation("CounterStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  currentTicketId          String?
+  consecutivePriorityCount Int           @default(0)
+  isOpen                   Boolean       @default(true)
+  isPaused                 Boolean       @default(false)
+  sortOrder                Int           @default(1)
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  tickets                  QueueTicket[]
+
+  @@unique([campus, name])
+  @@index([campus, isOpen])
+  @@map("queue_counters")
+}
+
+model QueueTicket {
+  id                String             @id @default(cuid())
+  ticketNumber      String
+  sequenceNumber    Int
+  queueDate         String
+  campus            String
+  serviceId         String
+  service           QueueService       @relation(fields: [serviceId], references: [id])
+  serviceCode       String
+  serviceName       String
+  priority          QueuePriority      @default(REGULAR)
+  priorityReason    String?
+  status            QueueTicketStatus  @default(WAITING)
+  visitorName       String?
+  studentIdNo       String?
+  trackingCodeRef   String?
+  publicLookupToken String             @unique
+  counterId         String?
+  counter           QueueCounter?      @relation(fields: [counterId], references: [id], onDelete: SetNull)
+  counterName       String?
+  servedById        String?
+  servedBy          User?              @relation("TicketServer", fields: [servedById], references: [id], onDelete: SetNull)
+  notes             String?
+  recallCount       Int                @default(0)
+  calledAt          DateTime?
+  servingStartedAt  DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  events            QueueTicketEvent[]
+
+  @@unique([queueDate, campus, serviceCode, sequenceNumber])
+  @@index([queueDate, campus, status])
+  @@index([counterId, status])
+  @@index([serviceId, status])
+  @@map("queue_tickets")
+}
+
+model QueueTicketEvent {
+  id         String             @id @default(cuid())
+  ticketId   String
+  ticket     QueueTicket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fromStatus QueueTicketStatus?
+  toStatus   QueueTicketStatus
+  counterId  String?
+  actorId    String?
+  note       String?
+  createdAt  DateTime           @default(now())
+
+  @@index([ticketId, createdAt])
+  @@map("queue_ticket_events")
 }
 

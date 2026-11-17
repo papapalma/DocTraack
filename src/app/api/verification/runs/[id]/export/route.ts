@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
+import {
+  sanitizeDownloadFilename,
+  sanitizeExcelWorkbook,
+  sanitizePipeCsvCell,
+} from "@/lib/validation";
 import { Role } from "@prisma/client";
 import ExcelJS from "exceljs";
 
@@ -84,9 +90,10 @@ export async function GET(
       orderBy: [{ status: "asc" }, { lastName: "asc" }, { firstName: "asc" }],
     });
 
-    const safeTitle = (run.title || "Cross_Check_Results")
-      .replace(/[^a-zA-Z0-9_-]/g, "_")
-      .slice(0, 50);
+    const safeTitle = sanitizeDownloadFilename(
+      run.title || "Cross_Check_Results",
+      "Cross_Check_Results"
+    ).slice(0, 50);
 
     // -------------------------------------------------------------
     // EXCEL EXPORT (.xlsx) — Tabular 3-Form Report
@@ -237,7 +244,17 @@ export async function GET(
       // 4. Form 4: Full Summary / All Records
       buildSheet("All Cross-Check Results", results, "FF374151");
 
+      sanitizeExcelWorkbook(workbook);
       const buffer = await workbook.xlsx.writeBuffer();
+
+      await logAudit({
+        actorId: user.id,
+        action: "VERIFICATION_REPORT_EXPORTED",
+        entity: "VerificationRun",
+        entityId: id,
+        req,
+        details: { format: "xlsx", rowCount: results.length },
+      });
 
       return new NextResponse(buffer, {
         status: 200,
@@ -245,6 +262,7 @@ export async function GET(
           "Content-Type":
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           "Content-Disposition": `attachment; filename="${safeTitle}_3Forms.xlsx"`,
+          "Cache-Control": "no-store, private",
         },
       });
     }
@@ -256,7 +274,7 @@ export async function GET(
       "SEQ|STATUS|IDNUMBER|LASTNAME|FIRSTNAME|MIDDLENAME|SCHOOL|IN_CHED|IN_REGISTRAR|IN_SYSTEM|CONFIDENCE|CERTIFICATION_NOTE|NOTES\r\n";
     const csvRows = results
       .map((item, idx) => {
-        const details = (item.matchDetails as any) || {};
+        const details = (item.matchDetails as Record<string, unknown>) || {};
         const scoreStr = item.confidenceScore
           ? `${Math.round(item.confidenceScore * 100)}%`
           : "";
@@ -268,33 +286,46 @@ export async function GET(
             : item.status === "NOT_ENROLLED"
             ? "SCHOLAR_NOT_ENROLLED"
             : "OTHER";
-        const cleanNotes = (details.notes || item.resolvedNotes || "").replace(/[|\r\n]/g, " ");
+        const rawNotes =
+          (typeof details.notes === "string" ? details.notes : "") ||
+          item.resolvedNotes ||
+          "";
 
         return [
           idx + 1,
-          item.status,
-          item.studentIdNo || "",
-          item.lastName,
-          item.firstName,
-          item.middleName || "",
-          item.school,
+          sanitizePipeCsvCell(item.status),
+          sanitizePipeCsvCell(item.studentIdNo || ""),
+          sanitizePipeCsvCell(item.lastName),
+          sanitizePipeCsvCell(item.firstName),
+          sanitizePipeCsvCell(item.middleName || ""),
+          sanitizePipeCsvCell(item.school),
           item.inChed ? "YES" : "NO",
           item.inRegistrar ? "YES" : "NO",
           item.inSystem ? "YES" : "NO",
           scoreStr,
           certNote,
-          cleanNotes,
+          sanitizePipeCsvCell(rawNotes),
         ].join("|");
       })
       .join("\r\n");
 
     const fullCsv = csvHeader + csvRows;
 
+    await logAudit({
+      actorId: user.id,
+      action: "VERIFICATION_REPORT_EXPORTED",
+      entity: "VerificationRun",
+      entityId: id,
+      req,
+      details: { format: "csv", rowCount: results.length },
+    });
+
     return new NextResponse(fullCsv, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="${safeTitle}.csv"`,
+        "Cache-Control": "no-store, private",
       },
     });
   } catch (error) {

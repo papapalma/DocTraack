@@ -4,6 +4,10 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AnnexLogo } from "./annex-logo";
 import { PrintPreviewModal } from "./print-preview-modal";
+import { AnnexPresetConfig } from "@/types/presets";
+import { applyPresetSettingsToAnnexDefaults } from "@/lib/annex-presets";
+import { PresetBuiltinExtrasSection } from "./preset-builtin-extras";
+import { PresetOverlayLayer } from "./preset-overlay-layer";
 import { Annex7FormData, Annex7Entry, LogoConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { SortableTh } from "@/components/ui/sortable-header";
@@ -34,6 +38,8 @@ import {
 
 interface Annex7SheetSuiteProps {
   initialData?: Annex7FormData;
+  presetId?: string;
+  presetConfig?: AnnexPresetConfig;
   documentId?: string;
   documentTitle?: string;
   mode: "create" | "view";
@@ -43,6 +49,8 @@ interface Annex7SheetSuiteProps {
 
 export function Annex7SheetSuite({
   initialData,
+  presetId,
+  presetConfig,
   documentId,
   documentTitle,
   mode,
@@ -140,7 +148,13 @@ export function Annex7SheetSuite({
       certificationDate: "June 30, 2024",
     };
 
-    if (!initialData) return baseDefaults;
+    if (!initialData) {
+      return applyPresetSettingsToAnnexDefaults(
+        7,
+        baseDefaults as unknown as Record<string, unknown>,
+        presetConfig
+      ) as unknown as Annex7FormData;
+    }
 
     const resolvedEntries = Array.isArray(initialData.entries) && initialData.entries.length > 0
       ? initialData.entries
@@ -156,7 +170,7 @@ export function Annex7SheetSuite({
       entries: resolvedEntries,
       totalAmount: resolvedTotal,
     };
-  }, [initialData]);
+  }, [initialData, presetConfig]);
 
   const [formData, setFormData] = useState<Annex7FormData>(defaultData);
   const [docTitle] = useState(
@@ -179,9 +193,9 @@ export function Annex7SheetSuite({
     refCode?: string;
   } | null>(null);
 
-  // Check for existing draft on mount in create mode
+  // Check for existing draft on mount in create mode (skip if preset explicitly passed)
   useEffect(() => {
-    if (mode === "create" && !initialData) {
+    if (mode === "create" && !initialData && !presetConfig) {
       const saved = getSavedDraft();
       if (saved?.data?.entries && saved.data.entries.length > 0) {
         setTableNotice("Restored your unsaved draft entries from earlier session.");
@@ -189,7 +203,7 @@ export function Annex7SheetSuite({
         setTimeout(() => setTableNotice(null), 5000);
       }
     }
-  }, [mode, initialData, getSavedDraft]);
+  }, [mode, initialData, presetConfig, getSavedDraft]);
 
   const handleLeftLogoChange = (newConfig: LogoConfig) => {
     setFormData((prev) => ({
@@ -376,6 +390,7 @@ export function Annex7SheetSuite({
         const payload = {
           title: docTitle,
           annexTypeId: annexTypeId,
+          ...(presetId ? { presetId } : {}),
           formData: formData,
           submitDirectly,
         };
@@ -1125,13 +1140,34 @@ export function Annex7SheetSuite({
               </div>
             </div>
           )}
+          <PresetBuiltinExtrasSection
+            presetConfig={presetConfig}
+            formData={formData as unknown as Record<string, unknown>}
+            onCustomFieldChange={(key, value) =>
+              setFormData((prev) => ({
+                ...prev,
+                customFields: {
+                  ...(((prev as unknown as Record<string, unknown>).customFields as Record<string, unknown>) || {}),
+                  [key]: value,
+                },
+              }))
+            }
+          />
         </div>
       )}
 
       {/* OFFICIAL CANVAS RENDER FUNCTION */}
       {(() => {
         const renderOfficialRadaiSheet = (editableLogo: boolean = true) => (
-          <div className="w-[1020px] bg-white text-black p-10 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight text-left">
+          <div className="relative w-[1020px] bg-white text-black p-10 shadow-2xl border border-neutral-300 print:shadow-none print:border-none print:p-0 print:w-full font-serif text-[11px] leading-tight text-left">
+            {presetConfig && presetConfig.elements.length > 0 && (
+              <PresetOverlayLayer
+                config={presetConfig}
+                pageId={presetConfig.pages[0]?.id || "builtin-a7-sheet"}
+                formData={formData as unknown as Record<string, unknown>}
+                displayMode="view"
+              />
+            )}
             {/* Top Tag */}
             <div className="flex justify-end mb-2">
               <span className="italic text-xs font-sans font-semibold tracking-wide text-neutral-800">

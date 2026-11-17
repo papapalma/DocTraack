@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { Role } from "@prisma/client";
+import { canAccessDocument, canExportAnnex } from "@/lib/rbac";
+import { logAudit } from "@/lib/audit";
+import { safeJsonObject, sanitizeDownloadFilename, sanitizeExcelWorkbook } from "@/lib/validation";
+import { Role as AppRole } from "@/types";
 import ExcelJS from "exceljs";
 import { Annex7FormData } from "@/types";
 
@@ -14,7 +17,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (user.role === Role.STUDENT) {
+    const role = user.role as AppRole;
+    if (!canExportAnnex(role, 7)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -33,15 +37,27 @@ export async function GET(req: NextRequest) {
       if (!doc || !doc.formData) {
         return NextResponse.json({ error: "Document not found" }, { status: 404 });
       }
+      if (doc.annexType.number !== 7 || !canAccessDocument({ id: user.id, role }, doc)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
 
       formData = doc.formData as unknown as Annex7FormData;
-      fileTitle = `Annex_7_RADAI_${(doc.title || "Report").replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      fileTitle = sanitizeDownloadFilename(`Annex_7_RADAI_${doc.title || "Report"}`, "Annex_7_RADAI");
     } else {
       return NextResponse.json(
         { error: "Missing documentId parameter" },
         { status: 400 }
       );
     }
+
+    await logAudit({
+      actorId: user.id,
+      action: "ANNEX_EXCEL_EXPORTED",
+      entity: "document",
+      entityId: documentId,
+      req,
+      details: { annexNumber: 7 },
+    });
 
     return generateExcelResponse(formData, fileTitle);
   } catch (error) {
@@ -60,13 +76,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (user.role === Role.STUDENT) {
+    if (!canExportAnnex(user.role as AppRole, 7)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const body = await req.json();
-    const formData = body as Annex7FormData;
-    const fileTitle = `Annex_7_RADAI_${(formData.reportNo || "Report").replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+    const body = await safeJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+    }
+    const formData = body as unknown as Annex7FormData;
+    if (Array.isArray(formData.entries) && formData.entries.length > 2000) {
+      return NextResponse.json({ error: "Too many entries for single export (max 2000)" }, { status: 400 });
+    }
+    const fileTitle = sanitizeDownloadFilename(`Annex_7_RADAI_${formData.reportNo || "Report"}`, "Annex_7_RADAI");
+
+    await logAudit({
+      actorId: user.id,
+      action: "ANNEX_EXCEL_EXPORTED",
+      entity: "document",
+      entityId: "preview",
+      req,
+      details: { annexNumber: 7, preview: true, entryCount: Array.isArray(formData.entries) ? formData.entries.length : 0 },
+    });
 
     return generateExcelResponse(formData, fileTitle);
   } catch (error) {
@@ -355,6 +386,7 @@ async function generateExcelResponse(formData: Annex7FormData, fileTitle: string
     }
   }
 
+  sanitizeExcelWorkbook(workbook);
   const buffer = await workbook.xlsx.writeBuffer();
 
   return new NextResponse(buffer, {
@@ -363,6 +395,7 @@ async function generateExcelResponse(formData: Annex7FormData, fileTitle: string
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${fileTitle}.xlsx"`,
+      "Cache-Control": "no-store, private",
     },
   });
 }

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { ApplicationStatus, Role } from "@prisma/client";
+import { canAccessDocument, canExportAnnex } from "@/lib/rbac";
+import { logAudit } from "@/lib/audit";
+import { sanitizeDownloadFilename, sanitizeExcelWorkbook } from "@/lib/validation";
+import { Role as AppRole } from "@/types";
+import { ApplicationStatus } from "@prisma/client";
 import ExcelJS from "exceljs";
 
 export const dynamic = "force-dynamic";
@@ -13,38 +17,49 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Must be Staff, Director, Accounting, or Admin
-    if (user.role === Role.STUDENT) {
+    const role = user.role as AppRole;
+    if (!canExportAnnex(role, 1)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
     const documentId = searchParams.get("documentId");
 
-    let students: any[] = [];
+    let students: Record<string, unknown>[] = [];
     let fileTitle = "Annex_1_Masterlist_TDP_Grantees";
 
     if (documentId) {
       const doc = await prisma.document.findUnique({
         where: { id: documentId },
+        include: { annexType: true },
       });
-      if (doc && doc.formData) {
-        const formData = doc.formData as any;
-        students = Array.isArray(formData.students) ? formData.students : [];
-        fileTitle = `Annex_1_${doc.title.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      if (!doc || !doc.formData) {
+        return NextResponse.json({ error: "Document not found" }, { status: 404 });
       }
+      if (doc.annexType.number !== 1 || !canAccessDocument({ id: user.id, role }, doc)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      const formData = doc.formData as Record<string, unknown>;
+      students = Array.isArray(formData.students)
+        ? (formData.students as Record<string, unknown>[]).slice(0, 2000)
+        : [];
+      fileTitle = sanitizeDownloadFilename(`Annex_1_${doc.title}`, "Annex_1_Masterlist_TDP_Grantees");
     } else {
-      // Fetch all validated/accepted student applications
+      if (role !== "STAFF" && role !== "DIRECTOR") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      // Fetch all validated/accepted student applications (capped)
       const applications = await prisma.application.findMany({
         where: { status: ApplicationStatus.ACCEPTED },
         include: {
           student: { select: { id: true, name: true, email: true } },
         },
         orderBy: { submittedAt: "asc" },
+        take: 2000,
       });
 
       students = applications.map((app, idx) => {
-        const d = (app.formData as any) || {};
+        const d = (app.formData as Record<string, unknown>) || {};
         return {
           seq: idx + 1,
           student_id: d.student_id || app.student.id,
@@ -226,36 +241,39 @@ export async function GET(req: NextRequest) {
     });
 
     // Data Rows
+    const strVal = (v: unknown, fb = ""): string =>
+      typeof v === "string" ? v : v != null ? String(v) : fb;
+
     students.forEach((student, index) => {
       const rowIndex = index + 3;
       const dataRow = worksheet.getRow(rowIndex);
       dataRow.height = 22;
 
-      const rowData = [
-        student.seq || index + 1,
-        student.student_id || "",
-        (student.last_name || "").toUpperCase(),
-        (student.given_name || "").toUpperCase(),
-        student.ext_name || "",
-        (student.middle_name || "").toUpperCase(),
-        student.gender || "",
-        student.birthdate || "",
-        student.course_degree || "",
-        student.year_level || "",
-        student.street_barangay || "",
-        student.town_city || "",
-        student.province || "",
-        student.zipcode || "",
-        student.contact_number || "",
-        student.email || "",
-        student.hei_uii || "4060",
-        student.hei_name || "MINDORO STATE COLLEGE OF AGRICULTURE AND TECHNOLOGY-MAIN CAMPUS",
-        (student.father_last_name || "").toUpperCase(),
-        (student.father_given_name || "").toUpperCase(),
-        (student.father_middle_name || "").toUpperCase(),
-        (student.mother_last_name || "").toUpperCase(),
-        (student.mother_given_name || "").toUpperCase(),
-        (student.mother_middle_name || "").toUpperCase(),
+      const rowData: (string | number)[] = [
+        (typeof student.seq === "number" || typeof student.seq === "string") && student.seq ? student.seq : index + 1,
+        strVal(student.student_id),
+        strVal(student.last_name).toUpperCase(),
+        strVal(student.given_name).toUpperCase(),
+        strVal(student.ext_name),
+        strVal(student.middle_name).toUpperCase(),
+        strVal(student.gender),
+        strVal(student.birthdate),
+        strVal(student.course_degree),
+        strVal(student.year_level),
+        strVal(student.street_barangay),
+        strVal(student.town_city),
+        strVal(student.province),
+        strVal(student.zipcode),
+        strVal(student.contact_number),
+        strVal(student.email),
+        strVal(student.hei_uii, "4060") || "4060",
+        strVal(student.hei_name, "MINDORO STATE COLLEGE OF AGRICULTURE AND TECHNOLOGY-MAIN CAMPUS") || "MINDORO STATE COLLEGE OF AGRICULTURE AND TECHNOLOGY-MAIN CAMPUS",
+        strVal(student.father_last_name).toUpperCase(),
+        strVal(student.father_given_name).toUpperCase(),
+        strVal(student.father_middle_name).toUpperCase(),
+        strVal(student.mother_last_name).toUpperCase(),
+        strVal(student.mother_given_name).toUpperCase(),
+        strVal(student.mother_middle_name).toUpperCase(),
       ];
 
       rowData.forEach((val, colIdx) => {
@@ -273,8 +291,18 @@ export async function GET(req: NextRequest) {
       });
     });
 
+    sanitizeExcelWorkbook(workbook);
     // Generate binary buffer
     const buffer = await workbook.xlsx.writeBuffer();
+
+    await logAudit({
+      actorId: user.id,
+      action: "ANNEX_EXCEL_EXPORTED",
+      entity: "document",
+      entityId: documentId || "masterlist",
+      req,
+      details: { annexNumber: 1, rowCount: students.length },
+    });
 
     return new NextResponse(buffer, {
       status: 200,
@@ -282,6 +310,7 @@ export async function GET(req: NextRequest) {
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="${fileTitle}.xlsx"`,
+        "Cache-Control": "no-store, private",
       },
     });
   } catch (error) {
