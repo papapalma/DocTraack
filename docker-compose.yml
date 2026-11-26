@@ -56,7 +56,7 @@ services:
       target: runner
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${APP_PORT:-9000}:9000"
     environment:
       DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-5mdb02f6}@db:5432/${POSTGRES_DB:-db_TDP}?schema=public}
       SESSION_SECRET: ${SESSION_SECRET:-minsu_doctrack_secure_session_secret_2026}
@@ -66,7 +66,7 @@ services:
       ENABLE_HSTS: ${ENABLE_HSTS:-false}
       COOKIE_SECURE: ${COOKIE_SECURE:-}
       NODE_ENV: production
-      PORT: 3000
+      PORT: 9000
     depends_on:
       db:
         condition: service_healthy
@@ -75,7 +75,7 @@ services:
     volumes:
       - storage_data:/app/storage
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health > /dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/api/health > /dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3

@@ -39,7 +39,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
+ENV PORT=9000
 ENV HOSTNAME="0.0.0.0"
 
 # Create non-root user
@@ -64,6 +64,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modul
 
 USER nextjs
 
-EXPOSE 3000
+EXPOSE 9000
 
 CMD ["node", "server.js"]

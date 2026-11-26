@@ -120,7 +120,7 @@ This automatically:
 1. Provisions a **PostgreSQL 16** container with persistent storage (`minsu_db_data`).
 2. Runs health checks until the database is ready.
 3. Launches an ephemeral **`db-init`** container to execute Prisma migrations (`prisma db push`) and seed default roles/accounts (`prisma/seed.ts`).
-4. Starts the **Next.js** standalone production container on **[http://localhost:3000](http://localhost:3000)**.
+4. Starts the **Next.js** standalone production container on **[http://localhost:9000](http://localhost:9000)**.
 5. Exposes PostgreSQL on port **`5432`** for external GUI tools (DBeaver, TablePlus, pgAdmin).
 
 ### Containerized Development Mode (with Live Hot-Reloading)
@@ -168,7 +168,7 @@ npx tsx prisma/seed.ts
 ```bash
 npm run dev
 ```
-Open **[http://localhost:3000](http://localhost:3000)** in your browser.
+Open **[http://localhost:9000](http://localhost:9000)** in your browser.
 
 ### 5. Building for Production
 ```bash

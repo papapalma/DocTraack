@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
-import { LogIn, Sparkles, KeyRound, ShieldCheck } from "lucide-react";
+import { LogIn, KeyRound, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { ContinuousRegistrationModal } from "@/components/auth/continuous-registration-modal";
 import { OtpInput } from "@/components/auth/otp-input";
@@ -56,16 +56,6 @@ export function AuthModal({
     setCode("");
     setRequiresTwoFactorStep(false);
     onClose();
-  };
-
-  // Quick Demo Account Auto-Fill
-  const fillRole = (roleEmail: string) => {
-    setEmail(roleEmail);
-    setPassword("Password@123");
-    setAuthMode("password");
-    setRequiresTwoFactorStep(false);
-    setCode("");
-    setError(null);
   };
 
   // If in register mode, render the continuous Annex 1 registration modal
@@ -310,83 +300,6 @@ export function AuthModal({
           <LogIn className="w-3.5 h-3.5 mr-1.5" />
           {authMode === "password" ? "Sign In with Password" : "Sign In with Authenticator"}
         </Button>
-
-        {/* Quick Demo Presets */}
-        <div className="pt-2.5 mt-2.5 border-t border-[#D6DDD8]/60">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#1B5E20] mb-2">
-            <Sparkles className="w-3 h-3 text-[#F2B705]" />
-            <span>One-Click Demo Accounts:</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px]">
-            <button
-              type="button"
-              onClick={() => fillRole("admin@minsu.edu.ph")}
-              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-white hover:bg-[#F1F8F1] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
-            >
-              <span>Admin</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#1B5E20]" />
-            </button>
-            <button
-              type="button"
-              onClick={() => fillRole("director@minsu.edu.ph")}
-              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-white hover:bg-[#F1F8F1] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
-            >
-              <span>Director</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#1B5E20]" />
-            </button>
-            <button
-              type="button"
-              onClick={() => fillRole("staff@minsu.edu.ph")}
-              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-white hover:bg-[#F1F8F1] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
-            >
-              <span>Staff</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#1B5E20]" />
-            </button>
-            <button
-              type="button"
-              onClick={() => fillRole("accounting@minsu.edu.ph")}
-              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-white hover:bg-[#F1F8F1] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
-            >
-              <span>Accounting</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#1B5E20]" />
-            </button>
-            <button
-              type="button"
-              onClick={() => fillRole("staff1@minsu.edu.ph")}
-              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-[#F1F8F1]/60 hover:bg-[#DCEFDD] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
-              title="Window 1 • Lane A"
-            >
-              <span>Staff 1</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32]" />
-            </button>
-            <button
-              type="button"
-              onClick={() => fillRole("staff2@minsu.edu.ph")}
-              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-[#F1F8F1]/60 hover:bg-[#DCEFDD] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
-              title="Window 2 • Lane P"
-            >
-              <span>Staff 2</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32]" />
-            </button>
-            <button
-              type="button"
-              onClick={() => fillRole("staff3@minsu.edu.ph")}
-              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-[#F1F8F1]/60 hover:bg-[#DCEFDD] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
-              title="Window 3 • Lanes V & G"
-            >
-              <span>Staff 3</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32]" />
-            </button>
-            <button
-              type="button"
-              onClick={() => fillRole("student@minsu.edu.ph")}
-              className="py-1.5 px-2 rounded-lg border border-[#D6DDD8]/80 bg-white hover:bg-[#F1F8F1] active:scale-95 transition-all text-left text-[#1F2A24] font-medium flex items-center justify-between shadow-2xs"
-            >
-              <span>Student</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#F2B705]" />
-            </button>
-          </div>
-        </div>
       </form>
     </Modal>
   );
