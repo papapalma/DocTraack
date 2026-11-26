@@ -282,6 +282,9 @@ export const Sidebar: React.FC = () => {
       )
     : undefined;
 
+  const isSettingsActive =
+    pathname === "/settings" || pathname.startsWith("/settings/");
+
   const renderLinkItem = (
     item: SidebarLinkItem,
     isCollapsed: boolean,
@@ -494,8 +497,57 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Pinned Bottom Footer (Office Pill + Role Indicator) */}
-      <div className="shrink-0 pt-3 space-y-3">
+      {/* Pinned Bottom Footer (Settings + Office Pill + Role Indicator) */}
+      <div className="shrink-0 pt-3 border-t border-[#D6DDD8]/70 space-y-3">
+        <Link
+          href="/settings"
+          onClick={closeMobile}
+          title={isCollapsed ? "Account & App Settings" : undefined}
+          aria-current={isSettingsActive ? "page" : undefined}
+          className={cn(
+            "relative flex items-center rounded-xl font-medium transition-colors duration-150 active:scale-[0.97] motion-reduce:active:scale-100 group",
+            isCollapsed
+              ? "justify-center p-3"
+              : "justify-between px-3.5 py-2.5 text-sm",
+            isSettingsActive
+              ? "bg-[#DCEFDD] text-[#123F17] font-semibold border border-[#1B5E20]/20 shadow-2xs"
+              : "text-[#1F2A24] hover:bg-[#F1F8F1] hover:text-[#1B5E20]"
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-center gap-3 min-w-0",
+              isCollapsed && "justify-center"
+            )}
+          >
+            <Settings
+              className={cn(
+                "w-4 h-4 transition-transform duration-150 group-hover:rotate-45 motion-reduce:group-hover:rotate-0 shrink-0",
+                isSettingsActive
+                  ? "text-[#1B5E20]"
+                  : "text-[#55645B] group-hover:text-[#1B5E20]"
+              )}
+            />
+            {!isCollapsed && <span className="truncate">Settings</span>}
+          </div>
+          {!isCollapsed ? (
+            isSettingsActive ? (
+              <span className="w-1.5 h-4 rounded-full bg-[#F2B705] shadow-xs shrink-0" />
+            ) : (
+              <span className="px-2 py-0.5 rounded-full bg-[#F1F8F1] border border-[#DCEFDD] text-[10px] font-bold text-[#1B5E20] shrink-0">
+                PWA
+              </span>
+            )
+          ) : (
+            isSettingsActive && (
+              <span
+                className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[#F2B705] ring-2 ring-[#DCEFDD]"
+                aria-hidden="true"
+              />
+            )
+          )}
+        </Link>
+
         {!isCollapsed && (
           <div className="p-3.5 rounded-2xl bg-gradient-to-br from-[#F1F8F1] to-[#DCEFDD]/50 border border-[#DCEFDD] text-xs text-[#1F2A24] shadow-xs">
             <div className="flex items-center gap-1.5 font-bold text-[#1B5E20] mb-1">

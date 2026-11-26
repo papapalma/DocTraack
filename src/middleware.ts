@@ -28,6 +28,7 @@ const PROTECTED_PREFIXES = [
   "/landing-preview",
   "/audit-logs",
   "/announcements",
+  "/settings",
   "/portal",
 ];
 
@@ -53,6 +54,7 @@ const ROLE_ROUTE_RULES: Array<{ prefix: string; allowed: Role[] }> = [
   { prefix: "/dashboard", allowed: ["DIRECTOR", "STAFF", "ACCOUNTING", "SYSTEM_ADMIN"] },
   { prefix: "/queue", allowed: ["DIRECTOR", "STAFF", "ACCOUNTING", "SYSTEM_ADMIN"] },
   { prefix: "/notifications", allowed: ["DIRECTOR", "STAFF", "ACCOUNTING", "SYSTEM_ADMIN"] },
+  { prefix: "/settings", allowed: ["DIRECTOR", "STAFF", "ACCOUNTING", "SYSTEM_ADMIN"] },
 ];
 
 function matchesPrefix(pathname: string, prefix: string): boolean {
@@ -98,6 +100,14 @@ export async function middleware(request: NextRequest) {
     }
 
     if (!isRoleAllowedOnPath(pathname, verifiedMeta.role)) {
+      if (
+        verifiedMeta.role === "STUDENT" &&
+        matchesPrefix(pathname, "/settings")
+      ) {
+        return NextResponse.redirect(
+          new URL("/portal/profile?tab=app", request.url)
+        );
+      }
       const fallback = verifiedMeta.role === "STUDENT" ? "/portal" : "/dashboard";
       return NextResponse.redirect(new URL(fallback, request.url));
     }
@@ -133,6 +143,7 @@ export async function middleware(request: NextRequest) {
       "font-src 'self' data:",
       "connect-src 'self' blob: data:",
       "worker-src 'self' blob:",
+      "manifest-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -166,6 +177,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|sw\\.js|manifest\\.webmanifest|kiosk/manifest\\.webmanifest|apple-touch-icon\\.png|icons/).*)",
   ],
 };

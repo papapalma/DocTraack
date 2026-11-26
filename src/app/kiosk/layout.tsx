@@ -4,6 +4,12 @@ export const metadata: Metadata = {
   title: "Walk-In Kiosk & Queue Display | MinSU DocTrack",
   description:
     "Mindoro State University Tulong Dunong Program self-service walk-in queueing terminal and live lobby display.",
+  manifest: "/kiosk/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "MinSU Kiosk",
+  },
 };
 
 export default function KioskLayout({

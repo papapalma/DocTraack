@@ -37,8 +37,8 @@ export function displayBrowserNotification(title: string, options?: Notification
 
   try {
     const defaultOptions: NotificationOptions = {
-      icon: "/favicon.ico",
-      badge: "/favicon.ico",
+      icon: "/icons/icon-192x192.png",
+      badge: "/icons/icon-192x192.png",
       tag: "minsu-doctrack-announcement",
       ...options,
     };

@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { PortalSkeleton } from "@/components/ui/skeleton";
 import { LogoutModal } from "@/components/auth/logout-modal";
 import { Logo } from "@/components/ui/logo";
+import { OfflineBanner } from "@/components/ui/offline-banner";
 import { motion } from "motion/react";
 import { PageTransition } from "@/components/ui/page-transition";
 
@@ -91,7 +92,8 @@ function StudentPortalContent({
   if (!user || user.role !== "STUDENT") return null;
 
   return (
-    <div className="h-screen overflow-hidden bg-[#F6F8F6] flex flex-col print:h-auto print:overflow-visible">
+    <div className="h-screen supports-[height:100dvh]:h-[100dvh] overflow-hidden bg-[#F6F8F6] flex flex-col print:h-auto print:overflow-visible">
+      <OfflineBanner />
       {/* Student Portal Header */}
       <header className="shrink-0 z-40 h-16 bg-[#1B5E20] border-b-2 border-[#F2B705] text-white flex items-center justify-between px-3 sm:px-8 shadow-md print:hidden">
         <div className="flex items-center gap-2 sm:gap-3">

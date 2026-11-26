@@ -34,7 +34,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   return (
     <NavProvider>
       <OfflineBanner />
-      <div className="h-screen overflow-hidden bg-[#F6F8F6] flex flex-col print:h-auto print:overflow-visible print:bg-white">
+      <div className="h-screen supports-[height:100dvh]:h-[100dvh] overflow-hidden bg-[#F6F8F6] flex flex-col print:h-auto print:overflow-visible print:bg-white">
         <div className="topbar-container shrink-0 z-40 print:hidden">
           <Topbar />
         </div>

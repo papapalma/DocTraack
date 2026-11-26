@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { SessionUser } from "@/types";
 import { useRouter } from "next/navigation";
+import { purgePwaCachesOnLogout } from "@/lib/pwa";
 
 interface SessionContextType {
   user: SessionUser | null;
@@ -48,6 +49,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
+      await purgePwaCachesOnLogout();
       setUser(null);
       router.push("/?auth=login");
       router.refresh();

@@ -5,6 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthModal } from "@/components/auth/auth-modal";
 import { ModularLanding } from "@/components/landing/modular-landing";
 import { DEFAULT_LANDING_SECTIONS, LandingSection, LandingStyleSettings, DEFAULT_STYLE_SETTINGS } from "@/types/landing";
+import {
+  detectStandaloneMode,
+  getPwaStartupMode,
+  getStartupTargetHref,
+} from "@/lib/pwa";
 
 function HomeContent() {
   const router = useRouter();
@@ -14,8 +19,19 @@ function HomeContent() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
 
-  // Check if session already exists
+  // Respect device-level PWA startup mode in standalone windows, or route active session
   useEffect(() => {
+    const authParam = searchParams?.get("auth");
+    const stayOnLanding = searchParams?.get("stay") === "1";
+
+    if (!authParam && !stayOnLanding && detectStandaloneMode()) {
+      const startupTarget = getStartupTargetHref(getPwaStartupMode());
+      if (startupTarget) {
+        router.replace(startupTarget);
+        return;
+      }
+    }
+
     fetch("/api/auth/session")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -28,7 +44,7 @@ function HomeContent() {
         }
       })
       .catch(() => {});
-  }, [router]);
+  }, [router, searchParams]);
 
   // Fetch published landing page sections
   useEffect(() => {

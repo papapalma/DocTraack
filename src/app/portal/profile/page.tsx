@@ -26,10 +26,12 @@ import {
   Radio,
   Clock,
   KeyRound,
+  Smartphone,
 } from "lucide-react";
 import { SkeletonForm } from "@/components/ui/skeleton";
 import { Modal } from "@/components/ui/modal";
 import { AuthenticatorLockStep } from "@/components/auth/authenticator-lock-step";
+import { PwaSettingsPanel } from "@/components/settings/pwa-settings-panel";
 import { motion, AnimatePresence } from "motion/react";
 import {
   getBrowserNotificationPermission,
@@ -44,7 +46,7 @@ import {
   isValidIncome,
 } from "@/lib/validation";
 
-type TabKey = "academic" | "contact" | "family" | "financial" | "notifications" | "security";
+type TabKey = "academic" | "contact" | "family" | "financial" | "notifications" | "security" | "app";
 
 const TABS: { id: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "academic", label: "Personal & Academic", icon: GraduationCap },
@@ -53,6 +55,7 @@ const TABS: { id: TabKey; label: string; icon: React.ComponentType<{ className?:
   { id: "financial", label: "Scholarship & Grants", icon: BadgePercent },
   { id: "notifications", label: "Notifications & Alerts", icon: Bell },
   { id: "security", label: "Security & Authenticator", icon: ShieldCheck },
+  { id: "app", label: "App & Device", icon: Smartphone },
 ];
 
 export default function StudentProfilePage() {
@@ -80,10 +83,10 @@ export default function StudentProfilePage() {
   const [reauthInput, setReauthInput] = useState("");
   const [reauthError, setReauthError] = useState<string | null>(null);
 
-  // Auto-switch to tab from query params (e.g. ?tab=notifications)
+  // Auto-switch to tab from query params (e.g. ?tab=notifications or ?tab=app)
   useEffect(() => {
     const tabParam = searchParams?.get("tab") as TabKey | null;
-    if (tabParam && ["academic", "contact", "family", "financial", "notifications", "security"].includes(tabParam)) {
+    if (tabParam && ["academic", "contact", "family", "financial", "notifications", "security", "app"].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
@@ -1327,8 +1330,20 @@ export default function StudentProfilePage() {
           </motion.div>
         )}
 
+        {/* TAB 7: APP & DEVICE (PWA) */}
+        {activeTab === "app" && (
+          <motion.div
+            key="app"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 350, damping: 28 }}
+          >
+            <PwaSettingsPanel showStartupModeSelector={false} />
+          </motion.div>
+        )}
+
         {/* Bottom Save Bar */}
-        {activeTab !== "notifications" && activeTab !== "security" && (
+        {activeTab !== "notifications" && activeTab !== "security" && activeTab !== "app" && (
           <div className="flex items-center justify-between pt-2">
             <p className="text-xs text-[#55645B]">
               {hasChanges ? (

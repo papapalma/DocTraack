@@ -13,12 +13,17 @@ import {
   ExternalLink,
   RotateCcw,
   AlertCircle,
+  Smartphone,
+  Download,
+  CheckCircle2,
 } from "lucide-react";
 import type { KioskDisplayMode } from "@/types/queue";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { MINSU_CAMPUSES } from "@/lib/campus-constants";
 import { unlockKioskAudio, announceQueueTicket } from "@/lib/kiosk-audio";
+import { usePwa } from "@/components/providers/pwa-provider";
+import type { PwaStartupMode } from "@/lib/pwa";
 
 export type UnifiedLayoutPreference = "AUTO" | "STACKED" | "SIDE_BY_SIDE";
 
@@ -55,6 +60,8 @@ function KioskPinModalBody({
     useState<KioskDisplayMode>(currentMode);
   const [selectedLayout, setSelectedLayout] =
     useState<UnifiedLayoutPreference>(currentLayout);
+  const { isStandalone, canInstall, promptInstall, startupMode, setStartupMode } =
+    usePwa();
 
   const handleDigit = (digit: string) => {
     if (pin.length >= 6) return;
@@ -229,6 +236,62 @@ function KioskPinModalBody({
           </select>
         </div>
       )}
+
+      {/* Kiosk App (PWA) & Standalone Startup Mode */}
+      <div className="rounded-2xl border border-line bg-page/70 p-3.5 space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-muted">
+            <Smartphone className="h-3.5 w-3.5 text-minsu-green-700" />
+            Kiosk PWA & Startup Mode
+          </span>
+          {isStandalone ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-minsu-green-100 px-2.5 py-0.5 text-[11px] font-bold text-minsu-green-800">
+              <CheckCircle2 className="h-3 w-3" />
+              Installed App
+            </span>
+          ) : canInstall ? (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => void promptInstall()}
+              className="h-7 rounded-lg px-2.5 text-xs"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Install Kiosk App
+            </Button>
+          ) : (
+            <span className="text-[11px] font-medium text-ink-muted">
+              Browser menu → Install App
+            </span>
+          )}
+        </div>
+
+        <div>
+          <label
+            htmlFor="pin-modal-pwa-startup"
+            className="sr-only"
+          >
+            PWA Startup Target on This Device
+          </label>
+          <select
+            id="pin-modal-pwa-startup"
+            value={startupMode}
+            onChange={(e) => setStartupMode(e.target.value as PwaStartupMode)}
+            className="w-full rounded-xl border border-line bg-white px-3 py-2 text-xs font-semibold text-ink outline-none focus:border-minsu-green-700 focus:ring-2 focus:ring-minsu-green-700"
+          >
+            <option value="default">
+              Startup: Default (Kiosk Manifest / Role Home)
+            </option>
+            <option value="kiosk">
+              Startup: Force Walk-In Kiosk (/kiosk)
+            </option>
+            <option value="kiosk-display">
+              Startup: Force Overhead TV Display (/kiosk/display)
+            </option>
+          </select>
+        </div>
+      </div>
 
       <div className="flex flex-wrap gap-2 pt-1">
         <Button

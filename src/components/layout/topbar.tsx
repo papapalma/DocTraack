@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useSession } from "@/hooks/use-session";
 import { useNav } from "@/components/layout/nav-context";
-import { Bell, LogOut, User as UserIcon, Shield, Menu, ChevronDown, Sparkles } from "lucide-react";
+import { Bell, LogOut, User as UserIcon, Shield, Menu, ChevronDown, Sparkles, Settings } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { LogoutModal } from "@/components/auth/logout-modal";
@@ -130,6 +130,20 @@ export const Topbar: React.FC = () => {
                     >
                       <UserIcon className="w-4 h-4 text-[#1B5E20]" />
                       Dashboard
+                    </Link>
+
+                    <Link
+                      href="/settings"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center justify-between gap-2.5 px-3 py-2 text-sm font-medium rounded-xl text-[#1F2A24] hover:bg-[#F1F8F1] active:bg-[#DCEFDD] transition-colors"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Settings className="w-4 h-4 text-[#1B5E20]" />
+                        Settings & App
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-[#F1F8F1] border border-[#DCEFDD] text-[10px] font-bold text-[#1B5E20]">
+                        PWA
+                      </span>
                     </Link>
 
                     {(user.role === "SYSTEM_ADMIN" || user.role === "DIRECTOR") && (

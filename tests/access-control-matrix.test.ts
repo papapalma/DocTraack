@@ -34,6 +34,7 @@ const REQUIRED_PROTECTED_ROUTES = [
   "/landing-preview",
   "/audit-logs",
   "/announcements",
+  "/settings",
   "/portal",
 ];
 
@@ -47,7 +48,7 @@ for (const route of REQUIRED_PROTECTED_ROUTES) {
     `Middleware MUST include protected route prefix "${route}"`
   );
 }
-console.log("  ✔ All 16 critical application routes are strictly registered in Edge Middleware.");
+console.log("  ✔ All 17 critical application routes are strictly registered in Edge Middleware.");
 
 // -----------------------------------------------------------------------------
 // 2. 3-Way Verification Engine RBAC Rules
